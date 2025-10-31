@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:mongo_dart/mongo_dart.dart';
 import '../utils/env_config.dart';
 import '../models/user.dart';
@@ -103,11 +105,153 @@ class MongoService {
 
   // MARK: - User Operations
 
+  /// Autenticar usuario por email o username con contraseña
+  Future<User?> authenticateUser({
+    required String emailOrUsername,
+    required String password,
+  }) async {
+    try {
+      final collection = await getUsersCollection();
+      
+      // Buscar por Email o Username
+      final query = {
+        '\$or': [
+          {'Email': emailOrUsername},
+          {'Username': emailOrUsername},
+        ],
+      };
+      
+      final cursor = collection.find(query);
+      final results = <Map<String, dynamic>>[];
+      await cursor.forEach((doc) {
+        results.add(doc.map((key, value) => MapEntry(key, value)));
+      });
+      
+      if (results.isEmpty) {
+        print('❌ Usuario no encontrado');
+        return null;
+      }
+      
+      final userDoc = results.first;
+      final storedPassword = userDoc['Password']?.toString();
+      
+      if (storedPassword == null) {
+        print('❌ Password no encontrado en documento');
+        return null;
+      }
+      
+      // Verificar contraseña (múltiples métodos)
+      bool passwordMatch = false;
+      
+      // Método 1: Texto plano
+      if (storedPassword == password) {
+        print('✅ Contraseña coincide (texto plano)');
+        passwordMatch = true;
+      }
+      
+      // Método 2: SHA256
+      if (!passwordMatch) {
+        final hash = sha256.convert(utf8.encode(password));
+        final passwordHash = base64Encode(hash.bytes);
+        if (storedPassword == passwordHash) {
+          print('✅ Contraseña coincide (SHA256)');
+          passwordMatch = true;
+        }
+      }
+      
+      // Método 3: SHA512
+      if (!passwordMatch) {
+        final hash = sha512.convert(utf8.encode(password));
+        final passwordHash = base64Encode(hash.bytes);
+        if (storedPassword == passwordHash) {
+          print('✅ Contraseña coincide (SHA512)');
+          passwordMatch = true;
+        }
+      }
+      
+      // Método 4: SHA384
+      if (!passwordMatch) {
+        final hash = sha384.convert(utf8.encode(password));
+        final passwordHash = base64Encode(hash.bytes);
+        if (storedPassword == passwordHash) {
+          print('✅ Contraseña coincide (SHA384)');
+          passwordMatch = true;
+        }
+      }
+      
+      if (!passwordMatch) {
+        print('❌ Contraseña incorrecta');
+        return null;
+      }
+      
+      // Construir User desde el documento
+      final userId = userDoc['_id']?.toString() ?? '';
+      final email = userDoc['Email']?.toString() ?? '';
+      final username = userDoc['Username']?.toString() ??
+          email.split('@').first;
+      final name = userDoc['Name']?.toString() ?? 'Usuario';
+      final role = userDoc['Role']?.toString() ?? '';
+      final isAdmin = role.toLowerCase() == 'admin';
+      
+      return User.fromJson(userDoc);
+    } catch (e) {
+      print('❌ Error autenticando usuario: $e');
+      rethrow;
+    }
+  }
+
+  /// Verificar si existe un usuario por email
+  Future<bool> checkUserExists(String email) async {
+    try {
+      final collection = await getUsersCollection();
+      final doc = await collection.findOne({'Email': email});
+      return doc != null;
+    } catch (e) {
+      print('❌ Error verificando existencia de usuario: $e');
+      rethrow;
+    }
+  }
+
+  /// Crear nuevo usuario
+  Future<void> createUser({
+    required String username,
+    required String name,
+    required String email,
+    required String password,
+  }) async {
+    try {
+      final collection = await getUsersCollection();
+      
+      // Hash de la contraseña con SHA256
+      final hash = sha256.convert(utf8.encode(password));
+      final passwordHash = base64Encode(hash.bytes);
+      
+      final userDoc = {
+        '_id': ObjectId().toString(),
+        'Email': email,
+        'Username': username,
+        'Name': name,
+        'Password': passwordHash,
+        'Role': 'user',
+        'IsActive': true,
+        'CreatedAt': DateTime.now().toIso8601String(),
+      };
+      
+      await collection.insertOne(userDoc);
+      print('✅ Usuario creado exitosamente');
+    } catch (e) {
+      print('❌ Error creando usuario: $e');
+      rethrow;
+    }
+  }
+
   /// Obtener usuario por email
   Future<User?> getUserByEmail(String email) async {
     try {
       final collection = await getUsersCollection();
-      final doc = await collection.findOne({'email': email});
+      // Intentar con 'Email' (mayúscula) primero, luego 'email' (minúscula)
+      var doc = await collection.findOne({'Email': email});
+      doc ??= await collection.findOne({'email': email});
 
       if (doc == null) return null;
 
@@ -138,27 +282,6 @@ class MongoService {
       return User.fromJson(doc.map((key, value) => MapEntry(key, value)));
     } catch (e) {
       print('❌ Error obteniendo usuario por ID: $e');
-      rethrow;
-    }
-  }
-
-  /// Crear nuevo usuario
-  Future<User> createUser(Map<String, dynamic> userData) async {
-    try {
-      final collection = await getUsersCollection();
-      final result = await collection.insertOne(userData);
-
-      if (result.isSuccess) {
-        final createdUser = await getUserById(result.id.toString());
-        if (createdUser == null) {
-          throw Exception('Error al recuperar usuario creado');
-        }
-        return createdUser;
-      } else {
-        throw Exception('Error al crear usuario');
-      }
-    } catch (e) {
-      print('❌ Error creando usuario: $e');
       rethrow;
     }
   }
