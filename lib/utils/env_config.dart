@@ -1,0 +1,44 @@
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
+/// Clase para gestionar las variables de entorno
+class EnvConfig {
+  static Future<void> load() async {
+    await dotenv.load(fileName: '.env');
+  }
+
+  // MongoDB
+  static String get mongoUri => dotenv.env['MONGO_URI'] ?? '';
+  static String get mongoDb => dotenv.env['MONGO_DB'] ?? '';
+
+  // AWS S3
+  static String get awsAccessKeyId => dotenv.env['AWS_ACCESS_KEY_ID'] ?? '';
+  static String get awsSecretAccessKey =>
+      dotenv.env['AWS_SECRET_ACCESS_KEY'] ?? '';
+  static String get awsRegion => dotenv.env['AWS_REGION'] ?? 'eu-central-1';
+  static String get bucketName => dotenv.env['BUCKET_NAME'] ?? '';
+  static bool get useS3 => dotenv.env['USE_S3']?.toLowerCase() == 'true';
+
+  // Email Service (Brevo)
+  static String get brevoApiKey => dotenv.env['BREVO_API_KEY'] ?? '';
+  static String get brevoSmtpServer =>
+      dotenv.env['BREVO_SMTP_SERVER'] ?? 'smtp-relay.brevo.com';
+  static int get brevoSmtpPort =>
+      int.tryParse(dotenv.env['BREVO_SMTP_PORT'] ?? '587') ?? 587;
+
+  // Google OAuth (opcional)
+  static String get googleClientId => dotenv.env['GOOGLE_CLIENT_ID'] ?? '';
+  static String get googleClientSecret =>
+      dotenv.env['GOOGLE_CLIENT_SECRET'] ?? '';
+
+  /// Validar que las variables críticas estén configuradas
+  static bool validate() {
+    if (mongoUri.isEmpty || mongoDb.isEmpty) {
+      return false;
+    }
+    if (useS3 && (awsAccessKeyId.isEmpty || awsSecretAccessKey.isEmpty)) {
+      return false;
+    }
+    return true;
+  }
+}
+

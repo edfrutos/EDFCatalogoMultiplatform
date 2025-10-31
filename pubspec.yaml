@@ -35,6 +35,40 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
 
+  # State Management
+  provider: ^6.1.1
+
+  # MongoDB
+  mongo_dart: ^0.10.5
+
+  # AWS S3 (usaremos dio con interceptores o implementación manual)
+  crypto: ^3.0.3
+  xml: ^6.3.0
+
+  # HTTP & Network
+  http: ^1.1.0
+  dio: ^5.4.0
+
+  # Environment Variables
+  flutter_dotenv: ^5.1.0
+
+  # Secure Storage (Keychain/Keystore)
+  flutter_secure_storage: ^9.0.0
+
+  # File Handling
+  file_picker: ^6.1.1
+  path_provider: ^2.1.1
+  path: ^1.8.3
+
+  # Image & Media
+  cached_network_image: ^3.3.1
+  image_picker: ^1.0.7
+
+  # Utilities
+  intl: ^0.19.0
+  uuid: ^4.5.1
+  equatable: ^2.0.5
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
