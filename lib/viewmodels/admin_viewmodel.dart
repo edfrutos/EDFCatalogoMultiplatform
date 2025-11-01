@@ -147,11 +147,67 @@ class AdminViewModel extends ChangeNotifier {
     }
   }
 
-  /// Limpiar mensajes
-  void clearMessages() {
+  /// Actualizar el rol de un usuario
+  Future<void> updateUserRole(User user, {required bool isAdmin}) async {
+    _isLoading = true;
     _errorMessage = null;
     _successMessage = null;
     notifyListeners();
+
+    try {
+      final updates = {'Role': isAdmin ? 'admin' : 'user'};
+      final success = await _mongoService.updateUser(user.id, updates);
+
+      if (success) {
+        _successMessage = isAdmin
+            ? 'Usuario promovido a administrador'
+            : 'Usuario convertido a usuario normal';
+        await loadUsers();
+      } else {
+        _errorMessage = 'Error al actualizar el rol del usuario';
+      }
+    } catch (e) {
+      _errorMessage = 'Error al actualizar el rol del usuario: $e';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Actualizar el estado activo de un usuario
+  Future<void> updateUserActiveStatus(User user, {required bool isActive}) async {
+    _isLoading = true;
+    _errorMessage = null;
+    _successMessage = null;
+    notifyListeners();
+
+    try {
+      final updates = {'IsActive': isActive};
+      final success = await _mongoService.updateUser(user.id, updates);
+
+      if (success) {
+        _successMessage = isActive
+            ? 'Usuario activado correctamente'
+            : 'Usuario desactivado correctamente';
+        await loadUsers();
+      } else {
+        _errorMessage = 'Error al actualizar el estado del usuario';
+      }
+    } catch (e) {
+      _errorMessage = 'Error al actualizar el estado del usuario: $e';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Limpiar mensajes
+  void clearMessages() {
+    Future.delayed(const Duration(seconds: 3), () {
+      _errorMessage = null;
+      _successMessage = null;
+      notifyListeners();
+    });
   }
 }
 

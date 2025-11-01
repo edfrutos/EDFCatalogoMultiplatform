@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:mongo_dart/mongo_dart.dart';
 import '../utils/env_config.dart';
 import '../models/user.dart';
@@ -9,6 +10,7 @@ import '../models/catalog.dart';
 class MongoService {
   static final MongoService _instance = MongoService._internal();
   factory MongoService() => _instance;
+  static MongoService get shared => _instance;
   MongoService._internal();
 
   Db? _db;
@@ -30,7 +32,8 @@ class MongoService {
     await _connect();
     if (_db == null || !_db!.isConnected) {
       throw Exception(
-          'No se pudo conectar a MongoDB. Verifica tu conexión y las credenciales en el archivo .env');
+        'No se pudo conectar a MongoDB. Verifica tu conexión y las credenciales en el archivo .env',
+      );
     }
     return _db!;
   }
@@ -39,6 +42,15 @@ class MongoService {
   Future<void> _connect() async {
     if (_db != null && _db!.isConnected) return;
 
+    // Verificar si estamos en web
+    if (kIsWeb) {
+      throw UnsupportedError(
+        'MongoDB no está soportado directamente en Flutter Web. '
+        'Por favor, usa la aplicación en macOS, iOS o Android, '
+        'o configura un backend API para acceder a MongoDB desde web.',
+      );
+    }
+
     _isConnecting = true;
     try {
       final mongoUri = EnvConfig.mongoUri;
@@ -46,26 +58,68 @@ class MongoService {
 
       if (mongoUri.isEmpty || mongoDb.isEmpty) {
         throw Exception(
-            'MONGO_URI y MONGO_DB deben estar configurados en el archivo .env');
+          'MONGO_URI y MONGO_DB deben estar configurados en el archivo .env',
+        );
       }
 
-      // Construir URI completa con nombre de base de datos
-      String fullUri = mongoUri;
-      if (!mongoUri.endsWith('/')) {
-        fullUri += '/';
+      // Limpiar URI: quitar el nombre de BD si está incluido y asegurar formato correcto
+      String cleanUri = mongoUri.trim();
+
+      // Si la URI termina con un nombre de BD, quitarlo (todo después del último / antes de ?)
+      // Formato esperado: mongodb+srv://...@cluster.net/?params o mongodb+srv://...@cluster.net/dbname?params
+      if (cleanUri.contains('/') &&
+          !cleanUri.contains('mongodb+srv://') &&
+          cleanUri.split('/').length > 4) {
+        // Si tiene más de 4 partes separadas por /, probablemente tiene nombre de BD
+        final parts = cleanUri.split('/');
+        // Reconstruir sin el nombre de BD (partes antes del último /)
+        final baseParts = parts.sublist(0, parts.length - 1);
+        cleanUri = baseParts.join('/');
+        // Asegurar que tenga los parámetros de query si los tenía
+        final lastPart = parts.last;
+        if (lastPart.contains('?')) {
+          final queryParams = lastPart.substring(lastPart.indexOf('?'));
+          cleanUri += queryParams;
+        }
       }
-      fullUri += mongoDb;
-      
+
+      // Si no termina en / ni ?, agregar / para luego especificar la BD
+      if (!cleanUri.endsWith('/') && !cleanUri.contains('?')) {
+        cleanUri += '/';
+      }
+
+      // Construir URI completa con nombre de BD
+      String fullUri = cleanUri;
+      if (fullUri.endsWith('/')) {
+        fullUri += mongoDb;
+      } else if (fullUri.contains('?')) {
+        // Si tiene parámetros, insertar el nombre de BD antes del ?
+        final parts = fullUri.split('?');
+        fullUri = '${parts[0]}/$mongoDb?${parts[1]}';
+      } else {
+        fullUri += '/$mongoDb';
+      }
+
       _connectionUri = fullUri;
 
       print('🔌 Intentando conectar a MongoDB...');
-      print('📍 URI: ${_maskUri(mongoUri)}');
+      print('📍 URI: ${_maskUri(cleanUri)}');
       print('🗄️  Base de datos: $mongoDb');
 
-      _db = await Db.create(_connectionUri!);
+      // Crear conexión con la URI completa que incluye el nombre de la BD
+      _db = await Db.create(fullUri);
       await _db!.open();
 
+      // Verificar que estamos usando la BD correcta
       print('✅ Conexión a MongoDB establecida correctamente');
+      print('✅ Base de datos confirmada: ${_db!.databaseName}');
+
+      if (_db!.databaseName != mongoDb) {
+        print(
+          '⚠️ ⚠️ ⚠️ ADVERTENCIA: Base de datos esperada "$mongoDb" pero usando "${_db!.databaseName}"',
+        );
+        print('⚠️ Esto podría causar que no se encuentren los usuarios');
+      }
     } catch (e) {
       print('❌ Error al conectar a MongoDB: $e');
       _db = null;
@@ -78,7 +132,9 @@ class MongoService {
   /// Enmascarar URI para logs (ocultar credenciales)
   String _maskUri(String uri) {
     return uri.replaceAll(
-        RegExp(r'mongodb\+srv://[^:]+:[^@]+'), 'mongodb+srv://***:***');
+      RegExp(r'mongodb\+srv://[^:]+:[^@]+'),
+      'mongodb+srv://***:***',
+    );
   }
 
   /// Desconectar de MongoDB
@@ -112,53 +168,186 @@ class MongoService {
   }) async {
     try {
       final collection = await getUsersCollection();
-      
-      // Buscar por Email o Username
-      final query = {
-        '\$or': [
-          {'Email': emailOrUsername},
-          {'Username': emailOrUsername},
-        ],
-      };
-      
-      final cursor = collection.find(query);
+
+      print('🔍 Buscando usuario con: $emailOrUsername');
+
+      // Diagnóstico: mostrar información de la colección
+      final db = await getDatabase();
+      print('📦 Base de datos actual: ${db.databaseName}');
+      print('📦 Colección: users');
+
       final results = <Map<String, dynamic>>[];
-      await cursor.forEach((doc) {
+
+      // Intentar buscar por Email primero
+      print('🔍 Buscando por Email: $emailOrUsername');
+      await collection.find({'Email': emailOrUsername}).forEach((doc) {
         results.add(doc.map((key, value) => MapEntry(key, value)));
       });
-      
+
+      // Si no se encontró por Email, buscar por Username
       if (results.isEmpty) {
-        print('❌ Usuario no encontrado');
+        print(
+          '🔍 No encontrado por Email, buscando por Username: $emailOrUsername',
+        );
+        await collection.find({'Username': emailOrUsername}).forEach((doc) {
+          results.add(doc.map((key, value) => MapEntry(key, value)));
+        });
+      }
+
+      // Si aún no se encontró, intentar con $or
+      if (results.isEmpty) {
+        print('🔍 Intentando con query \$or');
+        final orQuery = <String, dynamic>{
+          r'$or': [
+            <String, dynamic>{'Email': emailOrUsername},
+            <String, dynamic>{'Username': emailOrUsername},
+          ],
+        };
+        await collection.find(orQuery).forEach((doc) {
+          results.add(doc.map((key, value) => MapEntry(key, value)));
+        });
+      }
+
+      print('📊 Resultados encontrados: ${results.length}');
+
+      if (results.isEmpty) {
+        print('❌ Usuario no encontrado con: $emailOrUsername');
+        // Intentar buscar sin restricciones para ver qué usuarios existen
+        print('🔍 Intentando listar primeros usuarios disponibles...');
+        print('📦 Nombre de colección: users');
+        try {
+          // Contar total de documentos
+          final totalCount = await collection.count();
+          print('📊 Total de documentos en colección: $totalCount');
+
+          if (totalCount == 0) {
+            print('⚠️ La colección "users" está vacía');
+            print('🔍 Verificando conexión y base de datos...');
+
+            try {
+              final db = await getDatabase();
+              print('📦 Nombre de base de datos: ${db.databaseName}');
+
+              // Intentar buscar en otras colecciones comunes con nombres alternativos
+              final commonNames = ['Users', 'USER', 'User'];
+              for (final name in commonNames) {
+                try {
+                  final altColl = db.collection(name);
+                  final altCount = await altColl.count();
+                  if (altCount > 0) {
+                    print(
+                      '🔍 ⚠️ IMPORTANTE: Encontrada colección "$name" con $altCount documentos',
+                    );
+                    print(
+                      '   📊 Considera cambiar el nombre de colección a "$name"',
+                    );
+
+                    // Mostrar un ejemplo
+                    int count = 0;
+                    await for (final doc in altColl.find()) {
+                      if (count >= 1) break;
+                      print('   📄 Ejemplo de documento en "$name":');
+                      print('      Campos: ${doc.keys.join(", ")}');
+                      print(
+                        '      Email: ${doc['Email'] ?? doc['email'] ?? 'N/A'}',
+                      );
+                      print(
+                        '      Username: ${doc['Username'] ?? doc['username'] ?? 'N/A'}',
+                      );
+                      count++;
+                    }
+                  }
+                } catch (e) {
+                  // Colección no existe o error, continuar
+                }
+              }
+            } catch (e) {
+              print('⚠️ Error verificando colecciones: $e');
+            }
+
+            return null;
+          }
+
+          final sampleUsers = <String>[];
+          int count = 0;
+          await for (final doc in collection.find()) {
+            if (count >= 5) break; // Limitar a 5 usuarios
+
+            final email =
+                doc['Email']?.toString() ?? doc['email']?.toString() ?? 'N/A';
+            final username =
+                doc['Username']?.toString() ??
+                doc['username']?.toString() ??
+                'N/A';
+            final docId = doc['_id']?.toString() ?? 'N/A';
+
+            // Mostrar todos los campos del documento para debugging
+            print('📄 Documento ${count + 1}:');
+            print('   _id: $docId');
+            print('   Email: $email');
+            print('   Username: $username');
+            print('   Campos disponibles: ${doc.keys.join(", ")}');
+
+            sampleUsers.add('Email: $email, Username: $username');
+            count++;
+          }
+
+          if (sampleUsers.isNotEmpty) {
+            print('📋 Resumen - Primeros $count usuarios:');
+            for (final userInfo in sampleUsers) {
+              print('   - $userInfo');
+            }
+          } else {
+            print('⚠️ No se pudieron leer documentos de la colección');
+          }
+        } catch (e, stackTrace) {
+          print('⚠️ Error listando usuarios: $e');
+          print('📚 Stack trace: $stackTrace');
+        }
         return null;
       }
-      
+
       final userDoc = results.first;
-      final storedPassword = userDoc['Password']?.toString();
-      
+      print('✅ Usuario encontrado:');
+      print('   Email: ${userDoc['Email'] ?? userDoc['email']}');
+      print('   Username: ${userDoc['Username'] ?? userDoc['username']}');
+
+      final storedPassword =
+          userDoc['Password']?.toString() ?? userDoc['password']?.toString();
+
       if (storedPassword == null) {
         print('❌ Password no encontrado en documento');
         return null;
       }
-      
+
       // Verificar contraseña (múltiples métodos)
       bool passwordMatch = false;
-      
+
       // Método 1: Texto plano
       if (storedPassword == password) {
         print('✅ Contraseña coincide (texto plano)');
         passwordMatch = true;
       }
-      
+
       // Método 2: SHA256
       if (!passwordMatch) {
         final hash = sha256.convert(utf8.encode(password));
         final passwordHash = base64Encode(hash.bytes);
+        print('🔐 Comparando hash SHA256:');
+        print(
+          '   Almacenado: ${storedPassword.substring(0, storedPassword.length > 30 ? 30 : storedPassword.length)}...',
+        );
+        print(
+          '   Calculado:  ${passwordHash.substring(0, passwordHash.length > 30 ? 30 : passwordHash.length)}...',
+        );
         if (storedPassword == passwordHash) {
           print('✅ Contraseña coincide (SHA256)');
           passwordMatch = true;
+        } else {
+          print('❌ Hashes no coinciden');
         }
       }
-      
+
       // Método 3: SHA512
       if (!passwordMatch) {
         final hash = sha512.convert(utf8.encode(password));
@@ -168,7 +357,7 @@ class MongoService {
           passwordMatch = true;
         }
       }
-      
+
       // Método 4: SHA384
       if (!passwordMatch) {
         final hash = sha384.convert(utf8.encode(password));
@@ -178,21 +367,12 @@ class MongoService {
           passwordMatch = true;
         }
       }
-      
+
       if (!passwordMatch) {
         print('❌ Contraseña incorrecta');
         return null;
       }
-      
-      // Construir User desde el documento
-      final userId = userDoc['_id']?.toString() ?? '';
-      final email = userDoc['Email']?.toString() ?? '';
-      final username = userDoc['Username']?.toString() ??
-          email.split('@').first;
-      final name = userDoc['Name']?.toString() ?? 'Usuario';
-      final role = userDoc['Role']?.toString() ?? '';
-      final isAdmin = role.toLowerCase() == 'admin';
-      
+
       return User.fromJson(userDoc);
     } catch (e) {
       print('❌ Error autenticando usuario: $e');
@@ -221,11 +401,11 @@ class MongoService {
   }) async {
     try {
       final collection = await getUsersCollection();
-      
+
       // Hash de la contraseña con SHA256
       final hash = sha256.convert(utf8.encode(password));
       final passwordHash = base64Encode(hash.bytes);
-      
+
       final userDoc = {
         '_id': ObjectId().toString(),
         'Email': email,
@@ -236,7 +416,7 @@ class MongoService {
         'IsActive': true,
         'CreatedAt': DateTime.now().toIso8601String(),
       };
-      
+
       await collection.insertOne(userDoc);
       print('✅ Usuario creado exitosamente');
     } catch (e) {
@@ -295,21 +475,125 @@ class MongoService {
         objectId = ObjectId.fromHexString(id);
       } catch (_) {
         // Si no es un ObjectId válido, actualizar directamente
-        final result = await collection.update(
-          where.eq('_id', id),
-          {'\$set': updates},
-        );
+        final result = await collection.update(where.eq('_id', id), {
+          '\$set': updates,
+        });
         return result['ok'] == 1.0;
       }
-      final result = await collection.update(
-        where.id(objectId),
-        {'\$set': updates},
-      );
+      final result = await collection.update(where.id(objectId), {
+        '\$set': updates,
+      });
 
       return result['ok'] == 1.0;
     } catch (e) {
       print('❌ Error actualizando usuario: $e');
       rethrow;
+    }
+  }
+
+  /// Guarda token de recuperación de contraseña
+  Future<void> savePasswordResetToken(String email, String token) async {
+    try {
+      print('🔑 Guardando token de recuperación para: $email');
+      final collection = await getUsersCollection();
+
+      // Expira en 1 hora
+      final expiresAt = DateTime.now().add(const Duration(hours: 1));
+
+      final result = await collection.update(where.eq('Email', email), {
+        '\$set': {
+          'ResetToken': token,
+          'ResetTokenExpires': expiresAt.toIso8601String(),
+        },
+      });
+
+      if (result['nModified'] == 0) {
+        throw Exception('Usuario no encontrado');
+      }
+
+      print('✅ Token guardado correctamente');
+    } catch (e) {
+      print('❌ Error guardando token: $e');
+      rethrow;
+    }
+  }
+
+  /// Verifica el token de recuperación de contraseña
+  Future<bool> verifyPasswordResetToken(String email, String token) async {
+    try {
+      print('🔍 Verificando token de recuperación para: $email');
+      final collection = await getUsersCollection();
+
+      final doc = await collection.findOne({
+        'Email': email,
+        'ResetToken': token,
+      });
+
+      if (doc == null) {
+        print('❌ Token no encontrado o no coincide');
+        return false;
+      }
+
+      // Verificar que no haya expirado
+      final expiresAtStr = doc['ResetTokenExpires'];
+      if (expiresAtStr == null) {
+        print('❌ Token sin fecha de expiración');
+        return false;
+      }
+
+      final expiresAt = DateTime.parse(expiresAtStr);
+      if (expiresAt.isBefore(DateTime.now())) {
+        print('❌ Token expirado');
+        return false;
+      }
+
+      print('✅ Token válido');
+      return true;
+    } catch (e) {
+      print('❌ Error verificando token: $e');
+      return false;
+    }
+  }
+
+  /// Actualiza la contraseña de un usuario
+  Future<void> updatePassword(String email, String newPassword) async {
+    try {
+      print('🔑 Actualizando contraseña para: $email');
+      final collection = await getUsersCollection();
+
+      // Hash de la nueva contraseña con SHA256
+      final hash = sha256.convert(utf8.encode(newPassword));
+      final passwordHash = base64Encode(hash.bytes);
+
+      final result = await collection.update(where.eq('Email', email), {
+        '\$set': {'Password': passwordHash},
+      });
+
+      if (result['nModified'] == 0) {
+        throw Exception('Usuario no encontrado');
+      }
+
+      print('✅ Contraseña actualizada correctamente');
+    } catch (e) {
+      print('❌ Error actualizando contraseña: $e');
+      rethrow;
+    }
+  }
+
+  /// Limpia el token de recuperación de contraseña
+  Future<void> clearPasswordResetToken(String email) async {
+    try {
+      print('🧽 Limpiando token de recuperación para: $email');
+      final collection = await getUsersCollection();
+
+      await collection.update(where.eq('Email', email), {
+        '\$unset': {'ResetToken': '', 'ResetTokenExpires': ''},
+      });
+
+      print('✅ Token limpiado correctamente');
+    } catch (e) {
+      print('❌ Error limpiando token: $e');
+      // No lanzar error, es una operación de limpieza
     }
   }
 
@@ -322,7 +606,9 @@ class MongoService {
       final users = <User>[];
       await cursor.forEach((doc) {
         try {
-          users.add(User.fromJson(doc.map((key, value) => MapEntry(key, value))));
+          users.add(
+            User.fromJson(doc.map((key, value) => MapEntry(key, value))),
+          );
         } catch (e) {
           print('⚠️ Error parseando usuario: $e');
         }
@@ -338,20 +624,62 @@ class MongoService {
   // MARK: - Catalog Operations
 
   /// Obtener catálogos de un usuario
-  Future<List<Catalog>> getCatalogs(String userId, {bool isAdmin = false}) async {
+  Future<List<Catalog>> getCatalogs(
+    String userId, {
+    bool isAdmin = false,
+    String? userEmail, // Email del usuario para buscar en Owner/CreatedBy
+  }) async {
     try {
       final collection = await getCatalogsCollection();
-      final selector = isAdmin ? {} : where.eq('userId', userId);
+      // Usar Map directamente en lugar de SelectorBuilder para evitar errores
+      // MongoDB puede usar 'Owner', 'CreatedBy' o 'userId' para el propietario
+      // Owner/CreatedBy normalmente contienen el email del usuario
+      final selector = isAdmin
+          ? <String, dynamic>{}
+          : <String, dynamic>{
+              r'$or': [
+                {'Owner': userId},
+                {'CreatedBy': userId},
+                {'userId': userId},
+                // También buscar por email si está disponible
+                if (userEmail != null) {'Owner': userEmail},
+                if (userEmail != null) {'CreatedBy': userEmail},
+              ],
+            };
       final cursor = collection.find(selector);
+      print(
+        '🔍 Consulta de catálogos: isAdmin=$isAdmin, userId=$userId, selector=$selector',
+      );
 
       final catalogs = <Catalog>[];
+      int totalFound = 0;
+      int parsedSuccessfully = 0;
+      int parseErrors = 0;
+
       await cursor.forEach((doc) {
+        totalFound++;
         try {
-          catalogs.add(Catalog.fromJson(doc.map((key, value) => MapEntry(key, value))));
-        } catch (e) {
+          final catalog = Catalog.fromJson(
+            doc.map((key, value) => MapEntry(key, value)),
+          );
+          catalogs.add(catalog);
+          parsedSuccessfully++;
+          print('✅ Catálogo parseado: ${catalog.name} (ID: ${catalog.id})');
+        } catch (e, stackTrace) {
+          parseErrors++;
           print('⚠️ Error parseando catálogo: $e');
+          print('   Stack trace: $stackTrace');
+          print(
+            '   Documento: ${doc.toString().substring(0, doc.toString().length > 200 ? 200 : doc.toString().length)}...',
+          );
         }
       });
+
+      print('📊 Resumen de catálogos:');
+      print('   - Total encontrados en MongoDB: $totalFound');
+      print('   - Parseados correctamente: $parsedSuccessfully');
+      print('   - Errores de parsing: $parseErrors');
+      print('   - Catálogos retornados: ${catalogs.length}');
 
       return catalogs;
     } catch (e) {
@@ -384,8 +712,55 @@ class MongoService {
     }
   }
 
-  /// Crear nuevo catálogo
-  Future<Catalog> createCatalog(Map<String, dynamic> catalogData) async {
+  /// Crear nuevo catálogo (sobrecarga con parámetros nombrados)
+  Future<Catalog> createCatalog({
+    required String name,
+    required String description,
+    required String userId,
+    required List<String> columns,
+  }) async {
+    try {
+      final collection = await getCatalogsCollection();
+      final now = DateTime.now();
+
+      final catalogData = {
+        'Name': name,
+        'Description': description,
+        'Category': '',
+        'Fecha': now.toIso8601String(),
+        'DocumentoUrl': '',
+        'MultimediaUrl': '',
+        'ImagenUrl': '',
+        'Headers': columns,
+        'Rows': <Map<String, dynamic>>[],
+        'LegacyRows': <Map<String, dynamic>>[],
+        'userId': userId, // Añadir userId en minúscula también
+        'CreatedBy': userId,
+        'Owner': userId,
+        'CreatedAt': now.toIso8601String(),
+        'UpdatedAt': now.toIso8601String(),
+        'Miniatura': null,
+      };
+
+      final result = await collection.insertOne(catalogData);
+
+      if (result.isSuccess) {
+        final createdCatalog = await getCatalogById(result.id.toString());
+        if (createdCatalog == null) {
+          throw Exception('Error al recuperar catálogo creado');
+        }
+        return createdCatalog;
+      } else {
+        throw Exception('Error al crear catálogo');
+      }
+    } catch (e) {
+      print('❌ Error creando catálogo: $e');
+      rethrow;
+    }
+  }
+
+  /// Crear nuevo catálogo (sobrecarga con Map)
+  Future<Catalog> createCatalogFromMap(Map<String, dynamic> catalogData) async {
     try {
       final collection = await getCatalogsCollection();
       final result = await collection.insertOne(catalogData);
@@ -405,6 +780,24 @@ class MongoService {
     }
   }
 
+  /// Actualizar catálogo (sobrecarga que acepta objeto Catalog)
+  Future<bool> updateCatalogFromObject(Catalog catalog) async {
+    try {
+      final updates = <String, dynamic>{
+        'Name': catalog.name,
+        'Description': catalog.description,
+        'Headers': catalog.columns,
+        'Rows': catalog.rows.map((row) => row.toJson()).toList(),
+        'UpdatedAt': catalog.updatedAt.toIso8601String(),
+      };
+
+      return await updateCatalog(catalog.id, updates);
+    } catch (e) {
+      print('❌ Error actualizando catálogo: $e');
+      rethrow;
+    }
+  }
+
   /// Actualizar catálogo
   Future<bool> updateCatalog(String id, Map<String, dynamic> updates) async {
     try {
@@ -414,16 +807,14 @@ class MongoService {
         objectId = ObjectId.fromHexString(id);
       } catch (_) {
         // Si no es un ObjectId válido, actualizar directamente
-        final result = await collection.update(
-          where.eq('_id', id),
-          {'\$set': updates},
-        );
+        final result = await collection.update(where.eq('_id', id), {
+          '\$set': updates,
+        });
         return result['ok'] == 1.0;
       }
-      final result = await collection.update(
-        where.id(objectId),
-        {'\$set': updates},
-      );
+      final result = await collection.update(where.id(objectId), {
+        '\$set': updates,
+      });
 
       return result['ok'] == 1.0;
     } catch (e) {
@@ -453,4 +844,3 @@ class MongoService {
     }
   }
 }
-

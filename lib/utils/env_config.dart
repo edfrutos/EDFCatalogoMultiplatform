@@ -7,15 +7,32 @@ class EnvConfig {
   }
 
   // MongoDB
-  static String get mongoUri => dotenv.env['MONGO_URI'] ?? '';
-  static String get mongoDb => dotenv.env['MONGO_DB'] ?? '';
+  static String get mongoUri {
+    try {
+      return dotenv.env['MONGO_URI'] ?? '';
+    } catch (e) {
+      print('⚠️ Error accediendo a MONGO_URI: $e');
+      return '';
+    }
+  }
+
+  static String get mongoDb {
+    try {
+      return dotenv.env['MONGO_DB'] ?? '';
+    } catch (e) {
+      print('⚠️ Error accediendo a MONGO_DB: $e');
+      return '';
+    }
+  }
 
   // AWS S3
   static String get awsAccessKeyId => dotenv.env['AWS_ACCESS_KEY_ID'] ?? '';
   static String get awsSecretAccessKey =>
       dotenv.env['AWS_SECRET_ACCESS_KEY'] ?? '';
   static String get awsRegion => dotenv.env['AWS_REGION'] ?? 'eu-central-1';
-  static String get bucketName => dotenv.env['BUCKET_NAME'] ?? '';
+  // Intentar ambos nombres: S3_BUCKET_NAME y BUCKET_NAME
+  static String get bucketName =>
+      dotenv.env['S3_BUCKET_NAME'] ?? dotenv.env['BUCKET_NAME'] ?? '';
   static bool get useS3 => dotenv.env['USE_S3']?.toLowerCase() == 'true';
 
   // Email Service (Brevo)
@@ -41,4 +58,3 @@ class EnvConfig {
     return true;
   }
 }
-

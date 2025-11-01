@@ -1,7 +1,9 @@
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import '../models/user.dart';
 import '../services/mongo_service.dart';
 import '../services/keychain_service.dart';
+import '../services/email_service.dart';
 
 /// ViewModel para gestionar la autenticación de usuarios
 class AuthViewModel extends ChangeNotifier {
@@ -190,6 +192,93 @@ class AuthViewModel extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       print('❌ Error en registro: $e');
+      return false;
+    }
+  }
+
+  /// Solicitar recuperación de contraseña
+  Future<bool> requestPasswordReset(String email) async {
+    print('🔑 Solicitando recuperación de contraseña para: $email');
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      // Verificar que el usuario existe
+      final exists = await _mongoService.checkUserExists(email);
+      if (!exists) {
+        _errorMessage = 'No existe una cuenta con este email';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
+      // Generar token de recuperación (6 dígitos)
+      final random = Random();
+      final resetToken = random.nextInt(999999).toString().padLeft(6, '0');
+
+      // Guardar token en MongoDB con expiración de 1 hora
+      await _mongoService.savePasswordResetToken(email, resetToken);
+
+      // Enviar email con el token
+      await EmailService.shared.sendPasswordResetEmail(
+        to: email,
+        resetToken: resetToken,
+      );
+
+      print('✅ Email de recuperación enviado a: $email');
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = 'Error al enviar el email: $e';
+      _isLoading = false;
+      notifyListeners();
+      print('❌ Error en recuperación: $e');
+      return false;
+    }
+  }
+
+  /// Restablecer contraseña con token
+  Future<bool> resetPassword({
+    required String email,
+    required String token,
+    required String newPassword,
+  }) async {
+    print('🔑 Restableciendo contraseña para: $email');
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      // Verificar el token
+      final isValid = await _mongoService.verifyPasswordResetToken(email, token);
+      if (!isValid) {
+        _errorMessage = 'Código inválido o expirado';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
+      // Actualizar contraseña
+      await _mongoService.updatePassword(email, newPassword);
+
+      // Limpiar token de recuperación
+      try {
+        await _mongoService.clearPasswordResetToken(email);
+      } catch (_) {
+        // Ignorar errores de limpieza
+      }
+
+      print('✅ Contraseña restablecida exitosamente para: $email');
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = 'Error al restablecer la contraseña: $e';
+      _isLoading = false;
+      notifyListeners();
+      print('❌ Error al restablecer contraseña: $e');
       return false;
     }
   }

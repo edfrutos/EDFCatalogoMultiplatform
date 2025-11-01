@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:mongo_dart/mongo_dart.dart' as mongo;
 
 /// Modelo de usuario completo
 class User extends Equatable {
@@ -38,28 +39,73 @@ class User extends Equatable {
 
   // Factory constructor para crear desde JSON (MongoDB)
   factory User.fromJson(Map<String, dynamic> json) {
+    // Manejar _id: puede ser String, ObjectId, o Map con $oid
+    String idValue = '';
+    if (json['_id'] != null) {
+      if (json['_id'] is String) {
+        idValue = json['_id'] as String;
+      } else if (json['_id'] is mongo.ObjectId) {
+        // ObjectId en mongo_dart se convierte a String con .oid
+        idValue = (json['_id'] as mongo.ObjectId).oid;
+      } else if (json['_id'] is Map && json['_id']?['\$oid'] != null) {
+        idValue = json['_id']?['\$oid'] ?? '';
+      } else {
+        idValue = json['_id'].toString();
+      }
+    } else {
+      idValue = json['id']?.toString() ?? '';
+    }
+
+    // Convertir Role a isAdmin (Role puede ser "Admin", "admin", "user", etc.)
+    final role =
+        json['Role']?.toString().toLowerCase() ??
+        json['role']?.toString().toLowerCase() ??
+        '';
+    final isAdminValue = role == 'admin';
+
     return User(
-      id: json['_id'] is String
-          ? json['_id']
-          : (json['_id']?['\$oid'] ?? json['id'] ?? ''),
-      email: json['email'] ?? '',
-      username: json['username'] ?? '',
-      name: json['name'] ?? '',
-      isAdmin: json['isAdmin'] ?? false,
-      fullName: json['fullName'],
-      phone: json['phone'],
-      company: json['company'],
-      address: json['address'],
-      occupation: json['occupation'],
-      profileImageUrl: json['profileImageUrl'],
-      isActive: json['isActive'],
-      createdAt: json['createdAt'] != null
-          ? DateTime.tryParse(json['createdAt'].toString())
-          : null,
-      lastLoginAt: json['lastLoginAt'] != null
-          ? DateTime.tryParse(json['lastLoginAt'].toString())
-          : null,
+      id: idValue,
+      // MongoDB usa Email/Username con mayúsculas, pero también verificar minúsculas
+      email: json['Email']?.toString() ?? json['email']?.toString() ?? '',
+      username:
+          json['Username']?.toString() ?? json['username']?.toString() ?? '',
+      name: json['Name']?.toString() ?? json['name']?.toString() ?? '',
+      isAdmin: isAdminValue,
+      fullName: json['FullName']?.toString() ?? json['fullName']?.toString(),
+      phone: json['Phone']?.toString() ?? json['phone']?.toString(),
+      company: json['Company']?.toString() ?? json['company']?.toString(),
+      address: json['Address']?.toString() ?? json['address']?.toString(),
+      occupation:
+          json['Occupation']?.toString() ?? json['occupation']?.toString(),
+      profileImageUrl:
+          json['ProfileImageUrl']?.toString() ??
+          json['profileImageUrl']?.toString(),
+      isActive: json['IsActive'] ?? json['isActive'] ?? true,
+      createdAt:
+          _parseDateTime(json['CreatedAt']) ??
+          _parseDateTime(json['createdAt']),
+      lastLoginAt:
+          _parseDateTime(json['LastLoginAt']) ??
+          _parseDateTime(json['lastLoginAt']),
     );
+  }
+
+  // Helper para parsear fechas desde MongoDB
+  static DateTime? _parseDateTime(dynamic value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    if (value is Map && value['\$date'] != null) {
+      final dateValue = value['\$date'];
+      if (dateValue is int) {
+        return DateTime.fromMillisecondsSinceEpoch(dateValue);
+      } else if (dateValue is String) {
+        return DateTime.tryParse(dateValue);
+      }
+    }
+    if (value is String) {
+      return DateTime.tryParse(value);
+    }
+    return null;
   }
 
   // Convertir a JSON para MongoDB
@@ -130,20 +176,19 @@ class User extends Equatable {
 
   @override
   List<Object?> get props => [
-        id,
-        email,
-        username,
-        name,
-        isAdmin,
-        fullName,
-        phone,
-        company,
-        address,
-        occupation,
-        profileImageUrl,
-        isActive,
-        createdAt,
-        lastLoginAt,
-      ];
+    id,
+    email,
+    username,
+    name,
+    isAdmin,
+    fullName,
+    phone,
+    company,
+    address,
+    occupation,
+    profileImageUrl,
+    isActive,
+    createdAt,
+    lastLoginAt,
+  ];
 }
-

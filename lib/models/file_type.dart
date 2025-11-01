@@ -1,9 +1,5 @@
 /// Tipos de archivo soportados
-enum FileType {
-  image,
-  document,
-  multimedia,
-}
+enum FileType { image, document, text, multimedia, other }
 
 /// Extensiones de archivos para cada tipo
 class FileTypeExtensions {
@@ -74,4 +70,3 @@ class FileTypeExtensions {
     return fromExtension(extension);
   }
 }
-
