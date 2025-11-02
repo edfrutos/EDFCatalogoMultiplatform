@@ -17,7 +17,7 @@ class _RegisterViewState extends State<RegisterView> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  
+
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _isRegistering = false;
@@ -125,7 +125,8 @@ class _RegisterViewState extends State<RegisterView> {
                 ),
                 enabled: !_isRegistering,
                 textInputAction: TextInputAction.next,
-                validator: (value) => Validators.validateRequired(value, fieldName: 'Nombre'),
+                validator: (value) =>
+                    Validators.validateRequired(value, fieldName: 'Nombre'),
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -150,7 +151,9 @@ class _RegisterViewState extends State<RegisterView> {
                   prefixIcon: const Icon(Icons.lock),
                   suffixIcon: IconButton(
                     icon: Icon(
-                      _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                      _obscurePassword
+                          ? Icons.visibility
+                          : Icons.visibility_off,
                     ),
                     onPressed: () {
                       setState(() {
@@ -162,7 +165,8 @@ class _RegisterViewState extends State<RegisterView> {
                 enabled: !_isRegistering,
                 obscureText: _obscurePassword,
                 textInputAction: TextInputAction.next,
-                validator: (value) => Validators.validatePassword(value, minLength: 6),
+                validator: (value) =>
+                    Validators.validatePassword(value, minLength: 6),
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -193,8 +197,8 @@ class _RegisterViewState extends State<RegisterView> {
                   _passwordController.text,
                 ),
               ),
-              if (!_passwordController.text.isEmpty &&
-                  !_confirmPasswordController.text.isEmpty &&
+              if (_passwordController.text.isNotEmpty &&
+                  _confirmPasswordController.text.isNotEmpty &&
                   !_passwordsMatch)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
@@ -249,4 +253,3 @@ class _RegisterViewState extends State<RegisterView> {
     );
   }
 }
-

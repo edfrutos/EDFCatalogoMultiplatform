@@ -6,10 +6,7 @@ import '../../utils/validators.dart';
 class ResetPasswordView extends StatefulWidget {
   final String email;
 
-  const ResetPasswordView({
-    super.key,
-    required this.email,
-  });
+  const ResetPasswordView({super.key, required this.email});
 
   @override
   State<ResetPasswordView> createState() => _ResetPasswordViewState();
@@ -20,7 +17,7 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
   final _resetCodeController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  
+
   bool _obscureNewPassword = true;
   bool _obscureConfirmPassword = true;
   bool _isResetting = false;
@@ -80,7 +77,9 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
     } else if (mounted) {
       setState(() {
         _isError = true;
-        _message = authViewModel.errorMessage ?? '❌ Error al restablecer la contraseña';
+        _message =
+            authViewModel.errorMessage ??
+            '❌ Error al restablecer la contraseña';
       });
     }
   }
@@ -88,9 +87,7 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Restablecer contraseña'),
-      ),
+      appBar: AppBar(title: const Text('Restablecer contraseña')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Form(
@@ -100,10 +97,7 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
             children: [
               const Text(
                 'Se ha enviado un código de 6 dígitos a:',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey,
-                ),
+                style: TextStyle(fontSize: 14, color: Colors.grey),
               ),
               const SizedBox(height: 8),
               Text(
@@ -116,10 +110,7 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
               const SizedBox(height: 24),
               const Text(
                 'Código de verificación',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               TextFormField(
@@ -132,14 +123,22 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
                 enabled: !_isResetting,
                 keyboardType: TextInputType.number,
                 maxLength: 6,
-                buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
+                buildCounter:
+                    (
+                      context, {
+                      required currentLength,
+                      required isFocused,
+                      maxLength,
+                    }) => null,
                 onChanged: (value) {
                   // Limitar a solo números
                   final filtered = value.replaceAll(RegExp(r'[^0-9]'), '');
                   if (filtered != value) {
                     _resetCodeController.value = TextEditingValue(
                       text: filtered,
-                      selection: TextSelection.collapsed(offset: filtered.length),
+                      selection: TextSelection.collapsed(
+                        offset: filtered.length,
+                      ),
                     );
                   }
                 },
@@ -148,10 +147,7 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
               const SizedBox(height: 24),
               const Text(
                 'Nueva contraseña',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               TextFormField(
@@ -162,7 +158,9 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
                   prefixIcon: const Icon(Icons.lock),
                   suffixIcon: IconButton(
                     icon: Icon(
-                      _obscureNewPassword ? Icons.visibility : Icons.visibility_off,
+                      _obscureNewPassword
+                          ? Icons.visibility
+                          : Icons.visibility_off,
                     ),
                     onPressed: () {
                       setState(() {
@@ -173,7 +171,8 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
                 ),
                 enabled: !_isResetting,
                 obscureText: _obscureNewPassword,
-                validator: (value) => Validators.validatePassword(value, minLength: 6),
+                validator: (value) =>
+                    Validators.validatePassword(value, minLength: 6),
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -184,7 +183,9 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
                   prefixIcon: const Icon(Icons.lock_outline),
                   suffixIcon: IconButton(
                     icon: Icon(
-                      _obscureConfirmPassword ? Icons.visibility : Icons.visibility_off,
+                      _obscureConfirmPassword
+                          ? Icons.visibility
+                          : Icons.visibility_off,
                     ),
                     onPressed: () {
                       setState(() {
@@ -200,8 +201,8 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
                   _newPasswordController.text,
                 ),
               ),
-              if (!_newPasswordController.text.isEmpty &&
-                  !_confirmPasswordController.text.isEmpty &&
+              if (_newPasswordController.text.isNotEmpty &&
+                  _confirmPasswordController.text.isNotEmpty &&
                   !_passwordsMatch)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
@@ -256,4 +257,3 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
     );
   }
 }
-

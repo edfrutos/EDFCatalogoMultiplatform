@@ -621,6 +621,65 @@ class MongoService {
     }
   }
 
+  /// Eliminar usuario físicamente de la base de datos
+  Future<bool> deleteUser(String id) async {
+    try {
+      print('🗑️ Intentando eliminar usuario con ID: $id');
+      final collection = await getUsersCollection();
+
+      // Verificar que el usuario existe antes de eliminarlo
+      var userDoc = await collection.findOne({'_id': id});
+      if (userDoc == null) {
+        // Intentar con ObjectId
+        try {
+          final objectId = ObjectId.fromHexString(id);
+          userDoc = await collection.findOne(where.id(objectId));
+        } catch (_) {
+          // Ignorar error de parsing
+        }
+      }
+
+      if (userDoc == null) {
+        print('❌ Usuario no encontrado con ID: $id');
+        return false;
+      }
+
+      print('✅ Usuario encontrado, procediendo a eliminar...');
+
+      ObjectId? objectId;
+      try {
+        objectId = ObjectId.fromHexString(id);
+      } catch (_) {
+        // Si no es un ObjectId válido, eliminar directamente
+        print('📝 Eliminando usuario con ID como string: $id');
+        final result = await collection.remove(where.eq('_id', id));
+        print('📊 Resultado de eliminación: $result');
+        final success = result['ok'] == 1.0 || result['n'] > 0;
+        if (success) {
+          print('✅ Usuario eliminado exitosamente');
+        } else {
+          print('❌ Error: No se pudo eliminar el usuario (result: $result)');
+        }
+        return success;
+      }
+
+      print('📝 Eliminando usuario con ObjectId: $objectId');
+      final result = await collection.remove(where.id(objectId));
+      print('📊 Resultado de eliminación: $result');
+      final success = result['ok'] == 1.0 || result['n'] > 0;
+      if (success) {
+        print('✅ Usuario eliminado exitosamente');
+      } else {
+        print('❌ Error: No se pudo eliminar el usuario (result: $result)');
+      }
+      return success;
+    } catch (e, stackTrace) {
+      print('❌ Error eliminando usuario: $e');
+      print('📚 Stack trace: $stackTrace');
+      rethrow;
+    }
+  }
+
   // MARK: - Catalog Operations
 
   /// Obtener catálogos de un usuario

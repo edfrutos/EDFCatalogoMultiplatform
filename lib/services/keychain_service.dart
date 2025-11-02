@@ -1,7 +1,6 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
 
 /// Servicio para gestionar el almacenamiento seguro de credenciales
 /// Utiliza Keychain en iOS/macOS y Keystore en Android
@@ -18,7 +17,7 @@ class KeychainService {
       // Para desarrollo sin certificado, no especificamos groupId
       // Esto permite usar Keychain sin necesidad de signing
     ),
-    lOptions: const LinuxOptions(),
+    lOptions: LinuxOptions(),
     wOptions: WindowsOptions(useBackwardCompatibility: false),
   );
 

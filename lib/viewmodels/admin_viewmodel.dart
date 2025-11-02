@@ -96,7 +96,8 @@ class AdminViewModel extends ChangeNotifier {
         if (user.company != null) 'Company': user.company,
         if (user.address != null) 'Address': user.address,
         if (user.occupation != null) 'Occupation': user.occupation,
-        if (user.profileImageUrl != null) 'ProfileImageUrl': user.profileImageUrl,
+        if (user.profileImageUrl != null)
+          'ProfileImageUrl': user.profileImageUrl,
         'Role': user.isAdmin ? 'admin' : 'user',
         'IsActive': user.isActive ?? true,
       };
@@ -119,7 +120,7 @@ class AdminViewModel extends ChangeNotifier {
     }
   }
 
-  /// Eliminar un usuario
+  /// Eliminar un usuario físicamente de la base de datos
   Future<void> deleteUser(User user) async {
     _isLoading = true;
     _errorMessage = null;
@@ -127,16 +128,16 @@ class AdminViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Por ahora, desactivamos el usuario en lugar de eliminarlo
-      final updates = {'IsActive': false};
-      final success = await _mongoService.updateUser(user.id, updates);
+      // Eliminar físicamente el usuario
+      final success = await _mongoService.deleteUser(user.id);
 
       if (success) {
-        _successMessage = 'Usuario desactivado correctamente';
+        _successMessage = 'Usuario eliminado correctamente';
         await loadUsers();
         closeDeleteConfirmation();
       } else {
-        _errorMessage = 'Error al eliminar usuario';
+        _errorMessage =
+            'Error al eliminar usuario: no se pudo completar la operación';
       }
     } catch (e) {
       _errorMessage = 'Error al eliminar usuario: $e';
@@ -175,7 +176,10 @@ class AdminViewModel extends ChangeNotifier {
   }
 
   /// Actualizar el estado activo de un usuario
-  Future<void> updateUserActiveStatus(User user, {required bool isActive}) async {
+  Future<void> updateUserActiveStatus(
+    User user, {
+    required bool isActive,
+  }) async {
     _isLoading = true;
     _errorMessage = null;
     _successMessage = null;
@@ -201,6 +205,56 @@ class AdminViewModel extends ChangeNotifier {
     }
   }
 
+  /// Crear un nuevo usuario
+  Future<void> createUser({
+    required String username,
+    required String name,
+    required String email,
+    required String password,
+    bool isAdmin = false,
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    _successMessage = null;
+    notifyListeners();
+
+    try {
+      // Verificar si el usuario ya existe
+      final userExists = await _mongoService.checkUserExists(email);
+      if (userExists) {
+        _errorMessage = 'Ya existe un usuario con ese email';
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
+
+      // Crear el usuario
+      await _mongoService.createUser(
+        username: username,
+        name: name,
+        email: email,
+        password: password,
+      );
+
+      // Si se especifica como admin, actualizar el rol
+      if (isAdmin) {
+        final newUser = await _mongoService.getUserByEmail(email);
+        if (newUser != null) {
+          await updateUserRole(newUser, isAdmin: true);
+        }
+      }
+
+      _successMessage = 'Usuario creado correctamente';
+      await loadUsers();
+    } catch (e) {
+      _errorMessage = 'Error al crear usuario: $e';
+      print('❌ Error: $_errorMessage');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   /// Limpiar mensajes
   void clearMessages() {
     Future.delayed(const Duration(seconds: 3), () {
@@ -210,4 +264,3 @@ class AdminViewModel extends ChangeNotifier {
     });
   }
 }
-

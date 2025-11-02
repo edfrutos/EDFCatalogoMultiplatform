@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../models/user.dart';
 import '../../viewmodels/admin_viewmodel.dart';
 import 'admin_user_detail_view.dart';
+import 'widgets/create_user_dialog.dart';
 
 class AdminUsersListView extends StatefulWidget {
   const AdminUsersListView({super.key});
@@ -74,6 +75,24 @@ class _AdminUsersListViewState extends State<AdminUsersListView> {
                     ],
                   ),
                   const Spacer(),
+                  // Botón Crear Usuario
+                  ElevatedButton.icon(
+                    onPressed: viewModel.isLoading
+                        ? null
+                        : () {
+                            showDialog(
+                              context: context,
+                              builder: (context) => const CreateUserDialog(),
+                            );
+                          },
+                    icon: const Icon(Icons.person_add),
+                    label: const Text('Crear Usuario'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   IconButton(
                     icon: const Icon(Icons.refresh),
                     color: Colors.blue,
@@ -190,92 +209,92 @@ class _AdminUsersListViewState extends State<AdminUsersListView> {
                       ),
                     )
                   : filteredUsers.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                _searchText.isEmpty
-                                    ? Icons.person_off
-                                    : Icons.search_off,
-                                size: 64,
-                                color: Colors.grey,
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                _searchText.isEmpty
-                                    ? 'No hay usuarios'
-                                    : 'No se encontraron resultados',
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                            ],
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            _searchText.isEmpty
+                                ? Icons.person_off
+                                : Icons.search_off,
+                            size: 64,
+                            color: Colors.grey,
                           ),
-                        )
-                      : RefreshIndicator(
-                          onRefresh: () => viewModel.loadUsers(),
-                          child: ListView.builder(
-                            padding: const EdgeInsets.all(16),
-                            itemCount: filteredUsers.length,
-                            itemBuilder: (context, index) {
-                              final user = filteredUsers[index];
-                              return _UserListItem(
-                                user: user,
-                                onSelect: () {
-                                  viewModel.selectUser(user);
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          AdminUserDetailView(user: user),
-                                    ),
-                                  );
-                                },
-                                onToggleRole: () {
-                                  viewModel.updateUserRole(
-                                    user,
-                                    isAdmin: !user.isAdmin,
-                                  );
-                                },
-                                onToggleActive: () {
-                                  viewModel.updateUserActiveStatus(
-                                    user,
-                                    isActive: !(user.isActive ?? true),
-                                  );
-                                },
-                                onDelete: () {
-                                  showDialog(
-                                    context: context,
-                                    builder: (context) => AlertDialog(
-                                      title: const Text('Eliminar Usuario'),
-                                      content: Text(
-                                        '¿Deseas eliminar a ${user.email}? Esta acción no se puede deshacer.',
-                                      ),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () =>
-                                              Navigator.of(context).pop(),
-                                          child: const Text('Cancelar'),
-                                        ),
-                                        TextButton(
-                                          onPressed: () {
-                                            viewModel.deleteUser(user);
-                                            Navigator.of(context).pop();
-                                          },
-                                          style: TextButton.styleFrom(
-                                            foregroundColor: Colors.red,
-                                          ),
-                                          child: const Text('Eliminar'),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                },
+                          const SizedBox(height: 16),
+                          Text(
+                            _searchText.isEmpty
+                                ? 'No hay usuarios'
+                                : 'No se encontraron resultados',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: () => viewModel.loadUsers(),
+                      child: ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: filteredUsers.length,
+                        itemBuilder: (context, index) {
+                          final user = filteredUsers[index];
+                          return _UserListItem(
+                            user: user,
+                            onSelect: () {
+                              viewModel.selectUser(user);
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      AdminUserDetailView(user: user),
+                                ),
                               );
                             },
-                          ),
-                        ),
+                            onToggleRole: () {
+                              viewModel.updateUserRole(
+                                user,
+                                isAdmin: !user.isAdmin,
+                              );
+                            },
+                            onToggleActive: () {
+                              viewModel.updateUserActiveStatus(
+                                user,
+                                isActive: !(user.isActive ?? true),
+                              );
+                            },
+                            onDelete: () {
+                              showDialog(
+                                context: context,
+                                builder: (context) => AlertDialog(
+                                  title: const Text('Eliminar Usuario'),
+                                  content: Text(
+                                    '¿Deseas eliminar a ${user.email}? Esta acción no se puede deshacer.',
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.of(context).pop(),
+                                      child: const Text('Cancelar'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () {
+                                        viewModel.deleteUser(user);
+                                        Navigator.of(context).pop();
+                                      },
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: Colors.red,
+                                      ),
+                                      child: const Text('Eliminar'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
             ),
           ],
         );
@@ -333,9 +352,7 @@ class _UserListItem extends StatelessWidget {
                       children: [
                         Text(
                           user.name,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         if (user.isAdmin) ...[
                           const SizedBox(width: 8),
@@ -406,10 +423,7 @@ class _UserListItem extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       user.email,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey,
-                      ),
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                   ],
                 ),
@@ -433,7 +447,9 @@ class _UserListItem extends StatelessWidget {
                     child: Row(
                       children: [
                         Icon(
-                          user.isAdmin ? Icons.person : Icons.admin_panel_settings,
+                          user.isAdmin
+                              ? Icons.person
+                              : Icons.admin_panel_settings,
                           size: 20,
                         ),
                         const SizedBox(width: 8),
@@ -446,7 +462,9 @@ class _UserListItem extends StatelessWidget {
                     child: Row(
                       children: [
                         Icon(
-                          isActive ? Icons.circle_notifications : Icons.check_circle,
+                          isActive
+                              ? Icons.circle_notifications
+                              : Icons.check_circle,
                           size: 20,
                         ),
                         const SizedBox(width: 8),
@@ -490,4 +508,3 @@ class _UserListItem extends StatelessWidget {
     );
   }
 }
-

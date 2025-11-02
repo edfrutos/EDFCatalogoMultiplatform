@@ -50,10 +50,16 @@ class S3Service {
     required String catalogId,
     required FileType fileType,
   }) async {
+    // Limpiar el userId antes de usarlo
+    final cleanUserId = _cleanUserId(userId);
+    if (cleanUserId != userId) {
+      print('⚠️ UserId limpiado: "$userId" -> "$cleanUserId"');
+    }
+
     print('📤 Iniciando subida de archivo:');
     print('  - Archivo: ${path.basename(filePath)}');
     print('  - Tipo: ${fileType.name}');
-    print('  - Usuario: $userId');
+    print('  - Usuario: $cleanUserId');
     print('  - Catálogo: $catalogId');
     print('  - Bucket: $_bucketName');
     print('  - Region: $_region');
@@ -85,8 +91,9 @@ class S3Service {
 
     _validateFileSize(fileSize, fileType);
 
+    // Usar el userId limpio
     final s3Key = _generateS3Key(
-      userId: userId,
+      userId: cleanUserId,
       catalogId: catalogId,
       fileType: fileType,
       originalFileName: path.basename(filePath),
@@ -262,18 +269,34 @@ class S3Service {
 
   // MARK: - Helpers
 
+  /// Limpia el userId de formato ObjectId(...)
+  String _cleanUserId(String userId) {
+    // Si el userId contiene ObjectId("..."), extraer solo el ID
+    final objectIdMatch = RegExp(r'ObjectId\("?([^"]+)"?\)').firstMatch(userId);
+    if (objectIdMatch != null) {
+      return objectIdMatch.group(1)!;
+    }
+    // Si ya es un ID limpio, devolverlo tal cual
+    return userId;
+  }
+
   /// Genera una key única para S3
   String _generateS3Key({
-    required String userId,
+    required String userId, // userId ya debería estar limpio desde uploadFile
     required String catalogId,
     required FileType fileType,
     required String originalFileName,
   }) {
+    // Limpiar el userId para asegurar que no contenga formato ObjectId(...)
+    // (por si acaso viene sin limpiar desde otros métodos)
+    final cleanUserId = _cleanUserId(userId);
+    // También limpiar catalogId por si acaso
+    final cleanCatalogId = _cleanUserId(catalogId);
     final uuid = const Uuid().v4();
     final extension = path.extension(originalFileName);
     final fileTypeFolder = fileType.name; // image, document, multimedia
 
-    return 'users/$userId/catalogs/$catalogId/$fileTypeFolder/$uuid$extension';
+    return 'users/$cleanUserId/catalogs/$cleanCatalogId/$fileTypeFolder/$uuid$extension';
   }
 
   /// Normaliza una key de S3
@@ -398,12 +421,7 @@ class S3Service {
   }
 
   String _formatAmzDate(DateTime date) {
-    return date
-            .toIso8601String()
-            .replaceAll('-', '')
-            .replaceAll(':', '')
-            .split('.')[0] +
-        'Z';
+    return '${date.toIso8601String().replaceAll('-', '').replaceAll(':', '').split('.')[0]}Z';
   }
 
   String _formatBytes(int bytes) {

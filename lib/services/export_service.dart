@@ -35,7 +35,8 @@ class ExportService {
 
     // Guardar archivo
     final directory = await getApplicationDocumentsDirectory();
-    final fileName = '${_sanitizeFileName(catalog.name)}_${DateTime.now().millisecondsSinceEpoch}.csv';
+    final fileName =
+        '${_sanitizeFileName(catalog.name)}_${DateTime.now().millisecondsSinceEpoch}.csv';
     final file = File('${directory.path}/$fileName');
     await file.writeAsString(csvString);
 
@@ -47,11 +48,13 @@ class ExportService {
   Future<String> exportToExcel(Catalog catalog) async {
     final excel = Excel.createExcel();
     excel.delete('Sheet1'); // Eliminar hoja por defecto
-    final sheet = excel['${_sanitizeFileName(catalog.name)}'];
+    final sheet = excel[_sanitizeFileName(catalog.name)];
 
     // Encabezado
     for (int i = 0; i < catalog.columns.length; i++) {
-      final cell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0));
+      final cell = sheet.cell(
+        CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0),
+      );
       cell.value = catalog.columns[i];
       // Estilo para encabezado
       cell.cellStyle = CellStyle(
@@ -83,7 +86,8 @@ class ExportService {
 
     // Guardar archivo
     final directory = await getApplicationDocumentsDirectory();
-    final fileName = '${_sanitizeFileName(catalog.name)}_${DateTime.now().millisecondsSinceEpoch}.xlsx';
+    final fileName =
+        '${_sanitizeFileName(catalog.name)}_${DateTime.now().millisecondsSinceEpoch}.xlsx';
     final file = File('${directory.path}/$fileName');
     final excelBytes = excel.save();
     if (excelBytes != null) {
@@ -108,7 +112,9 @@ class ExportService {
 
       // Encabezado
       for (int i = 0; i < catalog.columns.length; i++) {
-        final cell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0));
+        final cell = sheet.cell(
+          CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0),
+        );
         cell.value = catalog.columns[i];
         cell.cellStyle = CellStyle(
           bold: true,
@@ -195,12 +201,11 @@ class ExportService {
     var sanitized = name
         .replaceAll(RegExp(r'[<>:"/\\|?*\[\]]'), '_')
         .replaceAll(' ', '_');
-    
+
     if (sanitized.length > 31) {
       sanitized = sanitized.substring(0, 31);
     }
-    
+
     return sanitized.isEmpty ? 'Sheet1' : sanitized;
   }
 }
-

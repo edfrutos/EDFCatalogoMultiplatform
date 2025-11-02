@@ -84,7 +84,7 @@ class Catalog extends Equatable {
       }
 
       // Helper para parsear fechas que pueden venir como DateTime, Map con $date, o String
-      DateTime? _parseDateTime(dynamic dateValue) {
+      DateTime? parseDateTime(dynamic dateValue) {
         if (dateValue == null) return null;
         if (dateValue is DateTime) return dateValue;
         if (dateValue is Map && dateValue['\$date'] != null) {
@@ -99,13 +99,13 @@ class Catalog extends Equatable {
       }
 
       DateTime createdAt =
-          _parseDateTime(json['CreatedAt']) ??
-          _parseDateTime(json['createdAt']) ??
+          parseDateTime(json['CreatedAt']) ??
+          parseDateTime(json['createdAt']) ??
           DateTime.now();
 
       DateTime updatedAt =
-          _parseDateTime(json['UpdatedAt']) ??
-          _parseDateTime(json['updatedAt']) ??
+          parseDateTime(json['UpdatedAt']) ??
+          parseDateTime(json['updatedAt']) ??
           DateTime.now();
 
       // Manejar _id: puede ser String, ObjectId, o Map con $oid
@@ -282,7 +282,7 @@ class CatalogRow extends Equatable {
     }
 
     // Helper para parsear fechas que pueden venir como DateTime, Map con $date, o String
-    DateTime? _parseRowDateTime(dynamic dateValue) {
+    DateTime? parseRowDateTime(dynamic dateValue) {
       if (dateValue == null) return null;
       if (dateValue is DateTime) return dateValue;
       if (dateValue is Map && dateValue['\$date'] != null) {
@@ -297,13 +297,13 @@ class CatalogRow extends Equatable {
     }
 
     DateTime createdAt =
-        _parseRowDateTime(json['CreatedAt']) ??
-        _parseRowDateTime(json['createdAt']) ??
+        parseRowDateTime(json['CreatedAt']) ??
+        parseRowDateTime(json['createdAt']) ??
         DateTime.now();
 
     DateTime updatedAt =
-        _parseRowDateTime(json['UpdatedAt']) ??
-        _parseRowDateTime(json['updatedAt']) ??
+        parseRowDateTime(json['UpdatedAt']) ??
+        parseRowDateTime(json['updatedAt']) ??
         DateTime.now();
 
     return CatalogRow(
