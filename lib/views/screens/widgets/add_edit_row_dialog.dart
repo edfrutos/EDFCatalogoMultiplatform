@@ -28,6 +28,7 @@ class AddEditRowDialog extends StatefulWidget {
 }
 
 class _AddEditRowDialogState extends State<AddEditRowDialog> {
+  final _formKey = GlobalKey<FormState>();
   late Map<String, TextEditingController> _controllers;
   late RowFiles _files;
   bool _isSaving = false;
@@ -80,6 +81,18 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
   }
 
   Future<void> _handleSave() async {
+    // Validar formulario antes de guardar
+    if (!_formKey.currentState!.validate()) {
+      // Si la validación falla, mostrar mensaje
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Por favor, corrige los errores en el formulario'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     final data = <String, String>{};
     for (final entry in _controllers.entries) {
       data[entry.key] = entry.value.text.trim();
@@ -423,127 +436,136 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
             // Form
             Expanded(
               child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Campos de datos
-                    const Text(
-                      'Datos:',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                child: Form(
+                  key: _formKey,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Campos de datos
+                      const Text(
+                        'Datos:',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    ...widget.catalog.columns.map((column) {
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
-                        child: TextFormField(
-                          controller: _controllers[column],
-                          decoration: InputDecoration(
-                            labelText: column,
-                            border: const OutlineInputBorder(),
+                      const SizedBox(height: 16),
+                      ...widget.catalog.columns.map((column) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: TextFormField(
+                            controller: _controllers[column],
+                            decoration: InputDecoration(
+                              labelText: column,
+                              border: const OutlineInputBorder(),
+                              helperText: 'Campo requerido',
+                              helperMaxLines: 1,
+                            ),
+                            validator: (value) {
+                              // Validación básica - puede extenderse con reglas por columna
+                              return Validators.validateRequired(
+                                value,
+                                fieldName: column,
+                              );
+                            },
                           ),
-                          validator: (value) {
-                            // Validación básica - puede extenderse con reglas por columna
-                            return Validators.validateRequired(
-                              value,
-                              fieldName: column,
-                            );
-                          },
-                          autovalidateMode: AutovalidateMode.onUserInteraction,
+                        );
+                      }),
+                      const SizedBox(height: 24),
+                      const Divider(),
+                      const SizedBox(height: 16),
+                      // Archivos
+                      const Text(
+                        'Archivos:',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
                         ),
-                      );
-                    }),
-                    const SizedBox(height: 24),
-                    const Divider(),
-                    const SizedBox(height: 16),
-                    // Archivos
-                    const Text(
-                      'Archivos:',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    if (_uploadError != null)
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        margin: const EdgeInsets.only(bottom: 16),
-                        decoration: BoxDecoration(
-                          color: Colors.red.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.red.shade200),
-                        ),
-                        child: Text(
-                          _uploadError!,
-                          style: const TextStyle(
-                            color: Colors.red,
-                            fontSize: 12,
+                      const SizedBox(height: 16),
+                      if (_uploadError != null)
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          margin: const EdgeInsets.only(bottom: 16),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.red.shade200),
+                          ),
+                          child: Text(
+                            _uploadError!,
+                            style: const TextStyle(
+                              color: Colors.red,
+                              fontSize: 12,
+                            ),
                           ),
                         ),
+                      // Imagen
+                      _MultiFileSelectionRow(
+                        title: 'Imagen',
+                        selectedFiles: _selectedImageFiles,
+                        existingUrls: _imageUrls,
+                        isUploading: _isUploadingImage,
+                        fileType: app_file_type.FileType.image,
+                        onSelect: () =>
+                            _selectFile(app_file_type.FileType.image),
+                        onSelectMultiple: () => _selectFile(
+                          app_file_type.FileType.image,
+                          allowMultiple: true,
+                        ),
+                        onAddUrl: () =>
+                            _showAddUrlDialog(app_file_type.FileType.image),
+                        onRemove: (index) => _removeFileOrUrl(
+                          index,
+                          app_file_type.FileType.image,
+                        ),
                       ),
-                    // Imagen
-                    _MultiFileSelectionRow(
-                      title: 'Imagen',
-                      selectedFiles: _selectedImageFiles,
-                      existingUrls: _imageUrls,
-                      isUploading: _isUploadingImage,
-                      fileType: app_file_type.FileType.image,
-                      onSelect: () => _selectFile(app_file_type.FileType.image),
-                      onSelectMultiple: () => _selectFile(
-                        app_file_type.FileType.image,
-                        allowMultiple: true,
+                      const SizedBox(height: 12),
+                      // Documento
+                      _MultiFileSelectionRow(
+                        title: 'Documento',
+                        selectedFiles: _selectedDocumentFiles,
+                        existingUrls: _documentUrls,
+                        isUploading: _isUploadingDocument,
+                        fileType: app_file_type.FileType.document,
+                        onSelect: () =>
+                            _selectFile(app_file_type.FileType.document),
+                        onSelectMultiple: () => _selectFile(
+                          app_file_type.FileType.document,
+                          allowMultiple: true,
+                        ),
+                        onAddUrl: () =>
+                            _showAddUrlDialog(app_file_type.FileType.document),
+                        onRemove: (index) => _removeFileOrUrl(
+                          index,
+                          app_file_type.FileType.document,
+                        ),
                       ),
-                      onAddUrl: () =>
-                          _showAddUrlDialog(app_file_type.FileType.image),
-                      onRemove: (index) =>
-                          _removeFileOrUrl(index, app_file_type.FileType.image),
-                    ),
-                    const SizedBox(height: 12),
-                    // Documento
-                    _MultiFileSelectionRow(
-                      title: 'Documento',
-                      selectedFiles: _selectedDocumentFiles,
-                      existingUrls: _documentUrls,
-                      isUploading: _isUploadingDocument,
-                      fileType: app_file_type.FileType.document,
-                      onSelect: () =>
-                          _selectFile(app_file_type.FileType.document),
-                      onSelectMultiple: () => _selectFile(
-                        app_file_type.FileType.document,
-                        allowMultiple: true,
+                      const SizedBox(height: 12),
+                      // Multimedia
+                      _MultiFileSelectionRow(
+                        title: 'Multimedia',
+                        selectedFiles: _selectedMultimediaFiles,
+                        existingUrls: _multimediaUrls,
+                        isUploading: _isUploadingMultimedia,
+                        fileType: app_file_type.FileType.multimedia,
+                        onSelect: () =>
+                            _selectFile(app_file_type.FileType.multimedia),
+                        onSelectMultiple: () => _selectFile(
+                          app_file_type.FileType.multimedia,
+                          allowMultiple: true,
+                        ),
+                        onAddUrl: () => _showAddUrlDialog(
+                          app_file_type.FileType.multimedia,
+                        ),
+                        onRemove: (index) => _removeFileOrUrl(
+                          index,
+                          app_file_type.FileType.multimedia,
+                        ),
                       ),
-                      onAddUrl: () =>
-                          _showAddUrlDialog(app_file_type.FileType.document),
-                      onRemove: (index) => _removeFileOrUrl(
-                        index,
-                        app_file_type.FileType.document,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    // Multimedia
-                    _MultiFileSelectionRow(
-                      title: 'Multimedia',
-                      selectedFiles: _selectedMultimediaFiles,
-                      existingUrls: _multimediaUrls,
-                      isUploading: _isUploadingMultimedia,
-                      fileType: app_file_type.FileType.multimedia,
-                      onSelect: () =>
-                          _selectFile(app_file_type.FileType.multimedia),
-                      onSelectMultiple: () => _selectFile(
-                        app_file_type.FileType.multimedia,
-                        allowMultiple: true,
-                      ),
-                      onAddUrl: () =>
-                          _showAddUrlDialog(app_file_type.FileType.multimedia),
-                      onRemove: (index) => _removeFileOrUrl(
-                        index,
-                        app_file_type.FileType.multimedia,
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

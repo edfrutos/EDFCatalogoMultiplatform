@@ -255,13 +255,19 @@ class _CatalogsViewState extends State<CatalogsView> {
                           label: Text(currentUser.name),
                         ),
                       const SizedBox(width: 8),
-                      // Botón de sincronizar (si está offline)
+                      // Botón de sincronizar (si está offline o hay cambios pendientes)
                       if (catalogViewModel.isOffline)
                         IconButton(
                           icon: const Icon(Icons.sync),
-                          onPressed: () {
-                            catalogViewModel.syncPendingData();
-                          },
+                          onPressed: currentUser == null
+                              ? null
+                              : () {
+                                  catalogViewModel.syncPendingData(
+                                    userId: currentUser.id,
+                                    isAdmin: currentUser.isAdmin,
+                                    userEmail: currentUser.email,
+                                  );
+                                },
                           tooltip: 'Sincronizar',
                         ),
                       const SizedBox(width: 8),

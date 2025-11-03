@@ -23,36 +23,70 @@ class _CatalogDetailViewState extends State<CatalogDetailView> {
     String format,
   ) async {
     try {
+      // Mostrar diálogo de carga
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const Center(child: CircularProgressIndicator()),
+        builder: (context) => AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text('Exportando catálogo a ${format.toUpperCase()}...'),
+            ],
+          ),
+        ),
       );
 
+      // Exportar según el formato
       if (format == 'csv') {
         await ExportService.shared.exportAndShareCsv(catalog);
       } else if (format == 'excel') {
         await ExportService.shared.exportAndShareExcel(catalog);
+      } else {
+        throw Exception('Formato de exportación no soportado: $format');
       }
 
       if (context.mounted) {
         Navigator.of(context).pop(); // Cerrar loading
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              'Catálogo exportado a ${format.toUpperCase()} correctamente',
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Catálogo exportado a ${format.toUpperCase()} correctamente',
+                  ),
+                ),
+              ],
             ),
             backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
           ),
         );
       }
     } catch (e) {
       if (context.mounted) {
-        Navigator.of(context).pop(); // Cerrar loading
+        Navigator.of(context).pop(); // Cerrar loading si aún está abierto
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al exportar: $e'),
+            content: Row(
+              children: [
+                const Icon(Icons.error, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Error al exportar: ${e.toString()}',
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                ),
+              ],
+            ),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
           ),
         );
       }

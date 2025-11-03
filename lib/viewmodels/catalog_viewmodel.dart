@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import '../models/catalog.dart';
 import '../services/sync_service.dart';
 import '../services/local_storage_service.dart';
@@ -6,16 +8,63 @@ import '../services/local_storage_service.dart';
 class CatalogViewModel extends ChangeNotifier {
   final SyncService _syncService = SyncService.shared;
   final LocalStorageService _localStorage = LocalStorageService.shared;
+  final Connectivity _connectivity = Connectivity();
 
   List<Catalog> _catalogs = [];
   bool _isLoading = false;
   String? _error;
   bool _isOffline = false;
+  StreamSubscription<ConnectivityResult>? _connectivitySubscription;
 
   List<Catalog> get catalogs => _catalogs;
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get isOffline => _isOffline;
+
+  CatalogViewModel() {
+    // Iniciar listener de conectividad
+    _initConnectivityListener();
+  }
+
+  /// Inicializa el listener de cambios de conectividad
+  void _initConnectivityListener() {
+    _connectivitySubscription = _connectivity.onConnectivityChanged.listen((
+      ConnectivityResult result,
+    ) async {
+      final wasOffline = _isOffline;
+      _isOffline = (result == ConnectivityResult.none);
+
+      // Si cambió de offline a online, sincronizar automáticamente
+      if (wasOffline && !_isOffline) {
+        print('✅ Conexión recuperada, sincronizando...');
+        if (await _localStorage.hasPendingSync()) {
+          await syncPendingData();
+        }
+      }
+
+      notifyListeners();
+    });
+  }
+
+  /// Verifica y actualiza el estado de conectividad manualmente
+  Future<void> checkConnectivity() async {
+    final hasConnection = await _syncService.hasConnection();
+    final wasOffline = _isOffline;
+    _isOffline = !hasConnection;
+
+    // Si cambió de offline a online, sincronizar
+    if (wasOffline && !_isOffline && await _localStorage.hasPendingSync()) {
+      await syncPendingData();
+    }
+
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _connectivitySubscription?.cancel();
+    super.dispose();
+  }
 
   Future<void> loadCatalogs({
     required String userId,
@@ -175,15 +224,52 @@ class CatalogViewModel extends ChangeNotifier {
   }
 
   /// Sincroniza manualmente los datos pendientes
-  Future<void> syncPendingData() async {
+  Future<void> syncPendingData({
+    String? userId,
+    bool? isAdmin,
+    String? userEmail,
+  }) async {
     _isLoading = true;
+    _error = null;
     notifyListeners();
 
     try {
+      // Verificar conexión antes de sincronizar
+      final hasConnection = await _syncService.hasConnection();
+      if (!hasConnection) {
+        _error = 'Sin conexión a internet. No se puede sincronizar.';
+        _isOffline = true;
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
+
+      // Si hay catálogos que recargar después de sincronizar
+      if (userId != null) {
+        await _syncService.syncCatalogsFromServer(
+          userId: userId,
+          isAdmin: isAdmin ?? false,
+          userEmail: userEmail,
+        );
+      }
+
+      // Sincronizar operaciones pendientes
       await _syncService.syncPendingOperations();
+
+      // Recargar catálogos para reflejar cambios
+      if (userId != null) {
+        _catalogs = await _syncService.getCatalogs(
+          userId: userId,
+          isAdmin: isAdmin ?? false,
+          userEmail: userEmail,
+        );
+      }
+
+      _isOffline = false;
       _error = null;
     } catch (e) {
       _error = 'Error en sincronización: $e';
+      print('❌ Error sincronizando: $e');
     } finally {
       _isLoading = false;
       notifyListeners();

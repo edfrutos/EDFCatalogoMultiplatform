@@ -55,24 +55,49 @@ class _AdvancedSearchViewState extends State<AdvancedSearchView> {
         return catalog.name.toLowerCase().contains(searchLower) ||
             catalog.description.toLowerCase().contains(searchLower) ||
             // Buscar en filas
-            catalog.rows.any((row) =>
-                row.data.values.any((value) =>
-                    value.toLowerCase().contains(searchLower)));
+            catalog.rows.any(
+              (row) => row.data.values.any(
+                (value) => value.toLowerCase().contains(searchLower),
+              ),
+            );
       }).toList();
     }
 
     // Filtro por fecha
     if (_startDate != null) {
+      final startDateAtStartOfDay = DateTime(
+        _startDate!.year,
+        _startDate!.month,
+        _startDate!.day,
+      );
       results = results.where((catalog) {
-        return catalog.createdAt.isAfter(_startDate!) ||
-            catalog.createdAt.isAtSameMomentAs(_startDate!);
+        final catalogDateAtStartOfDay = DateTime(
+          catalog.createdAt.year,
+          catalog.createdAt.month,
+          catalog.createdAt.day,
+        );
+        return catalogDateAtStartOfDay.isAtSameMomentAs(
+              startDateAtStartOfDay,
+            ) ||
+            catalogDateAtStartOfDay.isAfter(startDateAtStartOfDay);
       }).toList();
     }
 
     if (_endDate != null) {
+      final endDateAtEndOfDay = DateTime(
+        _endDate!.year,
+        _endDate!.month,
+        _endDate!.day,
+        23,
+        59,
+        59,
+      );
       results = results.where((catalog) {
-        return catalog.createdAt.isBefore(_endDate!) ||
-            catalog.createdAt.isAtSameMomentAs(_endDate!);
+        return catalog.createdAt.isBefore(endDateAtEndOfDay) ||
+            catalog.createdAt.isAtSameMomentAs(endDateAtEndOfDay) ||
+            (catalog.createdAt.year == _endDate!.year &&
+                catalog.createdAt.month == _endDate!.month &&
+                catalog.createdAt.day == _endDate!.day);
       }).toList();
     }
 
@@ -114,7 +139,8 @@ class _AdvancedSearchViewState extends State<AdvancedSearchView> {
 
   @override
   Widget build(BuildContext context) {
-    final hasActiveFilters = _searchText.isNotEmpty ||
+    final hasActiveFilters =
+        _searchText.isNotEmpty ||
         _startDate != null ||
         _endDate != null ||
         _minRows != null ||
@@ -279,4 +305,3 @@ class _AdvancedSearchViewState extends State<AdvancedSearchView> {
     );
   }
 }
-

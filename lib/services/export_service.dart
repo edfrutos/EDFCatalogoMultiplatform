@@ -190,10 +190,17 @@ class ExportService {
 
   /// Sanitiza el nombre del archivo para que sea válido
   String _sanitizeFileName(String name) {
-    return name
+    if (name.isEmpty) return 'catalog';
+    var sanitized = name
         .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
-        .replaceAll(' ', '_')
-        .substring(0, name.length > 50 ? 50 : name.length);
+        .replaceAll(' ', '_');
+
+    // Limitar longitud
+    if (sanitized.length > 50) {
+      sanitized = sanitized.substring(0, 50);
+    }
+
+    return sanitized.isEmpty ? 'catalog' : sanitized;
   }
 
   /// Sanitiza el nombre de la hoja de Excel (máximo 31 caracteres)
