@@ -1,0 +1,550 @@
+import 'dart:convert';
+import 'dart:io';
+import 'package:googleapis/drive/v3.dart' as drive;
+import 'package:googleapis_auth/auth.dart' as auth;
+import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
+import '../services/mongo_service.dart';
+import '../utils/env_config.dart';
+
+/// Servicio para gestionar backups en Google Drive
+/// NOTA: Requiere configuración de OAuth 2.0 en Google Cloud Console
+/// Para aplicaciones desktop, se necesita un servidor local para recibir el código OAuth
+class GoogleDriveBackupService {
+  static final GoogleDriveBackupService _instance =
+      GoogleDriveBackupService._internal();
+  factory GoogleDriveBackupService() => _instance;
+  GoogleDriveBackupService._internal();
+
+  drive.DriveApi? _driveApi;
+  auth.AutoRefreshingAuthClient? _authClient;
+  bool _isInitialized = false;
+  String? _backupFolderId;
+
+  /// Inicializar el servicio de Google Drive con OAuth 2.0
+  /// NOTA: La primera vez abrirá el navegador para autenticación
+  Future<void> initialize({Function(String)? onAuthUrl}) async {
+    if (_isInitialized) return;
+
+    try {
+      final clientId = EnvConfig.googleClientId;
+      final clientSecret = EnvConfig.googleClientSecret;
+      final folderName = EnvConfig.googleDriveFolder;
+
+      if (clientId.isEmpty || clientSecret.isEmpty) {
+        throw Exception(
+          'GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET deben estar configurados en .env',
+        );
+      }
+
+      // Configurar OAuth 2.0 para aplicación desktop
+      final identifier = auth.ClientId(clientId, clientSecret);
+      final scopes = [drive.DriveApi.driveFileScope];
+
+      // Para aplicaciones desktop, necesitamos usar un servidor HTTP local
+      // que reciba el código de autorización después de que el usuario autorice en el navegador
+      final authClient = await _authenticateWithLocalServer(
+        identifier,
+        scopes,
+        onAuthUrl: onAuthUrl,
+      );
+
+      if (authClient == null) {
+        throw Exception(
+          'No se pudo autenticar con Google Drive. Verifica las credenciales OAuth.',
+        );
+      }
+
+      _authClient = authClient;
+
+      // Crear cliente de Drive API con el cliente autenticado
+      _driveApi = drive.DriveApi(_authClient!);
+
+      // Buscar o crear la carpeta de backups
+      _backupFolderId = await _findOrCreateBackupFolder(folderName);
+
+      _isInitialized = true;
+      print('✅ Google Drive Backup Service inicializado correctamente');
+      print('📁 Carpeta de backups: $folderName (ID: $_backupFolderId)');
+    } catch (e) {
+      print('❌ Error inicializando Google Drive Backup Service: $e');
+      print('💡 Asegúrate de:');
+      print(
+        '   1. Tener GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET configurados en .env',
+      );
+      print(
+        '   2. Haber configurado http://localhost:8080/oauth2callback como redirect URI en Google Cloud Console',
+      );
+      print(
+        '   3. Haber habilitado la API de Google Drive en Google Cloud Console',
+      );
+      rethrow;
+    }
+  }
+
+  /// Autenticar usando un servidor HTTP local para recibir el código OAuth
+  Future<auth.AutoRefreshingAuthClient?> _authenticateWithLocalServer(
+    auth.ClientId clientId,
+    List<String> scopes, {
+    Function(String)? onAuthUrl,
+  }) async {
+    HttpServer? server;
+
+    try {
+      // Crear servidor HTTP local en puerto 8080
+      server = await HttpServer.bind('localhost', 8080);
+      print('🌐 Servidor OAuth iniciado en http://localhost:8080');
+
+      // Generar URL de autorización para Google
+      final authUri = 'https://accounts.google.com/o/oauth2/v2/auth';
+      final tokenUri = 'https://oauth2.googleapis.com/token';
+
+      final params = {
+        'client_id': clientId.identifier,
+        'redirect_uri': 'http://localhost:8080/oauth2callback',
+        'response_type': 'code',
+        'scope': scopes.join(' '),
+        'access_type': 'offline',
+        'prompt': 'consent',
+      };
+
+      final uri = Uri.parse(authUri).replace(
+        queryParameters: params.map((key, value) => MapEntry(key, value)),
+      );
+
+      // Mostrar URL al usuario y abrir en navegador
+      if (onAuthUrl != null) {
+        onAuthUrl(uri.toString());
+      }
+
+      print('🔗 Abriendo navegador para autenticación...');
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+
+      // Esperar a recibir el código de autorización
+      String? authCode;
+      await for (final request in server) {
+        final uri = request.requestedUri;
+
+        if (uri.path == '/oauth2callback') {
+          authCode = uri.queryParameters['code'];
+          final error = uri.queryParameters['error'];
+
+          if (error != null) {
+            request.response
+              ..statusCode = 400
+              ..headers.contentType = ContentType.html
+              ..write(
+                '<html><body><h1>Error de autorización</h1><p>$error</p></body></html>',
+              );
+            await request.response.close();
+            throw Exception('Error de autorización: $error');
+          }
+
+          if (authCode != null) {
+            request.response
+              ..statusCode = 200
+              ..headers.contentType = ContentType.html
+              ..write(
+                '<html><body><h1>Autorización exitosa</h1><p>Puedes cerrar esta ventana.</p></body></html>',
+              );
+            await request.response.close();
+            break;
+          }
+        } else {
+          request.response
+            ..statusCode = 404
+            ..write('Not found');
+          await request.response.close();
+        }
+      }
+
+      if (authCode == null) {
+        throw Exception('No se recibió el código de autorización');
+      }
+
+      // Intercambiar código por token de acceso
+      final tokenUriParsed = Uri.parse(tokenUri);
+
+      // Codificar el body como application/x-www-form-urlencoded
+      final bodyParams = <String, String>{
+        'code': authCode,
+        'client_id': clientId.identifier,
+        'client_secret': clientId.secret ?? '',
+        'redirect_uri': 'http://localhost:8080/oauth2callback',
+        'grant_type': 'authorization_code',
+      };
+
+      final bodyString = bodyParams.entries
+          .map(
+            (e) =>
+                '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}',
+          )
+          .join('&');
+
+      final tokenResponse = await http.post(
+        tokenUriParsed,
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: bodyString,
+      );
+
+      if (tokenResponse.statusCode != 200) {
+        throw Exception('Error obteniendo token: ${tokenResponse.body}');
+      }
+
+      final tokenData = json.decode(tokenResponse.body) as Map<String, dynamic>;
+      final accessToken = tokenData['access_token'] as String;
+      final refreshToken = tokenData['refresh_token'] as String?;
+      final expiresIn = tokenData['expires_in'] as int? ?? 3600;
+
+      // Crear credenciales
+      final credentials = auth.AccessCredentials(
+        auth.AccessToken(
+          'Bearer',
+          accessToken,
+          DateTime.now().toUtc().add(Duration(seconds: expiresIn)),
+        ),
+        refreshToken,
+        scopes,
+      );
+
+      // Crear cliente autenticado con auto-refresh
+      final httpClient = http.Client();
+      final authClient = auth.autoRefreshingClient(
+        clientId,
+        credentials,
+        httpClient,
+      );
+
+      return authClient;
+    } catch (e) {
+      print('❌ Error en autenticación OAuth: $e');
+      return null;
+    } finally {
+      // Cerrar servidor
+      await server?.close();
+      print('🔒 Servidor OAuth cerrado');
+    }
+  }
+
+  /// Buscar o crear la carpeta de backups en Google Drive
+  Future<String?> _findOrCreateBackupFolder(String folderName) async {
+    if (_driveApi == null) return null;
+
+    try {
+      // Buscar carpeta existente
+      final query =
+          "name='$folderName' and mimeType='application/vnd.google-apps.folder' and trashed=false";
+      final response = await _driveApi!.files.list(q: query, spaces: 'drive');
+
+      if (response.files != null && response.files!.isNotEmpty) {
+        return response.files!.first.id;
+      }
+
+      // Crear carpeta si no existe
+      final folder = drive.File()
+        ..name = folderName
+        ..mimeType = 'application/vnd.google-apps.folder';
+
+      final created = await _driveApi!.files.create(folder);
+      return created.id;
+    } catch (e) {
+      print('⚠️ Error buscando/creando carpeta: $e');
+      return null;
+    }
+  }
+
+  /// Verificar si el servicio está inicializado
+  bool get isInitialized => _isInitialized && _driveApi != null;
+
+  /// Crear backup de todos los catálogos
+  Future<String> backupCatalogs() async {
+    if (!isInitialized) {
+      await initialize();
+    }
+
+    if (_driveApi == null || _backupFolderId == null) {
+      throw Exception('Servicio no inicializado correctamente');
+    }
+
+    try {
+      final mongoService = MongoService();
+      final catalogs = await mongoService.getCatalogs(
+        '', // userId vacío
+        isAdmin: true, // true para poder obtener todos
+      );
+
+      // Convertir catálogos a JSON
+      final catalogsJson = {
+        'timestamp': DateTime.now().toIso8601String(),
+        'version': '1.0',
+        'count': catalogs.length,
+        'catalogs': catalogs.map((c) => c.toJson()).toList(),
+      };
+
+      final jsonString = json.encode(catalogsJson);
+      final jsonBytes = utf8.encode(jsonString);
+
+      // Generar nombre del archivo
+      final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
+      final fileName = 'catalogs_backup_$timestamp.json';
+
+      // Crear archivo en Drive
+      final file = drive.File()
+        ..name = fileName
+        ..parents = [_backupFolderId!]
+        ..mimeType = 'application/json';
+
+      final media = drive.Media(
+        Stream.value(jsonBytes),
+        jsonBytes.length,
+        contentType: 'application/json',
+      );
+
+      final created = await _driveApi!.files.create(file, uploadMedia: media);
+
+      print(
+        '✅ Backup de catálogos creado en Google Drive: $fileName (ID: ${created.id})',
+      );
+      return created.id ?? fileName;
+    } catch (e) {
+      print('❌ Error creando backup de catálogos: $e');
+      rethrow;
+    }
+  }
+
+  /// Crear backup de todos los usuarios
+  Future<String> backupUsers() async {
+    if (!isInitialized) {
+      await initialize();
+    }
+
+    if (_driveApi == null || _backupFolderId == null) {
+      throw Exception('Servicio no inicializado correctamente');
+    }
+
+    try {
+      final mongoService = MongoService();
+      final users = await mongoService.getAllUsers();
+
+      // Convertir usuarios a JSON (sin contraseñas)
+      final usersJson = {
+        'timestamp': DateTime.now().toIso8601String(),
+        'version': '1.0',
+        'count': users.length,
+        'users': users.map((u) {
+          final userJson = u.toJson();
+          // No incluir contraseñas en el backup
+          userJson.remove('password');
+          userJson.remove('passwordHash');
+          return userJson;
+        }).toList(),
+      };
+
+      final jsonString = json.encode(usersJson);
+      final jsonBytes = utf8.encode(jsonString);
+
+      // Generar nombre del archivo
+      final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
+      final fileName = 'users_backup_$timestamp.json';
+
+      // Crear archivo en Drive
+      final file = drive.File()
+        ..name = fileName
+        ..parents = [_backupFolderId!]
+        ..mimeType = 'application/json';
+
+      final media = drive.Media(
+        Stream.value(jsonBytes),
+        jsonBytes.length,
+        contentType: 'application/json',
+      );
+
+      final created = await _driveApi!.files.create(file, uploadMedia: media);
+
+      print(
+        '✅ Backup de usuarios creado en Google Drive: $fileName (ID: ${created.id})',
+      );
+      return created.id ?? fileName;
+    } catch (e) {
+      print('❌ Error creando backup de usuarios: $e');
+      rethrow;
+    }
+  }
+
+  /// Listar todos los backups de catálogos
+  Future<List<BackupInfo>> listCatalogBackups() async {
+    if (!isInitialized) {
+      await initialize();
+    }
+
+    if (_driveApi == null || _backupFolderId == null) {
+      return [];
+    }
+
+    try {
+      final query =
+          "'$_backupFolderId' in parents and name contains 'catalogs_backup' and mimeType='application/json' and trashed=false";
+      final response = await _driveApi!.files.list(
+        q: query,
+        orderBy: 'createdTime desc',
+        spaces: 'drive',
+      );
+
+      final backups = <BackupInfo>[];
+      if (response.files != null) {
+        for (final file in response.files!) {
+          backups.add(
+            BackupInfo(
+              name: file.name ?? 'unknown',
+              size: int.tryParse(file.size ?? '0') ?? 0,
+              created: file.createdTime ?? DateTime.now(),
+              type: BackupType.catalogs,
+              driveFileId: file.id,
+            ),
+          );
+        }
+      }
+
+      return backups;
+    } catch (e) {
+      print('❌ Error listando backups de catálogos: $e');
+      rethrow;
+    }
+  }
+
+  /// Listar todos los backups de usuarios
+  Future<List<BackupInfo>> listUserBackups() async {
+    if (!isInitialized) {
+      await initialize();
+    }
+
+    if (_driveApi == null || _backupFolderId == null) {
+      return [];
+    }
+
+    try {
+      final query =
+          "'$_backupFolderId' in parents and name contains 'users_backup' and mimeType='application/json' and trashed=false";
+      final response = await _driveApi!.files.list(
+        q: query,
+        orderBy: 'createdTime desc',
+        spaces: 'drive',
+      );
+
+      final backups = <BackupInfo>[];
+      if (response.files != null) {
+        for (final file in response.files!) {
+          backups.add(
+            BackupInfo(
+              name: file.name ?? 'unknown',
+              size: int.tryParse(file.size ?? '0') ?? 0,
+              created: file.createdTime ?? DateTime.now(),
+              type: BackupType.users,
+              driveFileId: file.id,
+            ),
+          );
+        }
+      }
+
+      return backups;
+    } catch (e) {
+      print('❌ Error listando backups de usuarios: $e');
+      rethrow;
+    }
+  }
+
+  /// Descargar un backup
+  Future<Map<String, dynamic>> downloadBackup(String fileId) async {
+    if (!isInitialized) {
+      await initialize();
+    }
+
+    if (_driveApi == null) {
+      throw Exception('Servicio no inicializado');
+    }
+
+    try {
+      final media =
+          await _driveApi!.files.get(
+                fileId,
+                downloadOptions: drive.DownloadOptions.fullMedia,
+              )
+              as drive.Media;
+
+      // Leer el contenido
+      final bytes = <int>[];
+      await for (final chunk in media.stream) {
+        bytes.addAll(chunk);
+      }
+
+      final jsonString = utf8.decode(bytes);
+      final data = json.decode(jsonString) as Map<String, dynamic>;
+
+      return data;
+    } catch (e) {
+      print('❌ Error descargando backup: $e');
+      rethrow;
+    }
+  }
+
+  /// Eliminar un backup
+  Future<void> deleteBackup(String fileId) async {
+    if (!isInitialized) {
+      await initialize();
+    }
+
+    if (_driveApi == null) {
+      throw Exception('Servicio no inicializado');
+    }
+
+    try {
+      await _driveApi!.files.delete(fileId);
+      print('✅ Backup eliminado de Google Drive: $fileId');
+    } catch (e) {
+      print('❌ Error eliminando backup: $e');
+      rethrow;
+    }
+  }
+
+  /// Cerrar conexiones
+  void dispose() {
+    _authClient?.close();
+    _driveApi = null;
+    _authClient = null;
+    _isInitialized = false;
+  }
+}
+
+/// Tipo de backup
+enum BackupType { catalogs, users }
+
+/// Información de un backup
+class BackupInfo {
+  final String name;
+  final int size;
+  final DateTime created;
+  final BackupType type;
+  final String? driveFileId; // ID del archivo en Google Drive
+
+  BackupInfo({
+    required this.name,
+    required this.size,
+    required this.created,
+    required this.type,
+    this.driveFileId,
+  });
+
+  String get fileName => name;
+  String get formattedSize {
+    if (size < 1024) return '$size B';
+    if (size < 1024 * 1024) return '${(size / 1024).toStringAsFixed(2)} KB';
+    return '${(size / (1024 * 1024)).toStringAsFixed(2)} MB';
+  }
+
+  String get formattedDate {
+    return '${created.day}/${created.month}/${created.year} '
+        '${created.hour}:${created.minute.toString().padLeft(2, '0')}';
+  }
+}

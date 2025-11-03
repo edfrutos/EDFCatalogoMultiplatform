@@ -48,3 +48,53 @@ app.*.map.json
 .env
 .env.local
 .env.*.local
+.env.production
+.env.development
+*.env
+!.env.example
+
+# Credentials and secrets
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+*credentials*.json
+*secret*.json
+credentials/
+secrets/
+**/credentials/
+**/secrets/
+
+# API Keys and configuration files with secrets
+*api-key*.json
+*apikey*.json
+*secret*.json
+*password*.json
+*password*.txt
+*password*.env
+google-services.json
+GoogleService-Info.plist
+firebase_options.dart
+**/android/app/google-services.json
+**/ios/Runner/GoogleService-Info.plist
+
+# Logs (pueden contener información sensible)
+*.log
+logs/
+*.log.*
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Temporary files
+tmp/
+temp/
+*.tmp

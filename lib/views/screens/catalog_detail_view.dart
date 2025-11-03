@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/catalog.dart';
@@ -30,7 +31,10 @@ class _CatalogDetailViewState extends State<CatalogDetailView> {
     String format,
   ) async {
     try {
-      // Mostrar diálogo de carga
+      // Exportar según el formato usando el nuevo método que abre el diálogo de directorio
+      String? filePath;
+
+      // Mostrar diálogo de carga mientras se selecciona el directorio
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -40,38 +44,96 @@ class _CatalogDetailViewState extends State<CatalogDetailView> {
             children: [
               const CircularProgressIndicator(),
               const SizedBox(height: 16),
-              Text('Exportando catálogo a ${format.toUpperCase()}...'),
+              Text(
+                'Seleccionando directorio para exportar ${format.toUpperCase()}...',
+              ),
             ],
           ),
         ),
       );
 
-      // Exportar según el formato
       if (format == 'csv') {
-        await ExportService.shared.exportAndShareCsv(catalog);
+        filePath = await ExportService.shared.exportAndSaveCsv(catalog);
       } else if (format == 'excel') {
-        await ExportService.shared.exportAndShareExcel(catalog);
+        filePath = await ExportService.shared.exportAndSaveExcel(catalog);
       } else {
         throw Exception('Formato de exportación no soportado: $format');
       }
 
       if (context.mounted) {
         Navigator.of(context).pop(); // Cerrar loading
+
+        if (filePath == null) {
+          // Usuario canceló la selección de directorio
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.white),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Exportación cancelada',
+                      style: TextStyle(fontSize: 14),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 2),
+            ),
+          );
+          return;
+        }
+
+        // Exportación exitosa
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Row(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.check_circle, color: Colors.white),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Catálogo exportado a ${format.toUpperCase()} correctamente',
-                  ),
+                Row(
+                  children: [
+                    const Icon(Icons.check_circle, color: Colors.white),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Catálogo exportado a ${format.toUpperCase()} correctamente',
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Archivo: ${filePath.split('/').last}',
+                  style: const TextStyle(fontSize: 11, color: Colors.white70),
+                ),
+                Text(
+                  'Ubicación: ${filePath.substring(0, filePath.length - filePath.split('/').last.length)}',
+                  style: const TextStyle(fontSize: 10, color: Colors.white60),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
             backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'Abrir ubicación',
+              textColor: Colors.white,
+              onPressed: () {
+                // Abrir el directorio en Finder (macOS)
+                if (Platform.isMacOS && filePath != null) {
+                  final fileName = filePath.split('/').last;
+                  final directory = filePath.substring(
+                    0,
+                    filePath.length - fileName.length - 1,
+                  );
+                  Process.run('open', [directory]);
+                }
+              },
+            ),
           ),
         );
       }

@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // Para rootBundle en web
+import 'package:flutter/services.dart'
+    show rootBundle; // Para rootBundle solo en web
 import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -50,8 +51,11 @@ void main() async {
     }
   } else {
     // Para macOS/iOS/Android/Desktop, buscar archivo físico
-    // Para macOS, buscar en el bundle primero (dentro de Resources)
-    if (Platform.isMacOS) {
+    // No intentar cargar desde assets en desktop - solo buscar en sistema de archivos
+    // Los assets solo funcionan bien en web
+
+    // Para macOS, buscar en el bundle del sistema de archivos (solo si no está cargado)
+    if (!envLoaded && Platform.isMacOS) {
       try {
         final bundlePath = Platform.resolvedExecutable;
         final bundleDir = File(
@@ -119,9 +123,22 @@ void main() async {
           current = current.parent; // Products/Debug
           current = current.parent; // Products
           current = current.parent; // Build
-          current = current.parent; // macos
-          current = current.parent; // build
-          projectRoot = current.path;
+          // Aquí podría ser macos o directamente la raíz del proyecto
+          // Si el siguiente nivel es macos, subir uno más para llegar a la raíz
+          if (current.path.endsWith('build')) {
+            var parent = current.parent;
+            // Verificar si el nombre del directorio parece ser el proyecto
+            if (parent.path.contains('EDFCatalogoMultiplatform')) {
+              projectRoot = parent.path;
+            } else {
+              // Si no, podría ser que estemos en build/macos, subir dos niveles
+              current = current.parent; // Debería ser la raíz
+              projectRoot = current.path;
+            }
+          } else {
+            projectRoot = current.path;
+          }
+          print('🔍 Ruta calculada del proyecto: $projectRoot');
         } catch (e) {
           print('⚠️ Error calculando ruta del proyecto: $e');
         }
@@ -135,9 +152,21 @@ void main() async {
         print('🔍 Añadida ruta del proyecto: $projectRoot/.env');
       }
 
+      // También buscar en el directorio de trabajo actual (útil con flutter run)
+      final currentWorkingDir = Directory.current.path;
+      // Si el directorio actual contiene pubspec.yaml, es la raíz del proyecto
+      final pubspecPath = File('$currentWorkingDir/pubspec.yaml');
+      if (pubspecPath.existsSync()) {
+        possiblePaths.add('$currentWorkingDir/.env');
+        print(
+          '🔍 Añadida ruta del directorio actual (raíz del proyecto): $currentWorkingDir/.env',
+        );
+      } else {
+        possiblePaths.add('$currentWorkingDir/.env');
+      }
+
       // Agregar rutas comunes
       possiblePaths.addAll([
-        '${Directory.current.path}/.env', // Directorio actual de trabajo
         '.env', // Relativo al directorio actual
       ]);
 

@@ -47,6 +47,19 @@ class EnvConfig {
   static String get googleClientSecret =>
       dotenv.env['GOOGLE_CLIENT_SECRET'] ?? '';
 
+  // Google Drive (para backups)
+  static String get googleDriveFolder =>
+      dotenv.env['GOOGLE_DRIVE_FOLDER'] ?? 'Backups_CatalogoTablas';
+  static String get googleProjectId => dotenv.env['GOOGLE_PROJECT_ID'] ?? '';
+  static bool get useGoogleDrive {
+    final useDriveEnv = dotenv.env['USE_GOOGLE_DRIVE']?.toLowerCase();
+    if (useDriveEnv != null) {
+      return useDriveEnv == 'true';
+    }
+    // Si hay client ID y secret, asumir que se quiere usar Drive
+    return googleClientId.isNotEmpty && googleClientSecret.isNotEmpty;
+  }
+
   /// Validar que las variables críticas estén configuradas
   static bool validate() {
     if (mongoUri.isEmpty || mongoDb.isEmpty) {

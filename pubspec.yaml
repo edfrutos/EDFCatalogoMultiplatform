@@ -92,6 +92,10 @@ dependencies:
   
   # Connectivity
   connectivity_plus: ^5.0.2
+  
+  # Google Cloud Storage
+  googleapis: ^12.0.0
+  googleapis_auth: ^1.5.0
 
 dev_dependencies:
   flutter_test:

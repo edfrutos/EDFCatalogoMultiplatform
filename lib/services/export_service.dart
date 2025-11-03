@@ -3,6 +3,7 @@ import 'package:csv/csv.dart';
 import 'package:excel/excel.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:file_picker/file_picker.dart';
 import '../models/catalog.dart';
 
 /// Servicio para exportar catálogos a diferentes formatos
@@ -166,23 +167,143 @@ class ExportService {
     );
   }
 
-  /// Exporta y comparte un catálogo como CSV
-  Future<void> exportAndShareCsv(Catalog catalog) async {
+  /// Exporta un catálogo como CSV y permite seleccionar el directorio de destino
+  /// Retorna la ruta del archivo exportado, o null si se canceló
+  Future<String?> exportAndSaveCsv(Catalog catalog) async {
     try {
-      final filePath = await exportToCsv(catalog);
-      final fileName = '${_sanitizeFileName(catalog.name)}.csv';
-      await shareFile(filePath, fileName);
+      // Abrir diálogo para seleccionar directorio
+      String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+
+      if (selectedDirectory == null) {
+        // Usuario canceló la selección
+        return null;
+      }
+
+      // Generar el nombre del archivo
+      final fileName =
+          '${_sanitizeFileName(catalog.name)}_${DateTime.now().millisecondsSinceEpoch}.csv';
+      final targetPath = '$selectedDirectory/$fileName';
+
+      // Crear el contenido CSV
+      final List<List<dynamic>> rows = [];
+
+      // Encabezado
+      final header = List<String>.from(catalog.columns);
+      rows.add(header);
+
+      // Filas de datos
+      for (final row in catalog.rows) {
+        final rowData = <String>[];
+        for (final column in catalog.columns) {
+          rowData.add(row.data[column] ?? '');
+        }
+        rows.add(rowData);
+      }
+
+      // Convertir a CSV
+      final csvString = const ListToCsvConverter().convert(rows);
+
+      // Guardar archivo en el directorio seleccionado
+      final file = File(targetPath);
+      await file.writeAsString(csvString);
+
+      return targetPath;
     } catch (e) {
       throw Exception('Error al exportar CSV: $e');
     }
   }
 
-  /// Exporta y comparte un catálogo como Excel
-  Future<void> exportAndShareExcel(Catalog catalog) async {
+  /// Exporta un catálogo como Excel y permite seleccionar el directorio de destino
+  /// Retorna la ruta del archivo exportado, o null si se canceló
+  Future<String?> exportAndSaveExcel(Catalog catalog) async {
+    try {
+      // Abrir diálogo para seleccionar directorio
+      String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+
+      if (selectedDirectory == null) {
+        // Usuario canceló la selección
+        return null;
+      }
+
+      // Generar el nombre del archivo
+      final fileName =
+          '${_sanitizeFileName(catalog.name)}_${DateTime.now().millisecondsSinceEpoch}.xlsx';
+      final targetPath = '$selectedDirectory/$fileName';
+
+      // Crear el archivo Excel
+      final excel = Excel.createExcel();
+      excel.delete('Sheet1'); // Eliminar hoja por defecto
+      final sheetName = _sanitizeSheetName(catalog.name);
+      final sheet = excel[sheetName];
+
+      // Encabezado
+      for (int i = 0; i < catalog.columns.length; i++) {
+        final cell = sheet.cell(
+          CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0),
+        );
+        cell.value = catalog.columns[i];
+        // Estilo para encabezado
+        cell.cellStyle = CellStyle(
+          bold: true,
+          backgroundColorHex: '#E8E8E8',
+          horizontalAlign: HorizontalAlign.Center,
+        );
+      }
+
+      // Filas de datos
+      for (int rowIndex = 0; rowIndex < catalog.rows.length; rowIndex++) {
+        final row = catalog.rows[rowIndex];
+        for (int colIndex = 0; colIndex < catalog.columns.length; colIndex++) {
+          final column = catalog.columns[colIndex];
+          final cell = sheet.cell(
+            CellIndex.indexByColumnRow(
+              columnIndex: colIndex,
+              rowIndex: rowIndex + 1,
+            ),
+          );
+          cell.value = row.data[column] ?? '';
+        }
+      }
+
+      // Ajustar ancho de columnas
+      for (int i = 0; i < catalog.columns.length; i++) {
+        sheet.setColumnWidth(i, 20.0);
+      }
+
+      // Guardar archivo en el directorio seleccionado
+      final excelBytes = excel.save();
+      if (excelBytes != null) {
+        final file = File(targetPath);
+        await file.writeAsBytes(excelBytes);
+      }
+
+      return targetPath;
+    } catch (e) {
+      throw Exception('Error al exportar Excel: $e');
+    }
+  }
+
+  /// Exporta y comparte un catálogo como CSV (método legacy, mantenido por compatibilidad)
+  /// Retorna la ruta del archivo exportado
+  Future<String> exportAndShareCsv(Catalog catalog) async {
+    try {
+      final filePath = await exportToCsv(catalog);
+      final fileName = '${_sanitizeFileName(catalog.name)}.csv';
+      await shareFile(filePath, fileName);
+      return filePath;
+    } catch (e) {
+      throw Exception('Error al exportar CSV: $e');
+    }
+  }
+
+  /// Exporta y comparte un catálogo como Excel (método legacy, mantenido por compatibilidad)
+  /// Retorna la ruta del archivo exportado
+  Future<String> exportAndShareExcel(Catalog catalog) async {
     try {
       final filePath = await exportToExcel(catalog);
       final fileName = '${_sanitizeFileName(catalog.name)}.xlsx';
       await shareFile(filePath, fileName);
+      return filePath;
     } catch (e) {
       throw Exception('Error al exportar Excel: $e');
     }

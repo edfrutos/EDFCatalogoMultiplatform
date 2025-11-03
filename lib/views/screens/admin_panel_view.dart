@@ -3,16 +3,14 @@ import '../../models/user.dart';
 import 'admin_users_list_view.dart';
 import 'admin_catalogs_list_view.dart';
 import 'admin_statistics_view.dart';
+import 'admin_backups_view.dart';
 
-enum AdminTab { users, catalogs, statistics }
+enum AdminTab { users, catalogs, statistics, backups }
 
 class AdminPanelView extends StatefulWidget {
   final User currentUser;
 
-  const AdminPanelView({
-    super.key,
-    required this.currentUser,
-  });
+  const AdminPanelView({super.key, required this.currentUser});
 
   @override
   State<AdminPanelView> createState() => _AdminPanelViewState();
@@ -31,9 +29,7 @@ class _AdminPanelViewState extends State<AdminPanelView> {
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: Colors.white,
-              border: Border(
-                bottom: BorderSide(color: Colors.grey.shade300),
-              ),
+              border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
             ),
             child: Row(
               children: [
@@ -50,7 +46,11 @@ class _AdminPanelViewState extends State<AdminPanelView> {
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        const Icon(Icons.admin_panel_settings, size: 16, color: Colors.orange),
+                        const Icon(
+                          Icons.admin_panel_settings,
+                          size: 16,
+                          color: Colors.orange,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           widget.currentUser.name,
@@ -88,6 +88,11 @@ class _AdminPanelViewState extends State<AdminPanelView> {
                   label: Text('Estadísticas'),
                   icon: Icon(Icons.bar_chart),
                 ),
+                ButtonSegment(
+                  value: AdminTab.backups,
+                  label: Text('Backups'),
+                  icon: Icon(Icons.backup),
+                ),
               ],
               selected: {_selectedTab},
               onSelectionChanged: (Set<AdminTab> newSelection) {
@@ -98,9 +103,7 @@ class _AdminPanelViewState extends State<AdminPanelView> {
             ),
           ),
           // Content
-          Expanded(
-            child: _buildTabContent(),
-          ),
+          Expanded(child: _buildTabContent()),
         ],
       ),
     );
@@ -114,7 +117,8 @@ class _AdminPanelViewState extends State<AdminPanelView> {
         return const AdminCatalogsListView();
       case AdminTab.statistics:
         return const AdminStatisticsView();
+      case AdminTab.backups:
+        return const AdminBackupsView();
     }
   }
 }
-

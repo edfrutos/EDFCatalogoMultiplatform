@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../viewmodels/admin_viewmodel.dart';
+import '../../viewmodels/backup_viewmodel.dart';
 import 'admin_panel_view.dart';
 
 class AdminView extends StatelessWidget {
@@ -25,18 +26,11 @@ class AdminView extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(
-                    Icons.block,
-                    size: 64,
-                    color: Colors.red,
-                  ),
+                  const Icon(Icons.block, size: 64, color: Colors.red),
                   const SizedBox(height: 16),
                   const Text(
                     'Acceso Denegado',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   const Padding(
@@ -53,12 +47,14 @@ class AdminView extends StatelessWidget {
           );
         }
 
-        return ChangeNotifierProvider(
-          create: (_) => AdminViewModel(),
+        return MultiProvider(
+          providers: [
+            ChangeNotifierProvider(create: (_) => AdminViewModel()),
+            ChangeNotifierProvider(create: (_) => BackupViewModel()),
+          ],
           child: AdminPanelView(currentUser: currentUser),
         );
       },
     );
   }
 }
-
