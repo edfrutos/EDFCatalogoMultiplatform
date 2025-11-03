@@ -24,6 +24,7 @@ class AuthViewModel extends ChangeNotifier {
   Future<void> signIn({
     required String emailOrUsername,
     required String password,
+    bool rememberMe = true,
   }) async {
     _isLoading = true;
     _errorMessage = null;
@@ -47,10 +48,17 @@ class AuthViewModel extends ChangeNotifier {
         _currentUser = user;
         _isAuthenticated = true;
 
-        // Guardar email en Keychain para persistencia
-        await _keychainService.saveToken(user.email);
-        await _keychainService.saveEmail(user.email);
-        await _keychainService.saveUserId(user.id);
+        // Guardar sesión solo si "Recordar contraseña" está marcado
+        if (rememberMe) {
+          await _keychainService.saveToken(user.email);
+          await _keychainService.saveEmail(user.email);
+          await _keychainService.saveUserId(user.id);
+          print('✅ Sesión guardada para recordar contraseña');
+        } else {
+          // Limpiar datos guardados si no quiere recordar
+          await _keychainService.clearAuthData();
+          print('✅ Sesión no guardada (recordar contraseña desactivado)');
+        }
 
         print('✅ Login exitoso para: $emailOrUsername');
       } else {
@@ -138,7 +146,9 @@ class AuthViewModel extends ChangeNotifier {
 
   /// Cerrar sesión
   void signOut() {
-    print('🔐 Cerrando sesión para: ${_currentUser?.email ?? "usuario desconocido"}');
+    print(
+      '🔐 Cerrando sesión para: ${_currentUser?.email ?? "usuario desconocido"}',
+    );
 
     _keychainService.clearAuthData();
 
@@ -252,7 +262,10 @@ class AuthViewModel extends ChangeNotifier {
 
     try {
       // Verificar el token
-      final isValid = await _mongoService.verifyPasswordResetToken(email, token);
+      final isValid = await _mongoService.verifyPasswordResetToken(
+        email,
+        token,
+      );
       if (!isValid) {
         _errorMessage = 'Código inválido o expirado';
         _isLoading = false;
@@ -289,4 +302,3 @@ class AuthViewModel extends ChangeNotifier {
     notifyListeners();
   }
 }
-

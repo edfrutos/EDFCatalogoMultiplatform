@@ -17,6 +17,7 @@ class _LoginViewState extends State<LoginView> {
   final _emailOrUsernameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _rememberPassword = true; // Por defecto marcado
 
   @override
   void dispose() {
@@ -34,6 +35,7 @@ class _LoginViewState extends State<LoginView> {
     await authViewModel.signIn(
       emailOrUsername: _emailOrUsernameController.text.trim(),
       password: _passwordController.text,
+      rememberMe: _rememberPassword,
     );
   }
 
@@ -105,6 +107,20 @@ class _LoginViewState extends State<LoginView> {
                     },
                   ),
                   const SizedBox(height: 8),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text(
+                      'Recordar contraseña',
+                      style: TextStyle(fontSize: 14),
+                    ),
+                    value: _rememberPassword,
+                    onChanged: (value) {
+                      setState(() {
+                        _rememberPassword = value ?? true;
+                      });
+                    },
+                    controlAffinity: ListTileControlAffinity.leading,
+                  ),
                   Consumer<AuthViewModel>(
                     builder: (context, authViewModel, _) {
                       if (authViewModel.errorMessage != null) {
