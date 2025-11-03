@@ -38,6 +38,7 @@ class _FileViewerViewState extends State<FileViewerView> {
   // Para WebView de YouTube
   WebViewController? _webViewController;
   bool _hasLoadedInitialContent = false;
+  String? _currentVideoId;
 
   FileType _getFileType(String url) {
     final lower = url.toLowerCase();
@@ -48,18 +49,29 @@ class _FileViewerViewState extends State<FileViewerView> {
       return FileType.multimedia;
     }
 
-    // Detectar archivos de texto
+    // Si la URL contiene "/document/" en la ruta, es un documento (independientemente de la extensión)
+    // Esto permite que archivos .md, .csv, .txt, etc. que fueron subidos como documentos se reconozcan como tal
+    if (lower.contains('/document/')) {
+      return FileType.document;
+    }
+
+    // Detectar archivos de texto plano y formatos de texto
     if (lower.contains('.txt') ||
+        fileNameLower.endsWith('.txt') ||
         lower.contains('.md') ||
         lower.contains('.markdown') ||
-        fileNameLower.endsWith('.txt') ||
         fileNameLower.endsWith('.md') ||
         fileNameLower.endsWith('.markdown') ||
         lower.contains('.rtf') ||
+        fileNameLower.endsWith('.rtf') ||
         lower.contains('.json') ||
+        fileNameLower.endsWith('.json') ||
         lower.contains('.xml') ||
+        fileNameLower.endsWith('.xml') ||
         lower.contains('.csv') ||
-        lower.contains('.log')) {
+        fileNameLower.endsWith('.csv') ||
+        lower.contains('.log') ||
+        fileNameLower.endsWith('.log')) {
       return FileType.text;
     }
 
@@ -70,7 +82,13 @@ class _FileViewerViewState extends State<FileViewerView> {
         lower.contains('.webp') ||
         lower.contains('.bmp')) {
       return FileType.image;
-    } else if (lower.contains('.pdf')) {
+    } else if (lower.contains('.pdf') ||
+        fileNameLower.endsWith('.pdf') ||
+        lower.contains('.doc') ||
+        fileNameLower.endsWith('.doc') ||
+        lower.contains('.docx') ||
+        fileNameLower.endsWith('.docx')) {
+      // Documentos: PDF y documentos de Word
       return FileType.document;
     } else if (lower.contains('.mp4') ||
         lower.contains('.mov') ||
@@ -85,22 +103,6 @@ class _FileViewerViewState extends State<FileViewerView> {
       return FileType.multimedia; // Audio también es multimedia
     }
     return FileType.other;
-  }
-
-  bool _isTextFile(String url) {
-    final lower = url.toLowerCase();
-    final fileNameLower = widget.fileName.toLowerCase();
-    return lower.contains('.txt') ||
-        lower.contains('.md') ||
-        lower.contains('.markdown') ||
-        fileNameLower.endsWith('.txt') ||
-        fileNameLower.endsWith('.md') ||
-        fileNameLower.endsWith('.markdown') ||
-        lower.contains('.rtf') ||
-        lower.contains('.json') ||
-        lower.contains('.xml') ||
-        lower.contains('.csv') ||
-        lower.contains('.log');
   }
 
   bool _isMarkdown(String url) {
@@ -148,9 +150,19 @@ class _FileViewerViewState extends State<FileViewerView> {
     final uri = Uri.tryParse(url);
     if (uri == null) return null;
 
-    // youtube.com/watch?v=VIDEO_ID
+    // youtube.com/shorts/VIDEO_ID
     if (uri.host.contains('youtube.com')) {
-      return uri.queryParameters['v'];
+      final path = uri.path;
+      if (path.startsWith('/shorts/')) {
+        final videoId = path.substring('/shorts/'.length).split('?')[0];
+        if (videoId.isNotEmpty) {
+          return videoId;
+        }
+      }
+      // youtube.com/watch?v=VIDEO_ID
+      if (uri.queryParameters.containsKey('v')) {
+        return uri.queryParameters['v'];
+      }
     }
     // youtu.be/VIDEO_ID
     if (uri.host.contains('youtu.be')) {
@@ -160,15 +172,6 @@ class _FileViewerViewState extends State<FileViewerView> {
       }
     }
     return null;
-  }
-
-  String _getYouTubeThumbnailUrl(String videoId) {
-    return 'https://img.youtube.com/vi/$videoId/maxresdefault.jpg';
-  }
-
-  String _getYouTubeEmbedUrl(String videoId) {
-    // Usar youtube-nocookie.com para mejor privacidad y agregar parámetros para reproducción
-    return 'https://www.youtube-nocookie.com/embed/$videoId?rel=0&modestbranding=1&playsinline=1&enablejsapi=1';
   }
 
   String _getYouTubeEmbedHtml(String videoId) {
@@ -260,6 +263,13 @@ class _FileViewerViewState extends State<FileViewerView> {
       _initializeVideo();
     } else if (fileType == FileType.text) {
       _loadTextFile();
+    } else if (fileType == FileType.document) {
+      // Cargar como texto si no es PDF (para .txt, .rtf, etc. que fueron seleccionados como documentos)
+      final lower = widget.url.toLowerCase();
+      final fileNameLower = widget.fileName.toLowerCase();
+      if (!lower.contains('.pdf') && !fileNameLower.endsWith('.pdf')) {
+        _loadTextFile();
+      }
     }
   }
 
@@ -418,7 +428,33 @@ class _FileViewerViewState extends State<FileViewerView> {
       case FileType.image:
         return _buildImageView();
       case FileType.document:
-        return _buildPdfView();
+        // Si es PDF, usar el visor de PDF; si no, intentar como texto
+        final lower = widget.url.toLowerCase();
+        final fileNameLower = widget.fileName.toLowerCase();
+        final isPdf = lower.contains('.pdf') || fileNameLower.endsWith('.pdf');
+        final isDoc =
+            lower.contains('.doc') ||
+            fileNameLower.endsWith('.doc') ||
+            lower.contains('.docx') ||
+            fileNameLower.endsWith('.docx');
+
+        if (isPdf) {
+          return _buildPdfView();
+        } else if (isDoc) {
+          // Archivos .doc y .docx no se pueden visualizar directamente
+          // Se mostrará el mensaje en _buildTextView cuando se detecte
+          if (_textContent == null && !_isLoadingText) {
+            _loadTextFile();
+          }
+          return _buildTextView();
+        } else {
+          // Para .txt, .rtf, etc., cargar como texto
+          // Esto permite visualizar archivos de texto que fueron seleccionados como "documento"
+          if (_textContent == null && !_isLoadingText) {
+            _loadTextFile();
+          }
+          return _buildTextView();
+        }
       case FileType.text:
         return _buildTextView();
       case FileType.multimedia:
@@ -487,12 +523,82 @@ class _FileViewerViewState extends State<FileViewerView> {
       return const Center(child: Text('No hay contenido para mostrar'));
     }
 
-    // Si es Markdown, renderizarlo
+    // Detectar tipo de archivo de texto
+    final lower = widget.url.toLowerCase();
+    final fileNameLower = widget.fileName.toLowerCase();
     final isMarkdown = _isMarkdown(widget.url);
+    final isRtf = lower.contains('.rtf') || fileNameLower.endsWith('.rtf');
+    final isDoc =
+        lower.contains('.doc') ||
+        fileNameLower.endsWith('.doc') ||
+        lower.contains('.docx') ||
+        fileNameLower.endsWith('.docx');
+
     print(
-      '📄 Renderizando texto: URL=${widget.url}, fileName=${widget.fileName}, isMarkdown=$isMarkdown, contentLength=${_textContent?.length}',
+      '📄 Renderizando texto: URL=${widget.url}, fileName=${widget.fileName}, isMarkdown=$isMarkdown, isRtf=$isRtf, isDoc=$isDoc, contentLength=${_textContent?.length}',
     );
 
+    // Archivos .doc y .docx no se pueden visualizar directamente (formato binario)
+    if (isDoc) {
+      return SafeArea(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.description, size: 64, color: Colors.orange),
+              const SizedBox(height: 16),
+              const Text(
+                'Archivo de Word',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 32.0),
+                child: Text(
+                  'Los archivos .doc y .docx no se pueden visualizar directamente en la app. Puedes descargarlo o abrirlo en una aplicación externa.',
+                  style: TextStyle(color: Colors.grey),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Builder(
+                    builder: (context) => Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: () => _downloadFile(context),
+                          icon: const Icon(Icons.download),
+                          label: const Text('Descargar'),
+                        ),
+                        const SizedBox(width: 16),
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            final uri = Uri.parse(widget.url);
+                            if (await canLaunchUrl(uri)) {
+                              await launchUrl(
+                                uri,
+                                mode: LaunchMode.externalApplication,
+                              );
+                            }
+                          },
+                          icon: const Icon(Icons.open_in_browser),
+                          label: const Text('Abrir externamente'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Renderizar Markdown con formato
     if (isMarkdown) {
       return SafeArea(
         child: SingleChildScrollView(
@@ -571,16 +677,95 @@ class _FileViewerViewState extends State<FileViewerView> {
       );
     }
 
-    // Texto plano
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: SingleChildScrollView(
-        child: SelectableText(
-          _textContent!,
-          style: const TextStyle(
-            fontFamily: 'monospace',
-            fontSize: 14,
-            height: 1.5,
+    // Texto plano (incluye .txt, .rtf sin formato, .json, .xml, .csv, .log, etc.)
+    // Para RTF, intentar mostrar el contenido de texto aunque se pierda el formato
+    String displayText = _textContent!;
+
+    // Si es RTF, intentar extraer solo el texto legible (simple: remover algunos códigos RTF comunes)
+    if (isRtf) {
+      // Eliminar códigos RTF básicos para mostrar el texto legible
+      displayText = displayText
+          .replaceAll(
+            RegExp(r'\\[a-z]+\d*\s?'),
+            ' ',
+          ) // Códigos RTF como \b1, \par, etc.
+          .replaceAll(RegExp(r'\{[^}]*\}'), '') // Grupos RTF
+          .replaceAll(RegExp(r'\s+'), ' ') // Espacios múltiples
+          .trim();
+
+      if (displayText.isEmpty || displayText.length < 10) {
+        // Si después de limpiar no queda contenido legible, mostrar mensaje
+        return SafeArea(
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.description, size: 64, color: Colors.orange),
+                const SizedBox(height: 16),
+                const Text(
+                  'Archivo RTF',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 32.0),
+                  child: Text(
+                    'No se pudo extraer el texto del archivo RTF. Puedes descargarlo o abrirlo en una aplicación externa.',
+                    style: TextStyle(color: Colors.grey),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: () => _downloadFile(context),
+                      icon: const Icon(Icons.download),
+                      label: const Text('Descargar'),
+                    ),
+                    const SizedBox(width: 16),
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        final uri = Uri.parse(widget.url);
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(
+                            uri,
+                            mode: LaunchMode.externalApplication,
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.open_in_browser),
+                      label: const Text('Abrir externamente'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+    }
+
+    // Usar fuente monospace para archivos de código/datos, pero fuente normal para texto
+    final useMonospace =
+        lower.contains('.json') ||
+        lower.contains('.xml') ||
+        lower.contains('.csv') ||
+        lower.contains('.log') ||
+        lower.contains('.txt');
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: SingleChildScrollView(
+          child: SelectableText(
+            displayText,
+            style: TextStyle(
+              fontFamily: useMonospace ? 'monospace' : null,
+              fontSize: useMonospace ? 14 : 16,
+              height: 1.5,
+            ),
           ),
         ),
       ),
@@ -718,66 +903,75 @@ class _FileViewerViewState extends State<FileViewerView> {
         widget.url.toLowerCase().contains('youtu.be');
     final videoId = isYouTube ? _extractYouTubeVideoId(widget.url) : null;
 
-    // Inicializar WebViewController en initState o aquí
-    if (isYouTube && videoId != null && _webViewController == null) {
-      _webViewController = WebViewController()
-        ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..setNavigationDelegate(
-          NavigationDelegate(
-            onNavigationRequest: (NavigationRequest request) {
-              final uri = Uri.tryParse(request.url);
-              final urlLower = request.url.toLowerCase();
-
-              // Si es el main frame
-              if (request.isMainFrame) {
-                // Permitir solo la carga inicial del HTML local
-                if (!_hasLoadedInitialContent) {
-                  // Permitir la primera navegación (puede ser cualquier cosa de la carga inicial)
-                  _hasLoadedInitialContent = true;
-                  print(
-                    '✅ Permitida navegación inicial del main frame: ${request.url}',
-                  );
-                  return NavigationDecision.navigate;
-                }
-
-                // Después de la carga inicial, bloquear TODAS las navegaciones del main frame
-                // IMPORTANTE: Esto previene que YouTube intente redirigir o abrir ventanas nuevas
-                print(
-                  '🚫 BLOQUEADA navegación principal (ya cargado): ${request.url}',
-                );
-                return NavigationDecision.prevent;
-              }
-
-              // Permitir TODAS las navegaciones dentro del iframe (subframes)
-              // Esto incluye recursos de YouTube dentro del embed que necesita cargar
-              print('✅ Permitida navegación de subframe: ${request.url}');
-              return NavigationDecision.navigate;
-            },
-            onPageStarted: (String url) {
-              print('🎥 Cargando YouTube WebView: $url');
-            },
-            onPageFinished: (String url) {
-              print('✅ YouTube WebView cargado: $url');
-              if (mounted) {
-                setState(() {});
-              }
-            },
-            onWebResourceError: (WebResourceError error) {
-              print('❌ Error en WebView: ${error.description}');
-              print('   Error code: ${error.errorCode}');
-              print('   Error type: ${error.errorType}');
-              print('   URL: ${error.url}');
-            },
-          ),
+    // Si el videoId cambió o el WebViewController no está inicializado, reinicializar
+    if (isYouTube && videoId != null) {
+      if (_webViewController == null || _currentVideoId != videoId) {
+        print(
+          '🔄 Inicializando/reinicializando WebView para video: $videoId (anterior: $_currentVideoId)',
         );
 
-      // Cargar HTML con iframe embebido
-      // IMPORTANTE: Usar el dominio de YouTube como baseUrl para que el iframe funcione
-      _webViewController!.loadHtmlString(
-        _getYouTubeEmbedHtml(videoId),
-        baseUrl: 'https://www.youtube-nocookie.com',
-      );
-      print('🎥 HTML con iframe cargado para video ID: $videoId');
+        // Resetear el flag de carga inicial si cambió el video
+        if (_currentVideoId != videoId) {
+          _hasLoadedInitialContent = false;
+          _currentVideoId = videoId;
+        }
+
+        _webViewController = WebViewController()
+          ..setJavaScriptMode(JavaScriptMode.unrestricted)
+          ..setNavigationDelegate(
+            NavigationDelegate(
+              onNavigationRequest: (NavigationRequest request) {
+                // Si es el main frame
+                if (request.isMainFrame) {
+                  // Permitir solo la carga inicial del HTML local
+                  if (!_hasLoadedInitialContent) {
+                    // Permitir la primera navegación (puede ser cualquier cosa de la carga inicial)
+                    _hasLoadedInitialContent = true;
+                    print(
+                      '✅ Permitida navegación inicial del main frame: ${request.url}',
+                    );
+                    return NavigationDecision.navigate;
+                  }
+
+                  // Después de la carga inicial, bloquear TODAS las navegaciones del main frame
+                  // IMPORTANTE: Esto previene que YouTube intente redirigir o abrir ventanas nuevas
+                  print(
+                    '🚫 BLOQUEADA navegación principal (ya cargado): ${request.url}',
+                  );
+                  return NavigationDecision.prevent;
+                }
+
+                // Permitir TODAS las navegaciones dentro del iframe (subframes)
+                // Esto incluye recursos de YouTube dentro del embed que necesita cargar
+                print('✅ Permitida navegación de subframe: ${request.url}');
+                return NavigationDecision.navigate;
+              },
+              onPageStarted: (String url) {
+                print('🎥 Cargando YouTube WebView: $url');
+              },
+              onPageFinished: (String url) {
+                print('✅ YouTube WebView cargado: $url');
+                if (mounted) {
+                  setState(() {});
+                }
+              },
+              onWebResourceError: (WebResourceError error) {
+                print('❌ Error en WebView: ${error.description}');
+                print('   Error code: ${error.errorCode}');
+                print('   Error type: ${error.errorType}');
+                print('   URL: ${error.url}');
+              },
+            ),
+          );
+
+        // Cargar HTML con iframe embebido
+        // IMPORTANTE: Usar el dominio de YouTube como baseUrl para que el iframe funcione
+        _webViewController!.loadHtmlString(
+          _getYouTubeEmbedHtml(videoId),
+          baseUrl: 'https://www.youtube-nocookie.com',
+        );
+        print('🎥 HTML con iframe cargado para video ID: $videoId');
+      }
     }
 
     return SafeArea(

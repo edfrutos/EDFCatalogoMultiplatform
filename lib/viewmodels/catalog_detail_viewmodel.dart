@@ -11,15 +11,15 @@ class CatalogDetailViewModel extends ChangeNotifier {
   Catalog _catalog;
   List<CatalogRow> _rows = [];
   List<CatalogRow> _originalRows = [];
-  
+
   bool _isLoading = false;
   String? _errorMessage;
   bool _isEditing = false;
   bool _showingAddRowSheet = false;
-  
+
   String? _sortedColumn;
   SortDirection _sortDirection = SortDirection.none;
-  
+
   // Paginación de filas
   int _currentPage = 1;
   static const int _itemsPerPage = 50;
@@ -32,13 +32,20 @@ class CatalogDetailViewModel extends ChangeNotifier {
   bool get showingAddRowSheet => _showingAddRowSheet;
   String? get sortedColumn => _sortedColumn;
   SortDirection get sortDirection => _sortDirection;
-  
+
   // Getters de paginación
   int get currentPage => _currentPage;
   int get itemsPerPage => _itemsPerPage;
   int get totalRows => _originalRows.length;
-  int get totalPages => PaginationService.calculateTotalPages(_originalRows.length, _itemsPerPage);
-  String get rowsRange => PaginationService.getItemsRange(_currentPage, _itemsPerPage, _originalRows.length);
+  int get totalPages => PaginationService.calculateTotalPages(
+    _originalRows.length,
+    _itemsPerPage,
+  );
+  String get rowsRange => PaginationService.getItemsRange(
+    _currentPage,
+    _itemsPerPage,
+    _originalRows.length,
+  );
 
   CatalogDetailViewModel({required Catalog catalog}) : _catalog = catalog {
     _loadRows();
@@ -52,7 +59,7 @@ class CatalogDetailViewModel extends ChangeNotifier {
     try {
       // Cargar filas del catálogo
       _originalRows = List.from(_catalog.rows);
-      
+
       // Si no hay filas pero hay legacyRows, convertirlas
       if (_originalRows.isEmpty && _catalog.legacyRows != null) {
         // legacyRows es Map<String, dynamic> que puede tener diferentes estructuras
@@ -109,7 +116,7 @@ class CatalogDetailViewModel extends ChangeNotifier {
 
   void _applySorting() {
     List<CatalogRow> sortedRows;
-    
+
     if (_sortedColumn == null || _sortDirection == SortDirection.none) {
       sortedRows = List.from(_originalRows);
     } else {
@@ -121,7 +128,7 @@ class CatalogDetailViewModel extends ChangeNotifier {
         // Intentar ordenar numéricamente si ambos valores son números
         final num1 = double.tryParse(value1);
         final num2 = double.tryParse(value2);
-        
+
         if (num1 != null && num2 != null) {
           return _sortDirection == SortDirection.ascending
               ? num1.compareTo(num2)
@@ -135,34 +142,41 @@ class CatalogDetailViewModel extends ChangeNotifier {
             : -comparison;
       });
     }
-    
+
     // Aplicar paginación a las filas ordenadas
-    _rows = PaginationService.getPageItems(sortedRows, _currentPage, _itemsPerPage);
+    _rows = PaginationService.getPageItems(
+      sortedRows,
+      _currentPage,
+      _itemsPerPage,
+    );
     notifyListeners();
   }
-  
+
   void nextPage() {
     if (PaginationService.hasNextPage(_currentPage, totalPages)) {
       _currentPage++;
       _applySorting();
     }
   }
-  
+
   void previousPage() {
     if (PaginationService.hasPreviousPage(_currentPage)) {
       _currentPage--;
       _applySorting();
     }
   }
-  
+
   void goToPage(int page) {
-    final totalPages = PaginationService.calculateTotalPages(_originalRows.length, _itemsPerPage);
+    final totalPages = PaginationService.calculateTotalPages(
+      _originalRows.length,
+      _itemsPerPage,
+    );
     if (page >= 1 && page <= totalPages) {
       _currentPage = page;
       _applySorting();
     }
   }
-  
+
   void resetPagination() {
     _currentPage = 1;
     _applySorting();
@@ -223,7 +237,10 @@ class CatalogDetailViewModel extends ChangeNotifier {
 
     _originalRows.add(newRow);
     // Si se agrega una nueva fila, puede que necesitemos ir a la última página
-    final totalPages = PaginationService.calculateTotalPages(_originalRows.length, _itemsPerPage);
+    final totalPages = PaginationService.calculateTotalPages(
+      _originalRows.length,
+      _itemsPerPage,
+    );
     if (totalPages > _currentPage) {
       _currentPage = totalPages;
     }
@@ -233,6 +250,16 @@ class CatalogDetailViewModel extends ChangeNotifier {
 
   void updateRow(int index, Map<String, String> data, RowFiles files) {
     if (index < 0 || index >= _rows.length) return;
+
+    print('🔄 Actualizando fila en índice $index');
+    print('   Archivos recibidos:');
+    print('     image: ${files.image}');
+    print('     images: ${files.images}');
+    print('     document: ${files.document}');
+    print('     documents: ${files.documents}');
+    print('     multimedia: ${files.multimedia}');
+    print('     multimediaFiles: ${files.multimediaFiles}');
+    print('     hasAnyFiles: ${files.hasAnyFiles}');
 
     // Obtener la fila desde rows (ya ordenada)
     final updatedRow = CatalogRow(
@@ -250,6 +277,14 @@ class CatalogDetailViewModel extends ChangeNotifier {
     );
     if (originalIndex != -1) {
       _originalRows[originalIndex] = updatedRow;
+      print('✅ Fila actualizada en originalRows[${originalIndex}]');
+      print(
+        '   Archivos después de actualizar: hasAnyFiles=${updatedRow.files.hasAnyFiles}',
+      );
+    } else {
+      print(
+        '⚠️ No se encontró la fila en originalRows con originalId=${updatedRow.originalId}',
+      );
     }
 
     _applySorting();
@@ -308,11 +343,30 @@ class CatalogDetailViewModel extends ChangeNotifier {
     _catalog = updatedCatalog;
 
     try {
+      print('💾 Guardando catálogo en MongoDB...');
+      print('   Total de filas: ${_originalRows.length}');
+      for (int i = 0; i < _originalRows.length; i++) {
+        final row = _originalRows[i];
+        print('   Fila $i: hasAnyFiles=${row.files.hasAnyFiles}');
+        if (row.files.hasAnyFiles) {
+          print('     image: ${row.files.image}, images: ${row.files.images}');
+          print(
+            '     document: ${row.files.document}, documents: ${row.files.documents}',
+          );
+          print(
+            '     multimedia: ${row.files.multimedia}, multimediaFiles: ${row.files.multimediaFiles}',
+          );
+        }
+      }
+
       await _mongoService.updateCatalogFromObject(updatedCatalog);
+      print('✅ Catálogo guardado correctamente');
+      // Notificar a los listeners después de guardar
+      notifyListeners();
     } catch (e) {
       _errorMessage = 'Error al guardar cambios: $e';
+      print('❌ Error guardando catálogo: $e');
       notifyListeners();
     }
   }
 }
-

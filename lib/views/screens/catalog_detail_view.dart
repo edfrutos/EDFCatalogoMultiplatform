@@ -10,10 +10,7 @@ import 'widgets/file_viewer_view.dart';
 class CatalogDetailView extends StatefulWidget {
   final Catalog catalog;
 
-  const CatalogDetailView({
-    super.key,
-    required this.catalog,
-  });
+  const CatalogDetailView({super.key, required this.catalog});
 
   @override
   State<CatalogDetailView> createState() => _CatalogDetailViewState();
@@ -29,9 +26,7 @@ class _CatalogDetailViewState extends State<CatalogDetailView> {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const Center(
-          child: CircularProgressIndicator(),
-        ),
+        builder: (context) => const Center(child: CircularProgressIndicator()),
       );
 
       if (format == 'csv') {
@@ -44,7 +39,9 @@ class _CatalogDetailViewState extends State<CatalogDetailView> {
         Navigator.of(context).pop(); // Cerrar loading
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Catálogo exportado a ${format.toUpperCase()} correctamente'),
+            content: Text(
+              'Catálogo exportado a ${format.toUpperCase()} correctamente',
+            ),
             backgroundColor: Colors.green,
           ),
         );
@@ -76,7 +73,8 @@ class _CatalogDetailViewState extends State<CatalogDetailView> {
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.download),
                   tooltip: 'Exportar',
-                  onSelected: (value) => _handleExport(context, viewModel.catalog, value),
+                  onSelected: (value) =>
+                      _handleExport(context, viewModel.catalog, value),
                   itemBuilder: (context) => [
                     const PopupMenuItem(
                       value: 'csv',
@@ -121,69 +119,71 @@ class _CatalogDetailViewState extends State<CatalogDetailView> {
               children: [
                 Column(
                   children: [
-                // Descripción
-                if (viewModel.catalog.description.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Text(
-                      viewModel.catalog.description,
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
-                  ),
-                if (viewModel.catalog.description.isNotEmpty)
-                  const Divider(),
-                // Cabecera de columnas con ordenamiento
-                if (viewModel.catalog.columns.isNotEmpty)
-                  Container(
-                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      border: Border(
-                        bottom: BorderSide(color: Colors.grey.shade300),
+                    // Descripción
+                    if (viewModel.catalog.description.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Text(
+                          viewModel.catalog.description,
+                          style: Theme.of(context).textTheme.bodyLarge,
+                        ),
                       ),
-                    ),
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          ...viewModel.catalog.columns.map((column) {
-                            final isSorted = viewModel.sortedColumn == column;
-                            return _SortableColumnHeader(
-                              title: column,
-                              isSorted: isSorted,
-                              sortDirection: isSorted
-                                  ? viewModel.sortDirection
-                                  : SortDirection.none,
-                              onTap: () {
-                                viewModel.toggleSort(column);
-                              },
-                            );
-                          }),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 8,
-                              horizontal: 12,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.shade50,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Text(
-                              'Archivos',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                    if (viewModel.catalog.description.isNotEmpty)
+                      const Divider(),
+                    // Cabecera de columnas con ordenamiento
+                    if (viewModel.catalog.columns.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 8,
+                          horizontal: 16,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          border: Border(
+                            bottom: BorderSide(color: Colors.grey.shade300),
                           ),
-                        ],
+                        ),
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              ...viewModel.catalog.columns.map((column) {
+                                final isSorted =
+                                    viewModel.sortedColumn == column;
+                                return _SortableColumnHeader(
+                                  title: column,
+                                  isSorted: isSorted,
+                                  sortDirection: isSorted
+                                      ? viewModel.sortDirection
+                                      : SortDirection.none,
+                                  onTap: () {
+                                    viewModel.toggleSort(column);
+                                  },
+                                );
+                              }),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                  horizontal: 12,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.shade50,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Text(
+                                  'Archivos',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                // Contenido
-                Expanded(
-                  child: viewModel.isLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : viewModel.errorMessage != null
+                    // Contenido
+                    Expanded(
+                      child: viewModel.isLoading
+                          ? const Center(child: CircularProgressIndicator())
+                          : viewModel.errorMessage != null
                           ? Center(
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
@@ -208,132 +208,147 @@ class _CatalogDetailViewState extends State<CatalogDetailView> {
                                 ],
                               ),
                             )
-                              : viewModel.totalRows == 0
-                              ? Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      const Icon(
-                                        Icons.inbox_outlined,
-                                        size: 64,
-                                        color: Colors.grey,
-                                      ),
-                                      const SizedBox(height: 16),
-                                      const Text(
-                                        'No hay filas disponibles',
-                                        style: TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      const Text(
-                                        'Añade nuevas filas para comenzar',
-                                        style: TextStyle(color: Colors.grey),
-                                      ),
-                                      const SizedBox(height: 16),
-                                      if (viewModel.isEditing)
-                                        ElevatedButton.icon(
-                                          onPressed: () {
-                                            viewModel.showAddRowSheet();
-                                          },
-                                          icon: const Icon(Icons.add),
-                                          label: const Text('Añadir fila'),
-                                        ),
-                                    ],
+                          : viewModel.totalRows == 0
+                          ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(
+                                    Icons.inbox_outlined,
+                                    size: 64,
+                                    color: Colors.grey,
                                   ),
-                                )
-                              : Column(
-                                  children: [
-                                    // Información de paginación de filas
-                                    if (viewModel.totalRows > viewModel.itemsPerPage)
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 16,
-                                          vertical: 8,
+                                  const SizedBox(height: 16),
+                                  const Text(
+                                    'No hay filas disponibles',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  const Text(
+                                    'Añade nuevas filas para comenzar',
+                                    style: TextStyle(color: Colors.grey),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  if (viewModel.isEditing)
+                                    ElevatedButton.icon(
+                                      onPressed: () {
+                                        viewModel.showAddRowSheet();
+                                      },
+                                      icon: const Icon(Icons.add),
+                                      label: const Text('Añadir fila'),
+                                    ),
+                                ],
+                              ),
+                            )
+                          : Column(
+                              children: [
+                                // Información de paginación de filas
+                                if (viewModel.totalRows >
+                                    viewModel.itemsPerPage)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 8,
+                                    ),
+                                    color: Colors.grey.shade100,
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          '${viewModel.rowsRange} filas',
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey,
+                                          ),
                                         ),
-                                        color: Colors.grey.shade100,
-                                        child: Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        Row(
                                           children: [
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.chevron_left,
+                                              ),
+                                              onPressed:
+                                                  PaginationService.hasPreviousPage(
+                                                    viewModel.currentPage,
+                                                  )
+                                                  ? () =>
+                                                        viewModel.previousPage()
+                                                  : null,
+                                              tooltip: 'Página anterior',
+                                            ),
                                             Text(
-                                              '${viewModel.rowsRange} filas',
+                                              'Página ${viewModel.currentPage} de ${viewModel.totalPages}',
                                               style: const TextStyle(
                                                 fontSize: 12,
-                                                color: Colors.grey,
+                                                fontWeight: FontWeight.bold,
                                               ),
                                             ),
-                                            Row(
-                                              children: [
-                                                IconButton(
-                                                  icon: const Icon(Icons.chevron_left),
-                                                  onPressed: PaginationService.hasPreviousPage(viewModel.currentPage)
-                                                      ? () => viewModel.previousPage()
-                                                      : null,
-                                                  tooltip: 'Página anterior',
-                                                ),
-                                                Text(
-                                                  'Página ${viewModel.currentPage} de ${viewModel.totalPages}',
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                ),
-                                                IconButton(
-                                                  icon: const Icon(Icons.chevron_right),
-                                                  onPressed: PaginationService.hasNextPage(viewModel.currentPage, viewModel.totalPages)
-                                                      ? () => viewModel.nextPage()
-                                                      : null,
-                                                  tooltip: 'Página siguiente',
-                                                ),
-                                              ],
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.chevron_right,
+                                              ),
+                                              onPressed:
+                                                  PaginationService.hasNextPage(
+                                                    viewModel.currentPage,
+                                                    viewModel.totalPages,
+                                                  )
+                                                  ? () => viewModel.nextPage()
+                                                  : null,
+                                              tooltip: 'Página siguiente',
                                             ),
                                           ],
                                         ),
-                                      ),
-                                    // Lista de filas
-                                    Expanded(
-                                      child: ListView.builder(
-                                        padding: const EdgeInsets.all(16),
-                                        itemCount: viewModel.rows.length,
-                                        itemBuilder: (context, index) {
-                                          final row = viewModel.rows[index];
-                                          return _CatalogRowCard(
-                                            row: row,
-                                            columns: viewModel.catalog.columns,
-                                            index: index,
-                                            isEditing: viewModel.isEditing,
-                                            onEdit: () {
-                                              _showEditRowDialog(
-                                                context,
-                                                viewModel,
-                                                index,
-                                                row,
-                                              );
-                                            },
-                                            onDelete: () {
-                                              _showDeleteConfirmation(
-                                                context,
-                                                viewModel,
-                                                index,
-                                              );
-                                            },
-                                            onFileTap: (url, fileName) {
-                                              Navigator.of(context).push(
-                                                MaterialPageRoute(
-                                                  builder: (context) => FileViewerView(
+                                      ],
+                                    ),
+                                  ),
+                                // Lista de filas
+                                Expanded(
+                                  child: ListView.builder(
+                                    padding: const EdgeInsets.all(16),
+                                    itemCount: viewModel.rows.length,
+                                    itemBuilder: (context, index) {
+                                      final row = viewModel.rows[index];
+                                      return _CatalogRowCard(
+                                        row: row,
+                                        columns: viewModel.catalog.columns,
+                                        index: index,
+                                        isEditing: viewModel.isEditing,
+                                        onEdit: () {
+                                          _showEditRowDialog(
+                                            context,
+                                            viewModel,
+                                            index,
+                                            row,
+                                          );
+                                        },
+                                        onDelete: () {
+                                          _showDeleteConfirmation(
+                                            context,
+                                            viewModel,
+                                            index,
+                                          );
+                                        },
+                                        onFileTap: (url, fileName) {
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (context) =>
+                                                  FileViewerView(
                                                     url: url,
                                                     fileName: fileName,
                                                   ),
-                                                ),
-                                              );
-                                            },
+                                            ),
                                           );
                                         },
-                                      ),
-                                    ),
-                                  ],
+                                      );
+                                    },
+                                  ),
                                 ),
+                              ],
+                            ),
                     ),
                   ],
                 ),
@@ -483,7 +498,7 @@ class _CatalogRowCard extends StatelessWidget {
   final VoidCallback onDelete;
   final Function(String url, String fileName) onFileTap;
 
-  const _CatalogRowCard({
+  _CatalogRowCard({
     required this.row,
     required this.columns,
     required this.index,
@@ -492,6 +507,108 @@ class _CatalogRowCard extends StatelessWidget {
     required this.onDelete,
     required this.onFileTap,
   });
+
+  Widget _buildFileChips() {
+    // Debug: verificar archivos de la fila
+    print('📋 Mostrando archivos de fila:');
+    print('   image: ${row.files.image}');
+    print('   images (${row.files.images.length}): ${row.files.images}');
+    print('   document: ${row.files.document}');
+    print(
+      '   documents (${row.files.documents.length}): ${row.files.documents}',
+    );
+    print('   multimedia: ${row.files.multimedia}');
+    print(
+      '   multimediaFiles (${row.files.multimediaFiles.length}): ${row.files.multimediaFiles}',
+    );
+
+    // Construir lista de chips
+    final chips = <Widget>[];
+
+    // Agregar imagen singular
+    if (row.files.image != null && row.files.image!.isNotEmpty) {
+      chips.add(
+        _FileChip(
+          label: 'Imagen',
+          icon: Icons.image,
+          onTap: () => onFileTap(row.files.image!, 'Imagen'),
+        ),
+      );
+    }
+
+    // Agregar imágenes múltiples
+    for (final url in row.files.images) {
+      if (url.isNotEmpty) {
+        chips.add(
+          _FileChip(
+            label: 'Imagen',
+            icon: Icons.image,
+            onTap: () => onFileTap(url, 'Imagen'),
+          ),
+        );
+      }
+    }
+
+    // Agregar documento singular
+    if (row.files.document != null && row.files.document!.isNotEmpty) {
+      chips.add(
+        _FileChip(
+          label: 'Documento',
+          icon: Icons.description,
+          onTap: () => onFileTap(row.files.document!, 'Documento'),
+        ),
+      );
+    }
+
+    // Agregar documentos múltiples
+    for (final url in row.files.documents) {
+      if (url.isNotEmpty) {
+        chips.add(
+          _FileChip(
+            label: 'Documento',
+            icon: Icons.description,
+            onTap: () => onFileTap(url, 'Documento'),
+          ),
+        );
+      }
+    }
+
+    // Agregar multimedia singular
+    if (row.files.multimedia != null && row.files.multimedia!.isNotEmpty) {
+      chips.add(
+        _FileChip(
+          label: 'Multimedia',
+          icon: Icons.videocam,
+          onTap: () => onFileTap(row.files.multimedia!, 'Multimedia'),
+        ),
+      );
+    }
+
+    // Agregar multimedia múltiple
+    for (final url in row.files.multimediaFiles) {
+      if (url.isNotEmpty) {
+        chips.add(
+          _FileChip(
+            label: 'Multimedia',
+            icon: Icons.videocam,
+            onTap: () => onFileTap(url, 'Multimedia'),
+          ),
+        );
+      }
+    }
+
+    print('   🎨 Total de chips a mostrar: ${chips.length}');
+
+    if (chips.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Wrap(spacing: 8, runSpacing: 8, children: chips),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -525,10 +642,7 @@ class _CatalogRowCard extends StatelessWidget {
                                 ),
                               ),
                               const SizedBox(height: 4),
-                              Text(
-                                value,
-                                style: const TextStyle(fontSize: 14),
-                              ),
+                              Text(value, style: const TextStyle(fontSize: 14)),
                             ],
                           ),
                         );
@@ -555,45 +669,7 @@ class _CatalogRowCard extends StatelessWidget {
               const SizedBox(height: 8),
               const Divider(),
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  if (row.files.image != null)
-                    _FileChip(
-                      label: 'Imagen',
-                      icon: Icons.image,
-                      onTap: () => onFileTap(row.files.image!, 'Imagen'),
-                    ),
-                  ...row.files.images.map((url) => _FileChip(
-                        label: 'Imagen',
-                        icon: Icons.image,
-                        onTap: () => onFileTap(url, 'Imagen'),
-                      )),
-                  if (row.files.document != null)
-                    _FileChip(
-                      label: 'Documento',
-                      icon: Icons.description,
-                      onTap: () => onFileTap(row.files.document!, 'Documento'),
-                    ),
-                  ...row.files.documents.map((url) => _FileChip(
-                        label: 'Documento',
-                        icon: Icons.description,
-                        onTap: () => onFileTap(url, 'Documento'),
-                      )),
-                  if (row.files.multimedia != null)
-                    _FileChip(
-                      label: 'Multimedia',
-                      icon: Icons.videocam,
-                      onTap: () => onFileTap(row.files.multimedia!, 'Multimedia'),
-                    ),
-                  ...row.files.multimediaFiles.map((url) => _FileChip(
-                        label: 'Multimedia',
-                        icon: Icons.videocam,
-                        onTap: () => onFileTap(url, 'Multimedia'),
-                      )),
-                ],
-              ),
+              _buildFileChips(),
             ],
           ],
         ),
@@ -617,9 +693,15 @@ class _FileChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
       child: Chip(
-        avatar: Icon(icon, size: 16),
-        label: Text(label),
+        avatar: Icon(icon, size: 18, color: Colors.blue),
+        label: Text(
+          label,
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
     );
   }
