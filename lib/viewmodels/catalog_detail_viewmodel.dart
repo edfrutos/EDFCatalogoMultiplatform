@@ -60,6 +60,22 @@ class CatalogDetailViewModel extends ChangeNotifier {
       // Cargar filas del catálogo
       _originalRows = List.from(_catalog.rows);
 
+      // Debug: verificar archivos al cargar
+      print('📥 Cargando ${_originalRows.length} filas del catálogo');
+      for (int i = 0; i < _originalRows.length; i++) {
+        final row = _originalRows[i];
+        print(
+          '   Fila $i (id=${row.id}): hasAnyFiles=${row.files.hasAnyFiles}',
+        );
+        if (row.files.hasAnyFiles) {
+          print(
+            '     ✅ Tiene archivos: image=${row.files.image != null}, document=${row.files.document != null}, multimedia=${row.files.multimedia != null}',
+          );
+        } else {
+          print('     ❌ NO tiene archivos');
+        }
+      }
+
       // Si no hay filas pero hay legacyRows, convertirlas
       if (_originalRows.isEmpty && _catalog.legacyRows != null) {
         // legacyRows es Map<String, dynamic> que puede tener diferentes estructuras

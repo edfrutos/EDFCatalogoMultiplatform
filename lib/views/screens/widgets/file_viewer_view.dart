@@ -605,7 +605,9 @@ class _FileViewerViewState extends State<FileViewerView> {
           padding: const EdgeInsets.all(16.0),
           child: MarkdownBody(
             data: _textContent!,
-            selectable: true,
+            // Desactivar selectable para evitar el error conocido de flutter_markdown
+            // El error ocurre cuando se intenta seleccionar texto en MarkdownBody con selectable: true
+            selectable: false,
             styleSheet: MarkdownStyleSheet(
               p: const TextStyle(fontSize: 16, height: 1.6),
               h1: const TextStyle(

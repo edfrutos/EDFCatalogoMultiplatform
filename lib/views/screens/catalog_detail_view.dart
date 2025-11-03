@@ -17,6 +17,13 @@ class CatalogDetailView extends StatefulWidget {
 }
 
 class _CatalogDetailViewState extends State<CatalogDetailView> {
+  void _showAllFilesModal(BuildContext context, Catalog catalog) {
+    showDialog(
+      context: context,
+      builder: (context) => _FilesModalDialog(catalog: catalog),
+    );
+  }
+
   Future<void> _handleExport(
     BuildContext context,
     Catalog catalog,
@@ -195,18 +202,38 @@ class _CatalogDetailViewState extends State<CatalogDetailView> {
                                   },
                                 );
                               }),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 8,
-                                  horizontal: 12,
+                              InkWell(
+                                onTap: () => _showAllFilesModal(
+                                  context,
+                                  viewModel.catalog,
                                 ),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue.shade50,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Text(
-                                  'Archivos',
-                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                borderRadius: BorderRadius.circular(8),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 8,
+                                    horizontal: 12,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade50,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Text(
+                                        'Archivos',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Icon(
+                                        Icons.open_in_new,
+                                        size: 14,
+                                        color: Colors.blue.shade700,
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ],
@@ -556,16 +583,22 @@ class _CatalogRowCard extends StatelessWidget {
       '   multimediaFiles (${row.files.multimediaFiles.length}): ${row.files.multimediaFiles}',
     );
 
-    // Construir lista de chips
-    final chips = <Widget>[];
+    // Construir listas separadas por tipo
+    final imageChips = <Widget>[];
+    final documentChips = <Widget>[];
+    final multimediaChips = <Widget>[];
 
     // Agregar imagen singular
     if (row.files.image != null && row.files.image!.isNotEmpty) {
-      chips.add(
+      final url = row.files.image!;
+      final title = row.files.fileTitles[url] ?? '';
+      imageChips.add(
         _FileChip(
-          label: 'Imagen',
+          label: title.isEmpty ? 'Imagen' : title,
           icon: Icons.image,
-          onTap: () => onFileTap(row.files.image!, 'Imagen'),
+          showTypeIcon: true,
+          fileType: 'Imagen',
+          onTap: () => onFileTap(url, 'Imagen'),
         ),
       );
     }
@@ -573,10 +606,13 @@ class _CatalogRowCard extends StatelessWidget {
     // Agregar imágenes múltiples
     for (final url in row.files.images) {
       if (url.isNotEmpty) {
-        chips.add(
+        final title = row.files.fileTitles[url] ?? '';
+        imageChips.add(
           _FileChip(
-            label: 'Imagen',
+            label: title.isEmpty ? 'Imagen' : title,
             icon: Icons.image,
+            showTypeIcon: true,
+            fileType: 'Imagen',
             onTap: () => onFileTap(url, 'Imagen'),
           ),
         );
@@ -585,11 +621,15 @@ class _CatalogRowCard extends StatelessWidget {
 
     // Agregar documento singular
     if (row.files.document != null && row.files.document!.isNotEmpty) {
-      chips.add(
+      final url = row.files.document!;
+      final title = row.files.fileTitles[url] ?? '';
+      documentChips.add(
         _FileChip(
-          label: 'Documento',
+          label: title.isEmpty ? 'Documento' : title,
           icon: Icons.description,
-          onTap: () => onFileTap(row.files.document!, 'Documento'),
+          showTypeIcon: true,
+          fileType: 'Documento',
+          onTap: () => onFileTap(url, 'Documento'),
         ),
       );
     }
@@ -597,10 +637,13 @@ class _CatalogRowCard extends StatelessWidget {
     // Agregar documentos múltiples
     for (final url in row.files.documents) {
       if (url.isNotEmpty) {
-        chips.add(
+        final title = row.files.fileTitles[url] ?? '';
+        documentChips.add(
           _FileChip(
-            label: 'Documento',
+            label: title.isEmpty ? 'Documento' : title,
             icon: Icons.description,
+            showTypeIcon: true,
+            fileType: 'Documento',
             onTap: () => onFileTap(url, 'Documento'),
           ),
         );
@@ -609,11 +652,15 @@ class _CatalogRowCard extends StatelessWidget {
 
     // Agregar multimedia singular
     if (row.files.multimedia != null && row.files.multimedia!.isNotEmpty) {
-      chips.add(
+      final url = row.files.multimedia!;
+      final title = row.files.fileTitles[url] ?? '';
+      multimediaChips.add(
         _FileChip(
-          label: 'Multimedia',
+          label: title.isEmpty ? 'Multimedia' : title,
           icon: Icons.videocam,
-          onTap: () => onFileTap(row.files.multimedia!, 'Multimedia'),
+          showTypeIcon: true,
+          fileType: 'Multimedia',
+          onTap: () => onFileTap(url, 'Multimedia'),
         ),
       );
     }
@@ -621,26 +668,62 @@ class _CatalogRowCard extends StatelessWidget {
     // Agregar multimedia múltiple
     for (final url in row.files.multimediaFiles) {
       if (url.isNotEmpty) {
-        chips.add(
+        final title = row.files.fileTitles[url] ?? '';
+        multimediaChips.add(
           _FileChip(
-            label: 'Multimedia',
+            label: title.isEmpty ? 'Multimedia' : title,
             icon: Icons.videocam,
+            showTypeIcon: true,
+            fileType: 'Multimedia',
             onTap: () => onFileTap(url, 'Multimedia'),
           ),
         );
       }
     }
 
-    print('   🎨 Total de chips a mostrar: ${chips.length}');
+    final totalChips =
+        imageChips.length + documentChips.length + multimediaChips.length;
+    print('   🎨 Total de chips a mostrar: $totalChips');
 
-    if (chips.isEmpty) {
+    if (totalChips == 0) {
       return const SizedBox.shrink();
+    }
+
+    // Construir lista de secciones con separadores usando Column
+    final sections = <Widget>[];
+
+    // Sección de imágenes
+    if (imageChips.isNotEmpty) {
+      sections.add(Wrap(spacing: 8, runSpacing: 8, children: imageChips));
+    }
+
+    // Separador entre imágenes y documentos
+    if (imageChips.isNotEmpty && documentChips.isNotEmpty) {
+      sections.add(const SizedBox(height: 12));
+    }
+
+    // Sección de documentos
+    if (documentChips.isNotEmpty) {
+      sections.add(Wrap(spacing: 8, runSpacing: 8, children: documentChips));
+    }
+
+    // Separador entre documentos y multimedia
+    if (documentChips.isNotEmpty && multimediaChips.isNotEmpty) {
+      sections.add(const SizedBox(height: 12));
+    }
+
+    // Sección de multimedia
+    if (multimediaChips.isNotEmpty) {
+      sections.add(Wrap(spacing: 8, runSpacing: 8, children: multimediaChips));
     }
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Wrap(spacing: 8, runSpacing: 8, children: chips),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: sections,
+      ),
     );
   }
 
@@ -699,12 +782,36 @@ class _CatalogRowCard extends StatelessWidget {
               ],
             ),
             // Archivos
-            if (row.files.hasAnyFiles) ...[
-              const SizedBox(height: 8),
-              const Divider(),
-              const SizedBox(height: 8),
-              _buildFileChips(),
-            ],
+            Builder(
+              builder: (context) {
+                final hasFiles = row.files.hasAnyFiles;
+                print(
+                  '🔍 Verificando archivos para fila $index: hasAnyFiles=$hasFiles',
+                );
+                if (!hasFiles) {
+                  print(
+                    '   ⚠️ Fila $index NO tiene archivos o hasAnyFiles retorna false',
+                  );
+                  print('     image: ${row.files.image}');
+                  print('     images: ${row.files.images}');
+                  print('     document: ${row.files.document}');
+                  print('     documents: ${row.files.documents}');
+                  print('     multimedia: ${row.files.multimedia}');
+                  print('     multimediaFiles: ${row.files.multimediaFiles}');
+                }
+                if (hasFiles) {
+                  return Column(
+                    children: [
+                      const SizedBox(height: 8),
+                      const Divider(),
+                      const SizedBox(height: 8),
+                      _buildFileChips(),
+                    ],
+                  );
+                }
+                return const SizedBox.shrink();
+              },
+            ),
           ],
         ),
       ),
@@ -716,12 +823,29 @@ class _FileChip extends StatelessWidget {
   final String label;
   final IconData icon;
   final VoidCallback onTap;
+  final bool showTypeIcon;
+  final String? fileType;
 
   const _FileChip({
     required this.label,
     required this.icon,
     required this.onTap,
+    this.showTypeIcon = false,
+    this.fileType,
   });
+
+  IconData _getTypeIcon() {
+    switch (fileType) {
+      case 'Imagen':
+        return Icons.image;
+      case 'Documento':
+        return Icons.description;
+      case 'Multimedia':
+        return Icons.videocam;
+      default:
+        return icon;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -729,14 +853,433 @@ class _FileChip extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Chip(
-        avatar: Icon(icon, size: 18, color: Colors.blue),
-        label: Text(
-          label,
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+        avatar: showTypeIcon
+            ? Icon(_getTypeIcon(), size: 18, color: Colors.blue)
+            : Icon(icon, size: 18, color: Colors.blue),
+        label: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (showTypeIcon && fileType != null) ...[
+              const SizedBox(width: 4),
+              Icon(_getTypeIcon(), size: 14, color: Colors.grey.shade600),
+            ],
+          ],
         ),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
+    );
+  }
+}
+
+/// Clase auxiliar para representar un archivo en el modal
+class _FileItem {
+  final String url;
+  final String title;
+  final int rowNumber;
+
+  _FileItem({required this.url, required this.title, required this.rowNumber});
+}
+
+/// Modal que primero muestra la lista de filas y luego los archivos de la fila seleccionada
+class _FilesModalDialog extends StatefulWidget {
+  final Catalog catalog;
+
+  const _FilesModalDialog({required this.catalog});
+
+  @override
+  State<_FilesModalDialog> createState() => _FilesModalDialogState();
+}
+
+class _FilesModalDialogState extends State<_FilesModalDialog> {
+  CatalogRow? _selectedRow;
+  int? _selectedRowIndex;
+
+  void _selectRow(CatalogRow row, int index) {
+    setState(() {
+      _selectedRow = row;
+      _selectedRowIndex = index;
+    });
+  }
+
+  void _goBack() {
+    setState(() {
+      _selectedRow = null;
+      _selectedRowIndex = null;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      child: Container(
+        width: MediaQuery.of(context).size.width * 0.8,
+        height: MediaQuery.of(context).size.height * 0.8,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            // Encabezado
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    if (_selectedRow != null)
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back),
+                        onPressed: _goBack,
+                        tooltip: 'Volver a la lista de filas',
+                      ),
+                    Text(
+                      _selectedRow != null
+                          ? 'Archivos de la Fila ${_selectedRowIndex! + 1}'
+                          : 'Seleccionar Fila',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ],
+            ),
+            const Divider(),
+            // Contenido
+            Expanded(
+              child: _selectedRow == null
+                  ? _buildRowsList()
+                  : _buildRowFiles(_selectedRow!),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRowsList() {
+    if (widget.catalog.rows.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.inbox_outlined, size: 64, color: Colors.grey),
+            SizedBox(height: 16),
+            Text(
+              'No hay filas en este catálogo',
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      itemCount: widget.catalog.rows.length,
+      itemBuilder: (context, index) {
+        final row = widget.catalog.rows[index];
+        final hasFiles = row.files.hasAnyFiles;
+        final fileCount = _getFileCount(row.files);
+
+        return Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          child: ListTile(
+            leading: CircleAvatar(
+              backgroundColor: hasFiles ? Colors.blue : Colors.grey,
+              child: Text(
+                '${index + 1}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            title: Text(
+              'Fila ${index + 1}',
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
+            subtitle: Text(
+              hasFiles
+                  ? '$fileCount archivo${fileCount > 1 ? 's' : ''}'
+                  : 'Sin archivos',
+              style: TextStyle(
+                color: hasFiles ? Colors.green : Colors.grey,
+                fontWeight: hasFiles ? FontWeight.w500 : FontWeight.normal,
+              ),
+            ),
+            trailing: hasFiles
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (row.files.image != null ||
+                          row.files.images.isNotEmpty)
+                        Icon(Icons.image, color: Colors.blue, size: 20),
+                      if (row.files.document != null ||
+                          row.files.documents.isNotEmpty) ...[
+                        const SizedBox(width: 4),
+                        Icon(Icons.description, color: Colors.orange, size: 20),
+                      ],
+                      if (row.files.multimedia != null ||
+                          row.files.multimediaFiles.isNotEmpty) ...[
+                        const SizedBox(width: 4),
+                        Icon(Icons.videocam, color: Colors.red, size: 20),
+                      ],
+                      const SizedBox(width: 8),
+                      const Icon(Icons.chevron_right),
+                    ],
+                  )
+                : const Icon(Icons.chevron_right),
+            enabled: hasFiles,
+            onTap: hasFiles ? () => _selectRow(row, index) : null,
+          ),
+        );
+      },
+    );
+  }
+
+  int _getFileCount(RowFiles files) {
+    int count = 0;
+    if (files.image != null && files.image!.isNotEmpty) count++;
+    count += files.images.length;
+    if (files.document != null && files.document!.isNotEmpty) count++;
+    count += files.documents.length;
+    if (files.multimedia != null && files.multimedia!.isNotEmpty) count++;
+    count += files.multimediaFiles.length;
+    return count;
+  }
+
+  Widget _buildRowFiles(CatalogRow row) {
+    // Recopilar archivos de la fila por categorías
+    final imageFiles = <_FileItem>[];
+    final documentFiles = <_FileItem>[];
+    final multimediaFiles = <_FileItem>[];
+
+    // Imágenes
+    if (row.files.image != null && row.files.image!.isNotEmpty) {
+      final url = row.files.image!;
+      final title = row.files.fileTitles[url] ?? '';
+      imageFiles.add(
+        _FileItem(
+          url: url,
+          title: title.isEmpty ? 'Imagen' : title,
+          rowNumber: _selectedRowIndex! + 1,
+        ),
+      );
+    }
+    for (final url in row.files.images) {
+      if (url.isNotEmpty) {
+        final title = row.files.fileTitles[url] ?? '';
+        imageFiles.add(
+          _FileItem(
+            url: url,
+            title: title.isEmpty ? 'Imagen' : title,
+            rowNumber: _selectedRowIndex! + 1,
+          ),
+        );
+      }
+    }
+
+    // Documentos
+    if (row.files.document != null && row.files.document!.isNotEmpty) {
+      final url = row.files.document!;
+      final title = row.files.fileTitles[url] ?? '';
+      documentFiles.add(
+        _FileItem(
+          url: url,
+          title: title.isEmpty ? 'Documento' : title,
+          rowNumber: _selectedRowIndex! + 1,
+        ),
+      );
+    }
+    for (final url in row.files.documents) {
+      if (url.isNotEmpty) {
+        final title = row.files.fileTitles[url] ?? '';
+        documentFiles.add(
+          _FileItem(
+            url: url,
+            title: title.isEmpty ? 'Documento' : title,
+            rowNumber: _selectedRowIndex! + 1,
+          ),
+        );
+      }
+    }
+
+    // Multimedia
+    if (row.files.multimedia != null && row.files.multimedia!.isNotEmpty) {
+      final url = row.files.multimedia!;
+      final title = row.files.fileTitles[url] ?? '';
+      multimediaFiles.add(
+        _FileItem(
+          url: url,
+          title: title.isEmpty ? 'Multimedia' : title,
+          rowNumber: _selectedRowIndex! + 1,
+        ),
+      );
+    }
+    for (final url in row.files.multimediaFiles) {
+      if (url.isNotEmpty) {
+        final title = row.files.fileTitles[url] ?? '';
+        multimediaFiles.add(
+          _FileItem(
+            url: url,
+            title: title.isEmpty ? 'Multimedia' : title,
+            rowNumber: _selectedRowIndex! + 1,
+          ),
+        );
+      }
+    }
+
+    // Si no hay archivos, mostrar mensaje
+    if (imageFiles.isEmpty &&
+        documentFiles.isEmpty &&
+        multimediaFiles.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.folder_open, size: 64, color: Colors.grey),
+            SizedBox(height: 16),
+            Text(
+              'Esta fila no tiene archivos',
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Sección de imágenes
+          if (imageFiles.isNotEmpty) ...[
+            _FileCategorySection(
+              title: 'Imágenes',
+              icon: Icons.image,
+              iconColor: Colors.blue,
+              files: imageFiles,
+              onFileTap: (file) =>
+                  _openFileViewer(context, file.url, file.title),
+            ),
+            const SizedBox(height: 24),
+          ],
+          // Sección de documentos
+          if (documentFiles.isNotEmpty) ...[
+            _FileCategorySection(
+              title: 'Documentos',
+              icon: Icons.description,
+              iconColor: Colors.orange,
+              files: documentFiles,
+              onFileTap: (file) =>
+                  _openFileViewer(context, file.url, file.title),
+            ),
+            const SizedBox(height: 24),
+          ],
+          // Sección de multimedia
+          if (multimediaFiles.isNotEmpty) ...[
+            _FileCategorySection(
+              title: 'Multimedia',
+              icon: Icons.videocam,
+              iconColor: Colors.red,
+              files: multimediaFiles,
+              onFileTap: (file) =>
+                  _openFileViewer(context, file.url, file.title),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _openFileViewer(BuildContext context, String url, String fileName) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => FileViewerView(url: url, fileName: fileName),
+      ),
+    );
+  }
+}
+
+/// Widget para mostrar una sección de archivos por categoría
+class _FileCategorySection extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final Color iconColor;
+  final List<_FileItem> files;
+  final Function(_FileItem) onFileTap;
+
+  const _FileCategorySection({
+    required this.title,
+    required this.icon,
+    required this.iconColor,
+    required this.files,
+    required this.onFileTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Encabezado de la categoría
+        Row(
+          children: [
+            Icon(icon, color: iconColor, size: 24),
+            const SizedBox(width: 8),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: iconColor.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                '${files.length}',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: iconColor,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        // Lista de archivos
+        ...files.map(
+          (file) => Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ListTile(
+              leading: Icon(icon, color: iconColor),
+              title: Text(
+                file.title,
+                style: const TextStyle(fontWeight: FontWeight.w500),
+              ),
+              subtitle: Text('Fila ${file.rowNumber}'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => onFileTap(file),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

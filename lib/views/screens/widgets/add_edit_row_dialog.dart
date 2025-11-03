@@ -43,6 +43,12 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
   List<String> _documentUrls = [];
   List<String> _multimediaUrls = [];
 
+  // Títulos personalizados para cada archivo (URL -> Título)
+  Map<String, String> _fileTitles = {};
+
+  // Controladores de texto para los títulos (URL -> TextEditingController)
+  final Map<String, TextEditingController> _titleControllers = {};
+
   // Estados de subida
   bool _isUploadingImage = false;
   bool _isUploadingDocument = false;
@@ -70,6 +76,18 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
       if (_files.multimedia != null) _files.multimedia!,
       ..._files.multimediaFiles,
     ];
+    // Inicializar títulos existentes
+    _fileTitles = Map<String, String>.from(_files.fileTitles);
+
+    // Inicializar controladores de títulos para URLs existentes
+    final allUrls = [..._imageUrls, ..._documentUrls, ..._multimediaUrls];
+    for (final url in allUrls) {
+      if (!_titleControllers.containsKey(url)) {
+        _titleControllers[url] = TextEditingController(
+          text: _fileTitles[url] ?? '',
+        );
+      }
+    }
   }
 
   @override
@@ -77,6 +95,11 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
     for (final controller in _controllers.values) {
       controller.dispose();
     }
+    // Limpiar controladores de títulos
+    for (final controller in _titleControllers.values) {
+      controller.dispose();
+    }
+    _titleControllers.clear();
     super.dispose();
   }
 
@@ -116,6 +139,22 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
             fileType: app_file_type.FileType.image,
           );
           _imageUrls.add(url);
+          // Preservar título si existe para la ruta temporal
+          final tempPath = file.path;
+          if (_fileTitles.containsKey(tempPath)) {
+            final title = _fileTitles.remove(tempPath)!;
+            _fileTitles[url] = title;
+            // Transferir controlador
+            if (_titleControllers.containsKey(tempPath)) {
+              final controller = _titleControllers.remove(tempPath)!;
+              controller.text = title;
+              _titleControllers[url] = controller;
+            } else {
+              _getOrCreateTitleController(url).text = title;
+            }
+          } else {
+            _getOrCreateTitleController(url);
+          }
         }
       } catch (e) {
         _uploadError = 'Error subiendo imagen: $e';
@@ -140,6 +179,22 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
             fileType: app_file_type.FileType.document,
           );
           _documentUrls.add(url);
+          // Preservar título si existe para la ruta temporal
+          final tempPath = file.path;
+          if (_fileTitles.containsKey(tempPath)) {
+            final title = _fileTitles.remove(tempPath)!;
+            _fileTitles[url] = title;
+            // Transferir controlador
+            if (_titleControllers.containsKey(tempPath)) {
+              final controller = _titleControllers.remove(tempPath)!;
+              controller.text = title;
+              _titleControllers[url] = controller;
+            } else {
+              _getOrCreateTitleController(url).text = title;
+            }
+          } else {
+            _getOrCreateTitleController(url);
+          }
         }
       } catch (e) {
         _uploadError = 'Error subiendo documento: $e';
@@ -164,6 +219,22 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
             fileType: app_file_type.FileType.multimedia,
           );
           _multimediaUrls.add(url);
+          // Preservar título si existe para la ruta temporal
+          final tempPath = file.path;
+          if (_fileTitles.containsKey(tempPath)) {
+            final title = _fileTitles.remove(tempPath)!;
+            _fileTitles[url] = title;
+            // Transferir controlador
+            if (_titleControllers.containsKey(tempPath)) {
+              final controller = _titleControllers.remove(tempPath)!;
+              controller.text = title;
+              _titleControllers[url] = controller;
+            } else {
+              _getOrCreateTitleController(url).text = title;
+            }
+          } else {
+            _getOrCreateTitleController(url);
+          }
         }
       } catch (e) {
         _uploadError = 'Error subiendo multimedia: $e';
@@ -185,6 +256,7 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
       multimediaFiles: _multimediaUrls.length > 1
           ? _multimediaUrls.sublist(1)
           : [],
+      fileTitles: _fileTitles,
     );
 
     // Debug: mostrar URLs que se van a guardar
@@ -322,12 +394,15 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
         default:
           break;
       }
+      // Crear controlador para la nueva URL
+      _getOrCreateTitleController(url);
       _uploadError = null;
     });
   }
 
   void _removeFileOrUrl(int index, app_file_type.FileType fileType) {
     setState(() {
+      String? urlToRemove;
       switch (fileType) {
         case app_file_type.FileType.image:
           if (index < _selectedImageFiles.length) {
@@ -335,6 +410,7 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
           } else {
             final urlIndex = index - _selectedImageFiles.length;
             if (urlIndex < _imageUrls.length) {
+              urlToRemove = _imageUrls[urlIndex];
               _imageUrls.removeAt(urlIndex);
             }
           }
@@ -345,6 +421,7 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
           } else {
             final urlIndex = index - _selectedDocumentFiles.length;
             if (urlIndex < _documentUrls.length) {
+              urlToRemove = _documentUrls[urlIndex];
               _documentUrls.removeAt(urlIndex);
             }
           }
@@ -355,6 +432,7 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
           } else {
             final urlIndex = index - _selectedMultimediaFiles.length;
             if (urlIndex < _multimediaUrls.length) {
+              urlToRemove = _multimediaUrls[urlIndex];
               _multimediaUrls.removeAt(urlIndex);
             }
           }
@@ -362,7 +440,82 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
         default:
           break;
       }
+      // Eliminar título y controlador asociados si existen
+      if (urlToRemove != null) {
+        if (_fileTitles.containsKey(urlToRemove)) {
+          _fileTitles.remove(urlToRemove);
+        }
+        if (_titleControllers.containsKey(urlToRemove)) {
+          _titleControllers[urlToRemove]!.dispose();
+          _titleControllers.remove(urlToRemove);
+        }
+      }
     });
+  }
+
+  void _updateFileTitle(String url, String title) {
+    setState(() {
+      if (title.trim().isEmpty) {
+        _fileTitles.remove(url);
+      } else {
+        _fileTitles[url] = title.trim();
+      }
+      // Actualizar el controlador si existe
+      if (_titleControllers.containsKey(url)) {
+        final controller = _titleControllers[url]!;
+        if (controller.text != title) {
+          controller.text = title;
+          controller.selection = TextSelection.collapsed(offset: title.length);
+        }
+      }
+    });
+  }
+
+  TextEditingController _getOrCreateTitleController(String url) {
+    if (!_titleControllers.containsKey(url)) {
+      _titleControllers[url] = TextEditingController(
+        text: _fileTitles[url] ?? '',
+      );
+    }
+    return _titleControllers[url]!;
+  }
+
+  String _getFileUrl(int index, app_file_type.FileType fileType) {
+    switch (fileType) {
+      case app_file_type.FileType.image:
+        if (index < _selectedImageFiles.length) {
+          return _selectedImageFiles[index].path; // Temporal hasta subir
+        } else {
+          final urlIndex = index - _selectedImageFiles.length;
+          if (urlIndex < _imageUrls.length) {
+            return _imageUrls[urlIndex];
+          }
+        }
+        break;
+      case app_file_type.FileType.document:
+        if (index < _selectedDocumentFiles.length) {
+          return _selectedDocumentFiles[index].path; // Temporal hasta subir
+        } else {
+          final urlIndex = index - _selectedDocumentFiles.length;
+          if (urlIndex < _documentUrls.length) {
+            return _documentUrls[urlIndex];
+          }
+        }
+        break;
+      case app_file_type.FileType.multimedia:
+        if (index < _selectedMultimediaFiles.length) {
+          return _selectedMultimediaFiles[index].path; // Temporal hasta subir
+        } else {
+          final urlIndex = index - _selectedMultimediaFiles.length;
+          if (urlIndex < _multimediaUrls.length) {
+            return _multimediaUrls[urlIndex];
+          }
+        }
+        break;
+      default:
+        break;
+    }
+    return '';
   }
 
   Future<void> _showAddUrlDialog(app_file_type.FileType fileType) async {
@@ -508,6 +661,7 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
                         existingUrls: _imageUrls,
                         isUploading: _isUploadingImage,
                         fileType: app_file_type.FileType.image,
+                        fileTitles: _fileTitles,
                         onSelect: () =>
                             _selectFile(app_file_type.FileType.image),
                         onSelectMultiple: () => _selectFile(
@@ -520,7 +674,15 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
                           index,
                           app_file_type.FileType.image,
                         ),
+                        onUpdateTitle: (url, title) =>
+                            _updateFileTitle(url, title),
+                        getFileUrl: (index) =>
+                            _getFileUrl(index, app_file_type.FileType.image),
+                        getTitleController: (url) =>
+                            _getOrCreateTitleController(url),
                       ),
+                      const SizedBox(height: 24),
+                      const Divider(),
                       const SizedBox(height: 12),
                       // Documento
                       _MultiFileSelectionRow(
@@ -529,6 +691,7 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
                         existingUrls: _documentUrls,
                         isUploading: _isUploadingDocument,
                         fileType: app_file_type.FileType.document,
+                        fileTitles: _fileTitles,
                         onSelect: () =>
                             _selectFile(app_file_type.FileType.document),
                         onSelectMultiple: () => _selectFile(
@@ -541,7 +704,15 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
                           index,
                           app_file_type.FileType.document,
                         ),
+                        onUpdateTitle: (url, title) =>
+                            _updateFileTitle(url, title),
+                        getFileUrl: (index) =>
+                            _getFileUrl(index, app_file_type.FileType.document),
+                        getTitleController: (url) =>
+                            _getOrCreateTitleController(url),
                       ),
+                      const SizedBox(height: 24),
+                      const Divider(),
                       const SizedBox(height: 12),
                       // Multimedia
                       _MultiFileSelectionRow(
@@ -550,6 +721,7 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
                         existingUrls: _multimediaUrls,
                         isUploading: _isUploadingMultimedia,
                         fileType: app_file_type.FileType.multimedia,
+                        fileTitles: _fileTitles,
                         onSelect: () =>
                             _selectFile(app_file_type.FileType.multimedia),
                         onSelectMultiple: () => _selectFile(
@@ -563,6 +735,14 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
                           index,
                           app_file_type.FileType.multimedia,
                         ),
+                        onUpdateTitle: (url, title) =>
+                            _updateFileTitle(url, title),
+                        getFileUrl: (index) => _getFileUrl(
+                          index,
+                          app_file_type.FileType.multimedia,
+                        ),
+                        getTitleController: (url) =>
+                            _getOrCreateTitleController(url),
                       ),
                     ],
                   ),
@@ -609,10 +789,14 @@ class _MultiFileSelectionRow extends StatelessWidget {
   final List<String> existingUrls;
   final bool isUploading;
   final app_file_type.FileType fileType;
+  final Map<String, String> fileTitles;
   final VoidCallback onSelect;
   final VoidCallback onSelectMultiple;
   final VoidCallback onAddUrl;
   final Function(int) onRemove;
+  final Function(String, String) onUpdateTitle;
+  final String Function(int) getFileUrl;
+  final TextEditingController Function(String) getTitleController;
 
   const _MultiFileSelectionRow({
     required this.title,
@@ -620,10 +804,14 @@ class _MultiFileSelectionRow extends StatelessWidget {
     required this.existingUrls,
     required this.isUploading,
     required this.fileType,
+    required this.fileTitles,
     required this.onSelect,
     required this.onSelectMultiple,
     required this.onAddUrl,
     required this.onRemove,
+    required this.onUpdateTitle,
+    required this.getFileUrl,
+    required this.getTitleController,
   });
 
   @override
@@ -665,6 +853,7 @@ class _MultiFileSelectionRow extends StatelessWidget {
               final item = isFile
                   ? path.basename(selectedFiles[index].path)
                   : existingUrls[index - selectedFiles.length];
+              final fileUrl = getFileUrl(index);
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 8),
@@ -673,27 +862,82 @@ class _MultiFileSelectionRow extends StatelessWidget {
                   color: isFile ? Colors.blue.shade50 : Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      isFile ? Icons.insert_drive_file : Icons.link,
-                      size: 20,
-                      color: isFile ? Colors.blue : Colors.grey,
+                    Row(
+                      children: [
+                        Icon(
+                          isFile ? Icons.insert_drive_file : Icons.link,
+                          size: 20,
+                          color: isFile ? Colors.blue : Colors.grey,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            item,
+                            style: const TextStyle(fontSize: 12),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 18),
+                          color: Colors.red,
+                          onPressed: isUploading ? null : () => onRemove(index),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        item,
-                        style: const TextStyle(fontSize: 12),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close, size: 18),
-                      color: Colors.red,
-                      onPressed: isUploading ? null : () => onRemove(index),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
+                    const SizedBox(height: 4),
+                    Builder(
+                      builder: (context) {
+                        // Obtener o crear el controlador para esta URL
+                        final controller = getTitleController(fileUrl);
+                        return TextField(
+                          key: ValueKey('title_$fileUrl'),
+                          controller: controller,
+                          decoration: InputDecoration(
+                            hintText: 'Título del archivo (opcional)',
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 8,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(4),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade300,
+                                width: 1,
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(4),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade300,
+                                width: 1,
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(4),
+                              borderSide: BorderSide(
+                                color: Colors.blue.shade400,
+                                width: 1.5,
+                              ),
+                            ),
+                          ),
+                          style: const TextStyle(fontSize: 12),
+                          textInputAction: TextInputAction.done,
+                          keyboardType: TextInputType.text,
+                          maxLines: 1,
+                          onChanged: (value) {
+                            if (fileUrl.isNotEmpty) {
+                              onUpdateTitle(fileUrl, value);
+                            }
+                          },
+                          enabled: !isUploading && fileUrl.isNotEmpty,
+                        );
+                      },
                     ),
                   ],
                 ),

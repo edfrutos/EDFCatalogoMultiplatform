@@ -51,13 +51,57 @@ class Catalog extends Equatable {
 
       // Rows en MongoDB (mayúscula), rows en minúsculas
       List<CatalogRow> rows = [];
+      Map<String, CatalogRow> rowsMap = {}; // Para detectar duplicados por _id
+      List<String> rowOrder = []; // Mantener orden de inserción
+
+      void processRow(CatalogRow row) {
+        final rowId = row.id;
+
+        // Si ya existe una fila con el mismo ID, comparar y mantener la mejor
+        if (rowsMap.containsKey(rowId)) {
+          final existingRow = rowsMap[rowId]!;
+
+          // Priorizar la fila que tiene archivos, o la más reciente (updatedAt)
+          bool shouldReplace = false;
+
+          if (!existingRow.files.hasAnyFiles && row.files.hasAnyFiles) {
+            // La nueva tiene archivos y la existente no
+            shouldReplace = true;
+            print(
+              '🔄 Reemplazando fila duplicada (ID: $rowId): la nueva tiene archivos',
+            );
+          } else if (existingRow.files.hasAnyFiles && !row.files.hasAnyFiles) {
+            // La existente tiene archivos y la nueva no, mantener la existente
+            print(
+              '⏭️  Manteniendo fila existente (ID: $rowId): la existente tiene archivos',
+            );
+          } else {
+            // Ambas tienen archivos o ninguna tiene, usar la más reciente
+            if (row.updatedAt.isAfter(existingRow.updatedAt)) {
+              shouldReplace = true;
+              print(
+                '🔄 Reemplazando fila duplicada (ID: $rowId): la nueva es más reciente',
+              );
+            }
+          }
+
+          if (shouldReplace) {
+            rowsMap[rowId] = row;
+          }
+        } else {
+          rowsMap[rowId] = row;
+          rowOrder.add(rowId); // Mantener orden de inserción
+        }
+      }
+
       if (json['Rows'] != null) {
         final rowsList = json['Rows'] as List<dynamic>?;
         if (rowsList != null) {
           for (final e in rowsList) {
             if (e is Map<String, dynamic>) {
               try {
-                rows.add(CatalogRow.fromJson(e));
+                final row = CatalogRow.fromJson(e);
+                processRow(row);
               } catch (e) {
                 print('⚠️ Error parseando fila: $e');
               }
@@ -72,7 +116,8 @@ class Catalog extends Equatable {
           for (final e in rowsList) {
             if (e is Map<String, dynamic>) {
               try {
-                rows.add(CatalogRow.fromJson(e));
+                final row = CatalogRow.fromJson(e);
+                processRow(row);
               } catch (e) {
                 print('⚠️ Error parseando fila: $e');
               }
@@ -82,6 +127,9 @@ class Catalog extends Equatable {
           }
         }
       }
+
+      // Convertir el Map a lista, manteniendo el orden de inserción
+      rows = rowOrder.map((id) => rowsMap[id]!).toList();
 
       // Helper para parsear fechas que pueden venir como DateTime, Map con $date, o String
       DateTime? parseDateTime(dynamic dateValue) {
@@ -275,10 +323,34 @@ class CatalogRow extends Equatable {
     }
 
     RowFiles rowFiles = const RowFiles();
+    Map<String, dynamic>? filesMap;
+
     if (json['Files'] != null && json['Files'] is Map) {
-      rowFiles = RowFiles.fromJson(json['Files'] as Map<String, dynamic>);
+      filesMap = json['Files'] as Map<String, dynamic>;
     } else if (json['files'] != null && json['files'] is Map) {
-      rowFiles = RowFiles.fromJson(json['files'] as Map<String, dynamic>);
+      filesMap = json['files'] as Map<String, dynamic>;
+    }
+
+    if (filesMap != null) {
+      // Debug: mostrar el contenido del Map antes de parsear
+      print('📦 Parseando archivos de fila:');
+      print('   filesMap keys: ${filesMap.keys.toList()}');
+      print('   filesMap content: $filesMap');
+
+      rowFiles = RowFiles.fromJson(filesMap);
+
+      // Debug: verificar parsing de archivos
+      print('   ✅ Parseado: hasAnyFiles=${rowFiles.hasAnyFiles}');
+      if (rowFiles.hasAnyFiles) {
+        print('      image: ${rowFiles.image}');
+        print('      document: ${rowFiles.document}');
+        print('      multimedia: ${rowFiles.multimedia}');
+      }
+    } else {
+      // Debug: no se encontraron archivos
+      print(
+        '⚠️ No se encontraron archivos en la fila (Files/files no presentes o no es Map)',
+      );
     }
 
     // Helper para parsear fechas que pueden venir como DateTime, Map con $date, o String
@@ -367,6 +439,8 @@ class RowFiles extends Equatable {
   final List<String> documents;
   final String? multimedia;
   final List<String> multimediaFiles;
+  // Map de URL -> Título personalizado para cada archivo
+  final Map<String, String> fileTitles;
 
   const RowFiles({
     this.image,
@@ -375,33 +449,53 @@ class RowFiles extends Equatable {
     this.documents = const [],
     this.multimedia,
     this.multimediaFiles = const [],
+    this.fileTitles = const {},
   });
 
   // Factory constructor para crear desde JSON
   // MongoDB usa mayúsculas: Image, Images, Document, Documents, Multimedia, MultimediaFiles
   factory RowFiles.fromJson(Map<String, dynamic> json) {
+    // Parsear fileTitles
+    Map<String, String> titles = {};
+    if (json['fileTitles'] != null && json['fileTitles'] is Map) {
+      final titlesMap = json['fileTitles'] as Map;
+      titles = titlesMap.map(
+        (key, value) => MapEntry(key.toString(), value.toString()),
+      );
+    }
+
+    // Helper para obtener un string no vacío
+    String? getNonEmptyString(dynamic value) {
+      if (value == null) return null;
+      final str = value.toString().trim();
+      return str.isEmpty ? null : str;
+    }
+
+    // Helper para filtrar cadenas vacías de listas
+    List<String> filterEmptyStrings(List<dynamic>? list) {
+      if (list == null) return [];
+      return list
+          .map((e) => e.toString().trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+    }
+
     return RowFiles(
-      image: json['Image']?.toString() ?? json['image']?.toString(),
-      images:
-          (json['Images'] as List<dynamic>? ?? json['images'] as List<dynamic>?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          [],
-      document: json['Document']?.toString() ?? json['document']?.toString(),
-      documents:
-          (json['Documents'] as List<dynamic>? ??
-                  json['documents'] as List<dynamic>?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          [],
-      multimedia:
-          json['Multimedia']?.toString() ?? json['multimedia']?.toString(),
-      multimediaFiles:
-          (json['MultimediaFiles'] as List<dynamic>? ??
-                  json['multimediaFiles'] as List<dynamic>?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          [],
+      image: getNonEmptyString(json['Image'] ?? json['image']),
+      images: filterEmptyStrings(
+        json['Images'] as List<dynamic>? ?? json['images'] as List<dynamic>?,
+      ),
+      document: getNonEmptyString(json['Document'] ?? json['document']),
+      documents: filterEmptyStrings(
+        json['Documents'] as List<dynamic>? ??
+            json['documents'] as List<dynamic>?,
+      ),
+      multimedia: getNonEmptyString(json['Multimedia'] ?? json['multimedia']),
+      multimediaFiles: filterEmptyStrings(
+        json['MultimediaFiles'] as List<dynamic>? ??
+            json['multimediaFiles'] as List<dynamic>?,
+      ),
+      fileTitles: titles,
     );
   }
 
@@ -414,6 +508,7 @@ class RowFiles extends Equatable {
       'documents': documents,
       if (multimedia != null) 'multimedia': multimedia,
       'multimediaFiles': multimediaFiles,
+      if (fileTitles.isNotEmpty) 'fileTitles': fileTitles,
     };
   }
 
@@ -425,6 +520,7 @@ class RowFiles extends Equatable {
     List<String>? documents,
     String? multimedia,
     List<String>? multimediaFiles,
+    Map<String, String>? fileTitles,
   }) {
     return RowFiles(
       image: image ?? this.image,
@@ -433,15 +529,16 @@ class RowFiles extends Equatable {
       documents: documents ?? this.documents,
       multimedia: multimedia ?? this.multimedia,
       multimediaFiles: multimediaFiles ?? this.multimediaFiles,
+      fileTitles: fileTitles ?? this.fileTitles,
     );
   }
 
   bool get hasAnyFiles {
-    return image != null ||
+    return (image != null && image!.isNotEmpty) ||
         images.isNotEmpty ||
-        document != null ||
+        (document != null && document!.isNotEmpty) ||
         documents.isNotEmpty ||
-        multimedia != null ||
+        (multimedia != null && multimedia!.isNotEmpty) ||
         multimediaFiles.isNotEmpty;
   }
 
@@ -453,5 +550,6 @@ class RowFiles extends Equatable {
     documents,
     multimedia,
     multimediaFiles,
+    fileTitles,
   ];
 }
