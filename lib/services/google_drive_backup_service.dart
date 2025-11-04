@@ -4,8 +4,10 @@ import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:googleapis_auth/auth.dart' as auth;
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
+import 'package:path/path.dart' as path;
 import '../services/mongo_service.dart';
 import '../utils/env_config.dart';
+import '../models/backup_info.dart';
 
 /// Servicio para gestionar backups en Google Drive
 /// NOTA: Requiere configuración de OAuth 2.0 en Google Cloud Console
@@ -508,6 +510,86 @@ class GoogleDriveBackupService {
     }
   }
 
+  /// Subir backup del proyecto a Google Drive
+  /// [zipFilePath] - Ruta del archivo ZIP del backup
+  /// Retorna el ID del archivo en Google Drive
+  Future<String> uploadProjectBackup(String zipFilePath) async {
+    if (!isInitialized) {
+      await initialize();
+    }
+
+    if (_driveApi == null || _backupFolderId == null) {
+      throw Exception('Servicio no inicializado correctamente');
+    }
+
+    try {
+      final zipFile = File(zipFilePath);
+      if (!await zipFile.exists()) {
+        throw Exception('El archivo ZIP no existe: $zipFilePath');
+      }
+
+      // Leer el archivo ZIP
+      final zipBytes = await zipFile.readAsBytes();
+      final fileName = path.basename(zipFilePath);
+
+      return await _uploadZipBytes(zipBytes, fileName);
+    } catch (e) {
+      print('❌ Error subiendo backup del proyecto: $e');
+      rethrow;
+    }
+  }
+
+  /// Subir backup del proyecto a Google Drive desde bytes en memoria
+  /// [zipBytes] - Bytes del archivo ZIP
+  /// [fileName] - Nombre del archivo
+  /// Retorna el ID del archivo en Google Drive
+  Future<String> uploadProjectBackupFromBytes(
+    List<int> zipBytes,
+    String fileName,
+  ) async {
+    if (!isInitialized) {
+      await initialize();
+    }
+
+    if (_driveApi == null || _backupFolderId == null) {
+      throw Exception('Servicio no inicializado correctamente');
+    }
+
+    try {
+      return await _uploadZipBytes(zipBytes, fileName);
+    } catch (e) {
+      print('❌ Error subiendo backup del proyecto: $e');
+      rethrow;
+    }
+  }
+
+  /// Método privado para subir bytes ZIP a Google Drive
+  Future<String> _uploadZipBytes(List<int> zipBytes, String fileName) async {
+    print('📤 Subiendo backup del proyecto a Google Drive: $fileName');
+    print(
+      '   Tamaño: ${(zipBytes.length / (1024 * 1024)).toStringAsFixed(2)} MB',
+    );
+
+    // Crear archivo en Drive
+    final file = drive.File()
+      ..name = fileName
+      ..parents = [_backupFolderId!]
+      ..mimeType = 'application/zip';
+
+    final media = drive.Media(
+      Stream.value(zipBytes),
+      zipBytes.length,
+      contentType: 'application/zip',
+    );
+
+    final created = await _driveApi!.files.create(file, uploadMedia: media);
+
+    print(
+      '✅ Backup del proyecto subido a Google Drive: $fileName (ID: ${created.id})',
+    );
+    return created.id ?? fileName;
+  }
+
   /// Cerrar conexiones
   void dispose() {
     _authClient?.close();
@@ -517,34 +599,4 @@ class GoogleDriveBackupService {
   }
 }
 
-/// Tipo de backup
-enum BackupType { catalogs, users }
-
-/// Información de un backup
-class BackupInfo {
-  final String name;
-  final int size;
-  final DateTime created;
-  final BackupType type;
-  final String? driveFileId; // ID del archivo en Google Drive
-
-  BackupInfo({
-    required this.name,
-    required this.size,
-    required this.created,
-    required this.type,
-    this.driveFileId,
-  });
-
-  String get fileName => name;
-  String get formattedSize {
-    if (size < 1024) return '$size B';
-    if (size < 1024 * 1024) return '${(size / 1024).toStringAsFixed(2)} KB';
-    return '${(size / (1024 * 1024)).toStringAsFixed(2)} MB';
-  }
-
-  String get formattedDate {
-    return '${created.day}/${created.month}/${created.year} '
-        '${created.hour}:${created.minute.toString().padLeft(2, '0')}';
-  }
-}
+// BackupInfo y BackupType ahora están en ../models/backup_info.dart
