@@ -654,13 +654,14 @@ class _CatalogRowCard extends StatelessWidget {
     if (row.files.image != null && row.files.image!.isNotEmpty) {
       final url = row.files.image!;
       final title = row.files.fileTitles[url] ?? '';
+      final displayTitle = title.isEmpty ? 'Imagen' : title;
       imageChips.add(
         _FileChip(
-          label: title.isEmpty ? 'Imagen' : title,
+          label: displayTitle,
           icon: Icons.image,
           showTypeIcon: true,
           fileType: 'Imagen',
-          onTap: () => onFileTap(url, 'Imagen'),
+          onTap: () => onFileTap(url, displayTitle),
         ),
       );
     }
@@ -669,13 +670,14 @@ class _CatalogRowCard extends StatelessWidget {
     for (final url in row.files.images) {
       if (url.isNotEmpty) {
         final title = row.files.fileTitles[url] ?? '';
+        final displayTitle = title.isEmpty ? 'Imagen' : title;
         imageChips.add(
           _FileChip(
-            label: title.isEmpty ? 'Imagen' : title,
+            label: displayTitle,
             icon: Icons.image,
             showTypeIcon: true,
             fileType: 'Imagen',
-            onTap: () => onFileTap(url, 'Imagen'),
+            onTap: () => onFileTap(url, displayTitle),
           ),
         );
       }
@@ -685,13 +687,14 @@ class _CatalogRowCard extends StatelessWidget {
     if (row.files.document != null && row.files.document!.isNotEmpty) {
       final url = row.files.document!;
       final title = row.files.fileTitles[url] ?? '';
+      final displayTitle = title.isEmpty ? 'Documento' : title;
       documentChips.add(
         _FileChip(
-          label: title.isEmpty ? 'Documento' : title,
+          label: displayTitle,
           icon: Icons.description,
           showTypeIcon: true,
           fileType: 'Documento',
-          onTap: () => onFileTap(url, 'Documento'),
+          onTap: () => onFileTap(url, displayTitle),
         ),
       );
     }
@@ -700,13 +703,14 @@ class _CatalogRowCard extends StatelessWidget {
     for (final url in row.files.documents) {
       if (url.isNotEmpty) {
         final title = row.files.fileTitles[url] ?? '';
+        final displayTitle = title.isEmpty ? 'Documento' : title;
         documentChips.add(
           _FileChip(
-            label: title.isEmpty ? 'Documento' : title,
+            label: displayTitle,
             icon: Icons.description,
             showTypeIcon: true,
             fileType: 'Documento',
-            onTap: () => onFileTap(url, 'Documento'),
+            onTap: () => onFileTap(url, displayTitle),
           ),
         );
       }
@@ -716,13 +720,14 @@ class _CatalogRowCard extends StatelessWidget {
     if (row.files.multimedia != null && row.files.multimedia!.isNotEmpty) {
       final url = row.files.multimedia!;
       final title = row.files.fileTitles[url] ?? '';
+      final displayTitle = title.isEmpty ? 'Multimedia' : title;
       multimediaChips.add(
         _FileChip(
-          label: title.isEmpty ? 'Multimedia' : title,
+          label: displayTitle,
           icon: Icons.videocam,
           showTypeIcon: true,
           fileType: 'Multimedia',
-          onTap: () => onFileTap(url, 'Multimedia'),
+          onTap: () => onFileTap(url, displayTitle),
         ),
       );
     }
@@ -731,13 +736,14 @@ class _CatalogRowCard extends StatelessWidget {
     for (final url in row.files.multimediaFiles) {
       if (url.isNotEmpty) {
         final title = row.files.fileTitles[url] ?? '';
+        final displayTitle = title.isEmpty ? 'Multimedia' : title;
         multimediaChips.add(
           _FileChip(
-            label: title.isEmpty ? 'Multimedia' : title,
+            label: displayTitle,
             icon: Icons.videocam,
             showTypeIcon: true,
             fileType: 'Multimedia',
-            onTap: () => onFileTap(url, 'Multimedia'),
+            onTap: () => onFileTap(url, displayTitle),
           ),
         );
       }

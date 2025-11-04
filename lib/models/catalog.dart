@@ -391,13 +391,18 @@ class CatalogRow extends Equatable {
 
   // Convertir a JSON para MongoDB
   Map<String, dynamic> toJson() {
+    final filesJson = files.toJson();
+    // Debug: verificar que fileTitles se está incluyendo
+    if (files.fileTitles.isNotEmpty) {
+      print('📝 CatalogRow.toJson - fileTitles: ${files.fileTitles}');
+    }
     return {
       '_id': id,
       if (originalId != null) 'originalId': originalId,
-      'data': data,
-      'files': files.toJson(),
-      'createdAt': createdAt.toIso8601String(),
-      'updatedAt': updatedAt.toIso8601String(),
+      'Data': data, // MongoDB usa mayúsculas
+      'Files': filesJson, // MongoDB usa mayúsculas
+      'CreatedAt': createdAt.toIso8601String(),
+      'UpdatedAt': updatedAt.toIso8601String(),
     };
   }
 
@@ -455,10 +460,16 @@ class RowFiles extends Equatable {
   // Factory constructor para crear desde JSON
   // MongoDB usa mayúsculas: Image, Images, Document, Documents, Multimedia, MultimediaFiles
   factory RowFiles.fromJson(Map<String, dynamic> json) {
-    // Parsear fileTitles
+    // Parsear fileTitles (verificar tanto minúsculas como mayúsculas para compatibilidad)
     Map<String, String> titles = {};
     if (json['fileTitles'] != null && json['fileTitles'] is Map) {
       final titlesMap = json['fileTitles'] as Map;
+      titles = titlesMap.map(
+        (key, value) => MapEntry(key.toString(), value.toString()),
+      );
+    } else if (json['FileTitles'] != null && json['FileTitles'] is Map) {
+      // También verificar mayúsculas para compatibilidad con MongoDB
+      final titlesMap = json['FileTitles'] as Map;
       titles = titlesMap.map(
         (key, value) => MapEntry(key.toString(), value.toString()),
       );
@@ -501,14 +512,20 @@ class RowFiles extends Equatable {
 
   // Convertir a JSON
   Map<String, dynamic> toJson() {
+    // Debug: verificar que fileTitles se está incluyendo
+    if (fileTitles.isNotEmpty) {
+      print('📝 RowFiles.toJson - fileTitles: $fileTitles');
+    }
     return {
-      if (image != null) 'image': image,
-      'images': images,
-      if (document != null) 'document': document,
-      'documents': documents,
-      if (multimedia != null) 'multimedia': multimedia,
-      'multimediaFiles': multimediaFiles,
-      if (fileTitles.isNotEmpty) 'fileTitles': fileTitles,
+      if (image != null) 'Image': image, // MongoDB usa mayúsculas
+      'Images': images, // MongoDB usa mayúsculas
+      if (document != null) 'Document': document, // MongoDB usa mayúsculas
+      'Documents': documents, // MongoDB usa mayúsculas
+      if (multimedia != null)
+        'Multimedia': multimedia, // MongoDB usa mayúsculas
+      'MultimediaFiles': multimediaFiles, // MongoDB usa mayúsculas
+      if (fileTitles.isNotEmpty)
+        'fileTitles': fileTitles, // Mantener minúsculas para compatibilidad
     };
   }
 

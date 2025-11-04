@@ -245,6 +245,25 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
       }
     }
 
+    // Capturar TODOS los títulos de los controladores antes de guardar
+    // Esto asegura que se capturen incluso si el usuario editó pero no se disparó onChanged
+    final allUrls = [..._imageUrls, ..._documentUrls, ..._multimediaUrls];
+    final finalFileTitles = <String, String>{};
+    for (final url in allUrls) {
+      if (_titleControllers.containsKey(url)) {
+        final title = _titleControllers[url]!.text.trim();
+        if (title.isNotEmpty) {
+          finalFileTitles[url] = title;
+        }
+      } else if (_fileTitles.containsKey(url)) {
+        // Si no hay controlador pero hay título en el mapa, usarlo
+        final title = _fileTitles[url]!.trim();
+        if (title.isNotEmpty) {
+          finalFileTitles[url] = title;
+        }
+      }
+    }
+
     // Crear RowFiles con las URLs finales
     // El primer elemento va en el campo singular (retrocompatibilidad), el resto en las listas
     final finalFiles = RowFiles(
@@ -256,8 +275,14 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
       multimediaFiles: _multimediaUrls.length > 1
           ? _multimediaUrls.sublist(1)
           : [],
-      fileTitles: _fileTitles,
+      fileTitles: finalFileTitles,
     );
+
+    // Debug: mostrar títulos que se van a guardar
+    print('📝 Títulos de archivos a guardar:');
+    for (final entry in finalFileTitles.entries) {
+      print('   ${entry.key}: "${entry.value}"');
+    }
 
     // Debug: mostrar URLs que se van a guardar
     print('📁 Guardando archivos:');
