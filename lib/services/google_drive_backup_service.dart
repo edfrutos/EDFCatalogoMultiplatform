@@ -747,6 +747,82 @@ class GoogleDriveBackupService {
     return created.id ?? fileName;
   }
 
+  /// Listar todos los backups de proyectos
+  Future<List<BackupInfo>> listProjectBackups() async {
+    if (!isInitialized) {
+      await initialize();
+    }
+
+    if (_driveApi == null || _backupFolderId == null) {
+      return [];
+    }
+
+    try {
+      final query =
+          "'$_backupFolderId' in parents and name contains 'project_backup' and mimeType='application/zip' and trashed=false";
+      final response = await _driveApi!.files.list(
+        q: query,
+        orderBy: 'createdTime desc',
+        spaces: 'drive',
+      );
+
+      final backups = <BackupInfo>[];
+      if (response.files != null) {
+        for (final file in response.files!) {
+          backups.add(
+            BackupInfo(
+              name: file.name ?? 'unknown',
+              size: int.tryParse(file.size ?? '0') ?? 0,
+              created: file.createdTime ?? DateTime.now(),
+              type: BackupType.project,
+              driveFileId: file.id,
+            ),
+          );
+        }
+      }
+
+      return backups;
+    } catch (e) {
+      print('❌ Error listando backups de proyectos: $e');
+      rethrow;
+    }
+  }
+
+  /// Descargar backup de proyecto (ZIP)
+  /// Retorna los bytes del archivo ZIP
+  Future<List<int>> downloadProjectBackup(String fileId) async {
+    if (!isInitialized) {
+      await initialize();
+    }
+
+    if (_driveApi == null) {
+      throw Exception('Servicio no inicializado');
+    }
+
+    try {
+      final media =
+          await _driveApi!.files.get(
+                fileId,
+                downloadOptions: drive.DownloadOptions.fullMedia,
+              )
+              as drive.Media;
+
+      // Leer el contenido como bytes
+      final bytes = <int>[];
+      await for (final chunk in media.stream) {
+        bytes.addAll(chunk);
+      }
+
+      print(
+        '✅ Backup de proyecto descargado: ${bytes.length} bytes (${(bytes.length / (1024 * 1024)).toStringAsFixed(2)} MB)',
+      );
+      return bytes;
+    } catch (e) {
+      print('❌ Error descargando backup de proyecto: $e');
+      rethrow;
+    }
+  }
+
   /// Cerrar conexiones
   void dispose() {
     _authClient?.close();

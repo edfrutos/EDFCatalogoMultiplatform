@@ -1,5 +1,5 @@
 /// Tipo de backup
-enum BackupType { catalogs, users }
+enum BackupType { catalogs, users, project }
 
 /// Información de un backup (compatible con Google Drive y Local)
 class BackupInfo {

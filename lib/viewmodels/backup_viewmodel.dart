@@ -14,7 +14,7 @@ class BackupViewModel extends ChangeNotifier {
 
   List<BackupInfo> _catalogBackups = [];
   List<BackupInfo> _userBackups = [];
-  List<ProjectBackupInfo> _projectBackups = [];
+  List<BackupInfo> _projectBackups = [];
   bool _isLoading = false;
   String? _errorMessage;
   String? _successMessage;
@@ -23,7 +23,7 @@ class BackupViewModel extends ChangeNotifier {
 
   List<BackupInfo> get catalogBackups => _catalogBackups;
   List<BackupInfo> get userBackups => _userBackups;
-  List<ProjectBackupInfo> get projectBackups => _projectBackups;
+  List<BackupInfo> get projectBackups => _projectBackups;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   String? get successMessage => _successMessage;
@@ -81,28 +81,49 @@ class BackupViewModel extends ChangeNotifier {
           print('   Stack trace: $stackTrace');
           _userBackups = [];
         }
+      } else if (type == BackupType.project) {
+        print('📁 Cargando backups de proyectos desde Google Drive...');
+        try {
+          if (!_googleDriveService.isInitialized) {
+            print('🔧 Inicializando Google Drive Service...');
+            await _googleDriveService.initialize(
+              onAuthUrl: (url) {
+                print('🔗 Abriendo URL de autenticación: $url');
+              },
+            );
+          }
+          _projectBackups = await _googleDriveService.listProjectBackups();
+          print('✅ Backups de proyectos cargados: ${_projectBackups.length}');
+        } catch (e, stackTrace) {
+          print('❌ Error cargando backups de proyectos desde Google Drive: $e');
+          print('   Stack trace: $stackTrace');
+          _projectBackups = [];
+        }
       }
 
-      // Cargar backups del proyecto SOLO si se solicita explícitamente
-      if (loadProjectBackups) {
-        print('📁 Cargando backups del proyecto desde directorio local...');
-        try {
-          _projectBackups = await _projectBackupService.listProjectBackups();
-          print('✅ Backups del proyecto cargados: ${_projectBackups.length}');
-        } catch (e) {
-          // Si falla por permisos al listar backups, no es crítico - solo mostrar warning
-          if (e.toString().contains('Operation not permitted') ||
-              e.toString().contains('permission')) {
-            print('⚠️ No se pueden listar backups del proyecto: $e');
-            _projectBackups = [];
-          } else {
-            rethrow;
-          }
-        }
-      } else {
+      // Cargar backups del proyecto SOLO si se solicita explícitamente (compatibilidad con código antiguo)
+      if (loadProjectBackups && type != BackupType.project) {
         print(
-          '⏭️  Omitiendo carga de backups del proyecto (loadProjectBackups=false)',
+          '⚠️ loadProjectBackups=true pero type != project, usando Google Drive en su lugar',
         );
+        // Usar Google Drive en lugar del directorio local
+        try {
+          if (!_googleDriveService.isInitialized) {
+            await _googleDriveService.initialize(
+              onAuthUrl: (url) {
+                print('🔗 Abriendo URL de autenticación: $url');
+              },
+            );
+          }
+          _projectBackups = await _googleDriveService.listProjectBackups();
+          print(
+            '✅ Backups de proyectos cargados desde Google Drive: ${_projectBackups.length}',
+          );
+        } catch (e, stackTrace) {
+          print('❌ Error cargando backups de proyectos: $e');
+          print('   Stack trace: $stackTrace');
+          _projectBackups = [];
+        }
       }
     } catch (e) {
       _errorMessage = 'Error al cargar backups: $e';
@@ -240,12 +261,20 @@ class BackupViewModel extends ChangeNotifier {
 
           // Recargar backups del proyecto solo si el ViewModel no se ha disposeado
           if (!_isDisposed) {
-            await loadBackups(loadProjectBackups: true);
+            await loadBackups(type: BackupType.project);
           }
           return; // Éxito, salir
         } catch (e) {
           print('⚠️ Error subiendo a Google Drive: $e');
-          // Si falla Google Drive, intentar guardar localmente como fallback
+          // Si falla por permisos, re-lanzar para que la UI maneje la selección de directorio
+          if (e.toString().contains('permisos') ||
+              e.toString().contains('permission') ||
+              e.toString().contains('Operation not permitted') ||
+              e.toString().contains('PathAccessException') ||
+              e.toString().contains('No se puede acceder')) {
+            rethrow;
+          }
+          // Si falla por otra razón, intentar guardar localmente como fallback
           // Continuar con el flujo local
         }
       }
@@ -294,7 +323,7 @@ class BackupViewModel extends ChangeNotifier {
 
         // Recargar backups del proyecto solo si el ViewModel no se ha disposeado
         if (!_isDisposed) {
-          await loadBackups(loadProjectBackups: true);
+          await loadBackups(type: BackupType.project);
         }
       } catch (e) {
         // Si el error menciona permisos, lanzar excepción para que la UI maneje
@@ -319,6 +348,8 @@ class BackupViewModel extends ChangeNotifier {
   }
 
   /// Descargar un backup (sin restaurar, solo obtener datos)
+  /// Para catálogos/usuarios: retorna JSON
+  /// Para proyectos: retorna bytes del ZIP (en el campo 'bytes')
   Future<Map<String, dynamic>?> downloadBackup(
     String fileId,
     BackupType type,
@@ -333,8 +364,17 @@ class BackupViewModel extends ChangeNotifier {
         await _googleDriveService.initialize();
       }
 
-      final data = await _googleDriveService.downloadBackup(fileId);
-      return data;
+      if (type == BackupType.project) {
+        // Para proyectos, descargar como ZIP
+        final zipBytes = await _googleDriveService.downloadProjectBackup(
+          fileId,
+        );
+        return {'bytes': zipBytes, 'type': 'zip'};
+      } else {
+        // Para catálogos/usuarios, descargar como JSON
+        final data = await _googleDriveService.downloadBackup(fileId);
+        return data;
+      }
     } catch (e) {
       if (!_isDisposed) {
         _errorMessage = 'Error al descargar backup: $e';

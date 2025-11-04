@@ -102,8 +102,26 @@ class ProjectBackupService {
   }
 
   /// Verificar si un directorio debe ser excluido
-  bool _shouldExcludeDirectory(String dirName) {
-    return _excludedDirs.contains(dirName);
+  /// [dirName] - Nombre del directorio (basename)
+  /// [fullPath] - Ruta completa del directorio (opcional, para verificar rutas completas)
+  bool _shouldExcludeDirectory(String dirName, [String? fullPath]) {
+    // Primero verificar por nombre
+    if (_excludedDirs.contains(dirName)) {
+      return true;
+    }
+
+    // Si se proporciona la ruta completa, verificar si contiene alguna ruta excluida
+    if (fullPath != null) {
+      final normalizedPath = path.normalize(fullPath);
+      for (final excludedDir in _excludedDirs) {
+        // Verificar si la ruta contiene el directorio excluido
+        if (normalizedPath.contains(excludedDir)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   /// Verificar si un archivo debe ser excluido
@@ -268,7 +286,8 @@ class ProjectBackupService {
         final entityName = path.basename(entity.path);
 
         // Omitir directorios excluidos
-        if (entity is Directory && _shouldExcludeDirectory(entityName)) {
+        if (entity is Directory &&
+            _shouldExcludeDirectory(entityName, entity.path)) {
           print('   ⏭️  Omitiendo directorio: $entityName');
           continue;
         }
@@ -360,12 +379,18 @@ class ProjectBackupService {
         final entityName = path.basename(entity.path);
 
         // Verificar si el directorio debe ser excluido
-        if (entity is Directory && _shouldExcludeDirectory(entityName)) {
+        if (entity is Directory &&
+            _shouldExcludeDirectory(entityName, entity.path)) {
           continue;
         }
 
         // Verificar si el archivo debe ser excluido
         if (entity is File && _shouldExcludeFile(entityName)) {
+          continue;
+        }
+
+        // Verificar si la ruta completa contiene algún directorio excluido
+        if (entity is File && _shouldExcludeDirectory('', entity.path)) {
           continue;
         }
 
@@ -525,6 +550,23 @@ class ProjectBackupService {
         );
       }
 
+      // Verificar permisos para leer el directorio del proyecto ANTES de intentar hacer backup
+      try {
+        await projectDir.list().take(1).toList();
+      } catch (e) {
+        // Si no hay permisos para leer el directorio del proyecto, lanzar excepción clara
+        if (e.toString().contains('Operation not permitted') ||
+            e.toString().contains('permission') ||
+            e.toString().contains('PathAccessException')) {
+          throw Exception(
+            'No se puede acceder al directorio del proyecto por falta de permisos.\n'
+            'Por favor, selecciona el directorio del proyecto para otorgar permisos de lectura.\n'
+            'Error: $e',
+          );
+        }
+        rethrow;
+      }
+
       print('📦 Creando ZIP del proyecto en memoria...');
       print('   Origen: $actualProjectPath');
 
@@ -533,44 +575,14 @@ class ProjectBackupService {
       int totalSize = 0;
 
       // Añadir todos los archivos del proyecto al ZIP
-      await for (final entity in projectDir.list(recursive: true)) {
-        final entityName = path.basename(entity.path);
-
-        // Omitir directorios excluidos
-        if (entity is Directory && _shouldExcludeDirectory(entityName)) {
-          continue;
-        }
-
-        // Omitir archivos excluidos
-        if (entity is File && _shouldExcludeFile(entityName)) {
-          continue;
-        }
-
-        if (entity is File) {
-          try {
-            final relativePath = path.relative(
-              entity.path,
-              from: actualProjectPath,
-            );
-            final fileBytes = await entity.readAsBytes();
-            final archiveFile = ArchiveFile(
-              relativePath,
-              fileBytes.length,
-              fileBytes,
-            );
-            archive.addFile(archiveFile);
-            totalSize += fileBytes.length;
-            filesAdded++;
-
-            if (filesAdded % 100 == 0) {
-              print('   📄 Archivos añadidos: $filesAdded...');
-            }
-          } catch (e) {
-            print('   ⚠️  Error añadiendo ${entity.path}: $e');
-            // Continuar con el siguiente archivo
-          }
-        }
-      }
+      // Usar list recursivo pero manejar errores de permisos en subdirectorios
+      final result = await _addFilesToArchiveRecursive(
+        projectDir,
+        actualProjectPath,
+        archive,
+      );
+      filesAdded = result['filesAdded'] as int;
+      totalSize = result['totalSize'] as int;
 
       print('   ✅ Archivos añadidos al ZIP: $filesAdded');
       print(
@@ -629,6 +641,107 @@ class ProjectBackupService {
       print('❌ Error eliminando backup: $e');
       rethrow;
     }
+  }
+
+  /// Añadir archivos al archivo ZIP de forma recursiva, manejando errores de permisos
+  /// Retorna un mapa con 'filesAdded' y 'totalSize'
+  Future<Map<String, int>> _addFilesToArchiveRecursive(
+    Directory dir,
+    String projectRoot,
+    Archive archive,
+  ) async {
+    int filesAdded = 0;
+    int totalSize = 0;
+
+    try {
+      // Intentar listar el directorio
+      await for (final entity in dir.list()) {
+        try {
+          final entityName = path.basename(entity.path);
+          final relativePath = path.relative(entity.path, from: projectRoot);
+
+          // Verificar si el directorio debe ser excluido usando la ruta completa
+          if (entity is Directory) {
+            if (_shouldExcludeDirectory(entityName, entity.path)) {
+              continue;
+            }
+
+            // Recursivamente añadir archivos del subdirectorio
+            final subResult = await _addFilesToArchiveRecursive(
+              entity,
+              projectRoot,
+              archive,
+            );
+            filesAdded += subResult['filesAdded'] as int;
+            totalSize += subResult['totalSize'] as int;
+          } else if (entity is File) {
+            // Verificar si el archivo debe ser excluido
+            if (_shouldExcludeFile(entityName)) {
+              continue;
+            }
+
+            // Verificar si la ruta completa contiene algún directorio excluido
+            if (_shouldExcludeDirectory('', entity.path)) {
+              continue;
+            }
+
+            try {
+              final fileBytes = await entity.readAsBytes();
+              final archiveFile = ArchiveFile(
+                relativePath,
+                fileBytes.length,
+                fileBytes,
+              );
+              archive.addFile(archiveFile);
+              totalSize += fileBytes.length;
+              filesAdded++;
+
+              if (filesAdded % 100 == 0) {
+                print('   📄 Archivos añadidos: $filesAdded...');
+              }
+            } catch (e) {
+              print('   ⚠️  Error añadiendo ${entity.path}: $e');
+              // Continuar con el siguiente archivo
+            }
+          }
+        } catch (e) {
+          // Si hay un error con una entidad específica, continuar
+          // (puede ser un problema de permisos en un subdirectorio específico)
+          if (e.toString().contains('Operation not permitted') ||
+              e.toString().contains('permission') ||
+              e.toString().contains('PathAccessException')) {
+            print(
+              '   ⚠️  No se puede acceder a ${entity.path}: $e (continuando...)',
+            );
+            continue;
+          }
+          // Re-lanzar otros errores
+          rethrow;
+        }
+      }
+    } catch (e) {
+      // Si falla al listar el directorio, verificar si es por permisos
+      if (e.toString().contains('Operation not permitted') ||
+          e.toString().contains('permission') ||
+          e.toString().contains('PathAccessException')) {
+        // Si es el directorio raíz, lanzar excepción
+        if (path.normalize(dir.path) == path.normalize(projectRoot)) {
+          throw Exception(
+            'No se puede acceder al directorio del proyecto por falta de permisos.\n'
+            'Por favor, selecciona el directorio del proyecto para otorgar permisos de lectura.\n'
+            'Error: $e',
+          );
+        }
+        // Si es un subdirectorio, solo continuar (no es crítico)
+        print(
+          '   ⚠️  No se puede acceder al directorio ${dir.path}: $e (omitido)',
+        );
+      } else {
+        rethrow;
+      }
+    }
+
+    return {'filesAdded': filesAdded, 'totalSize': totalSize};
   }
 
   /// Obtener la ruta base de backups

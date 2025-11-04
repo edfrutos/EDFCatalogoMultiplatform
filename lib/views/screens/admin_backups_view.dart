@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart' as file_picker;
 import '../../viewmodels/backup_viewmodel.dart';
-import '../../services/project_backup_service.dart';
 import '../../models/backup_info.dart';
 
 class AdminBackupsView extends StatefulWidget {
@@ -61,8 +60,8 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
         );
         break;
       case 2: // Backups del Proyecto
-        print('📁 Cargando backups del proyecto desde directorio local');
-        viewModel.loadBackups(loadProjectBackups: true);
+        print('📁 Cargando backups del proyecto desde Google Drive');
+        viewModel.loadBackups(type: BackupType.project);
         break;
     }
   }
@@ -622,7 +621,29 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
       Navigator.of(context).pop(); // Cerrar loading
 
       if (data != null) {
-        // Mostrar detalles del backup
+        // Si es un proyecto (ZIP), guardarlo en lugar de mostrar detalles
+        if (type == BackupType.project && data['bytes'] != null) {
+          final zipBytes = data['bytes'] as List<int>;
+          final result = await file_picker.FilePicker.platform.saveFile(
+            fileName: backup.fileName,
+            type: file_picker.FileType.custom,
+            allowedExtensions: ['zip'],
+          );
+
+          if (result != null) {
+            final file = File(result);
+            await file.writeAsBytes(zipBytes);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('✅ Backup descargado: ${file.path}'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+          return;
+        }
+
+        // Para catálogos/usuarios, mostrar detalles del backup
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
@@ -635,7 +656,11 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                   Text('Fecha: ${backup.formattedDate}'),
                   Text('Tamaño: ${backup.formattedSize}'),
                   Text(
-                    'Tipo: ${type == BackupType.catalogs ? 'Catálogos' : 'Usuarios'}',
+                    'Tipo: ${type == BackupType.catalogs
+                        ? 'Catálogos'
+                        : type == BackupType.users
+                        ? 'Usuarios'
+                        : 'Proyecto'}',
                   ),
                   if (data['count'] != null)
                     Text('Elementos: ${data['count']}'),
@@ -719,21 +744,22 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
       if (context.mounted) {
         Navigator.of(context).pop(); // Cerrar loading
 
-        // Si hay error relacionado con permisos, pedir al usuario que seleccione directorio
+        // Si hay error relacionado con permisos, pedir al usuario que seleccione directorio del proyecto
         if (viewModel.errorMessage != null &&
             (viewModel.errorMessage!.contains('permisos') ||
                 viewModel.errorMessage!.contains('permission') ||
                 viewModel.errorMessage!.contains('Operation not permitted') ||
                 viewModel.errorMessage!.contains('PathAccessException') ||
                 viewModel.errorMessage!.contains('No se puede acceder'))) {
-          // Preguntar si quiere seleccionar un directorio
+          // Preguntar si quiere seleccionar el directorio del proyecto
           final selectDir = await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
               title: const Text('Permisos insuficientes'),
               content: const Text(
-                'No se puede crear el backup en la ubicación predeterminada por falta de permisos.\n\n'
-                '¿Deseas seleccionar un directorio diferente para guardar el backup?',
+                'No se puede acceder al directorio del proyecto por falta de permisos.\n\n'
+                'Por favor, selecciona el directorio del proyecto para otorgar permisos de lectura.\n\n'
+                'El backup se subirá directamente a Google Drive.',
               ),
               actions: [
                 TextButton(
@@ -742,14 +768,14 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                 ),
                 ElevatedButton(
                   onPressed: () => Navigator.of(context).pop(true),
-                  child: const Text('Seleccionar Directorio'),
+                  child: const Text('Seleccionar Directorio del Proyecto'),
                 ),
               ],
             ),
           );
 
           if (selectDir == true) {
-            // Primero pedir al usuario que seleccione el directorio del proyecto
+            // Pedir al usuario que seleccione el directorio del proyecto
             // (para obtener permisos de lectura)
             final selectedProjectDir = await file_picker.FilePicker.platform
                 .getDirectoryPath(
@@ -758,50 +784,65 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                 );
 
             if (selectedProjectDir != null) {
-              // Ahora pedir al usuario que seleccione el directorio para guardar el backup
-              final selectedBackupDir = await file_picker.FilePicker.platform
-                  .getDirectoryPath(
-                    dialogTitle:
-                        'Selecciona el directorio para GUARDAR el backup',
-                  );
+              // Cerrar cualquier diálogo anterior
+              if (context.mounted) {
+                Navigator.of(context).pop();
+              }
 
-              if (selectedBackupDir != null) {
-                // Cerrar cualquier diálogo anterior
-                if (context.mounted) {
-                  Navigator.of(context).pop();
-                }
-
-                // Mostrar loading nuevamente
-                showDialog(
-                  context: context,
-                  barrierDismissible: false,
-                  builder: (context) => AlertDialog(
-                    content: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const CircularProgressIndicator(),
-                        const SizedBox(height: 16),
-                        const Text('Creando backup del proyecto...'),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Esto puede tardar varios minutos',
-                          style: TextStyle(fontSize: 12, color: Colors.grey),
-                        ),
-                      ],
-                    ),
+              // Mostrar loading nuevamente
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (context) => AlertDialog(
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CircularProgressIndicator(),
+                      const SizedBox(height: 16),
+                      const Text('Creando backup del proyecto...'),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Esto puede tardar varios minutos',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ],
                   ),
-                );
+                ),
+              );
 
-                // Crear backup usando el directorio del proyecto seleccionado
-                // uploadToGoogleDrive está en true por defecto, pero lo especificamos explícitamente
+              // Crear backup usando el directorio del proyecto seleccionado
+              // uploadToGoogleDrive está en true por defecto, se subirá directamente a Google Drive
+              try {
                 await viewModel.createProjectBackup(
-                  backupDirectory: selectedBackupDir,
                   projectPath: selectedProjectDir,
                   uploadToGoogleDrive: true,
                 );
+              } catch (e) {
+                print(
+                  'Error capturado al crear backup con directorio seleccionado: $e',
+                );
+              }
 
-                if (context.mounted) {
-                  Navigator.of(context).pop(); // Cerrar loading
+              if (context.mounted) {
+                Navigator.of(context).pop(); // Cerrar loading
+
+                // Mostrar mensaje de éxito o error
+                if (viewModel.successMessage != null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(viewModel.successMessage!),
+                      backgroundColor: Colors.green,
+                      duration: const Duration(seconds: 5),
+                    ),
+                  );
+                } else if (viewModel.errorMessage != null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(viewModel.errorMessage!),
+                      backgroundColor: Colors.red,
+                      duration: const Duration(seconds: 5),
+                    ),
+                  );
                 }
               }
             }
@@ -841,7 +882,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
     }
 
     return RefreshIndicator(
-      onRefresh: () => viewModel.loadBackups(loadProjectBackups: true),
+      onRefresh: () => viewModel.loadBackups(type: BackupType.project),
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
         itemCount: viewModel.projectBackups.length,
@@ -855,43 +896,38 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                 child: Icon(Icons.folder_copy, color: Colors.white),
               ),
               title: Text(
-                backup.backupName,
+                backup.fileName,
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 4),
-                  Text('Tamaño: ${backup.sizeFormatted}'),
-                  Text('Archivos: ${backup.filesCount}'),
-                  Text(
-                    'Fecha: ${backup.createdAt.day}/${backup.createdAt.month}/${backup.createdAt.year} '
-                    '${backup.createdAt.hour}:${backup.createdAt.minute.toString().padLeft(2, '0')}',
-                  ),
-                  Text(
-                    'Ubicación: ${backup.backupPath}',
-                    style: const TextStyle(fontSize: 11, color: Colors.grey),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  Text('Tamaño: ${backup.formattedSize}'),
+                  Text('Fecha: ${backup.formattedDate}'),
+                  if (backup.isGoogleDrive)
+                    const Text(
+                      '📍 Google Drive',
+                      style: TextStyle(fontSize: 11, color: Colors.blue),
+                    ),
                 ],
               ),
               trailing: PopupMenuButton<String>(
                 onSelected: (value) {
-                  if (value == 'open') {
-                    _openProjectBackupLocation(context, backup.backupPath);
+                  if (value == 'download') {
+                    _downloadProjectBackup(context, viewModel, backup);
                   } else if (value == 'delete') {
                     _deleteProjectBackup(context, viewModel, backup);
                   }
                 },
                 itemBuilder: (context) => [
                   const PopupMenuItem(
-                    value: 'open',
+                    value: 'download',
                     child: Row(
                       children: [
-                        Icon(Icons.folder_open, size: 20),
+                        Icon(Icons.download, size: 20),
                         SizedBox(width: 8),
-                        Text('Abrir ubicación'),
+                        Text('Descargar'),
                       ],
                     ),
                   ),
@@ -914,18 +950,108 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
     );
   }
 
+  /// Descargar backup del proyecto
+  Future<void> _downloadProjectBackup(
+    BuildContext context,
+    BackupViewModel viewModel,
+    BackupInfo backup,
+  ) async {
+    if (backup.driveFileId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error: No se encontró el ID del archivo'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            const Text('Descargando backup del proyecto...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final data = await viewModel.downloadBackup(
+        backup.driveFileId!,
+        BackupType.project,
+      );
+
+      if (context.mounted) {
+        Navigator.of(context).pop(); // Cerrar loading
+
+        if (data != null && data['bytes'] != null) {
+          // Guardar el ZIP usando file_picker
+          final zipBytes = data['bytes'] as List<int>;
+          final result = await file_picker.FilePicker.platform.saveFile(
+            fileName: backup.fileName,
+            type: file_picker.FileType.custom,
+            allowedExtensions: ['zip'],
+          );
+
+          if (result != null) {
+            final file = File(result);
+            await file.writeAsBytes(zipBytes);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('✅ Backup descargado: ${file.path}'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Error: No se pudo descargar el backup'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.of(context).pop(); // Cerrar loading
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al descargar backup: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   /// Eliminar backup del proyecto
   Future<void> _deleteProjectBackup(
     BuildContext context,
     BackupViewModel viewModel,
-    ProjectBackupInfo backup,
+    BackupInfo backup,
   ) async {
+    if (backup.driveFileId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error: No se encontró el ID del archivo'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Eliminar backup del proyecto'),
         content: Text(
-          '¿Estás seguro de que deseas eliminar el backup "${backup.backupName}"?',
+          '¿Estás seguro de que deseas eliminar el backup "${backup.fileName}"?',
         ),
         actions: [
           TextButton(
@@ -945,48 +1071,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
     );
 
     if (confirmed == true) {
-      await viewModel.deleteProjectBackup(backup.backupPath);
-    }
-  }
-
-  /// Abrir ubicación del backup en Finder (macOS)
-  Future<void> _openProjectBackupLocation(
-    BuildContext context,
-    String backupPath,
-  ) async {
-    try {
-      if (Platform.isMacOS) {
-        // Abrir el directorio en Finder
-        await Process.run('open', [backupPath]);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Abriendo ubicación: $backupPath'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      } else {
-        // Para otras plataformas, mostrar la ruta
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Ubicación del backup'),
-            content: SelectableText(backupPath),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cerrar'),
-              ),
-            ],
-          ),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error al abrir ubicación: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      await viewModel.deleteBackup(backup.driveFileId!, BackupType.project);
     }
   }
 }
