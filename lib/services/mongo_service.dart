@@ -15,7 +15,6 @@ class MongoService {
 
   Db? _db;
   bool _isConnecting = false;
-  String? _connectionUri;
 
   /// Obtener la instancia de la base de datos
   Future<Db> getDatabase() async {
@@ -113,8 +112,6 @@ class MongoService {
       } else {
         fullUri += '/$mongoDb';
       }
-
-      _connectionUri = fullUri;
 
       print('🔌 Intentando conectar a MongoDB...');
       print('📍 URI: ${_maskUri(cleanUri)}');

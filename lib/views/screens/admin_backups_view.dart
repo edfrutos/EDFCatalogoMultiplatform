@@ -914,20 +914,32 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
               ),
               trailing: PopupMenuButton<String>(
                 onSelected: (value) {
-                  if (value == 'download') {
-                    _downloadProjectBackup(context, viewModel, backup);
+                  if (value == 'restore') {
+                    _restoreProjectBackup(context, viewModel, backup);
+                  } else if (value == 'download') {
+                    _viewProjectBackupDetails(context, viewModel, backup);
                   } else if (value == 'delete') {
                     _deleteProjectBackup(context, viewModel, backup);
                   }
                 },
                 itemBuilder: (context) => [
                   const PopupMenuItem(
+                    value: 'restore',
+                    child: Row(
+                      children: [
+                        Icon(Icons.restore, size: 20, color: Colors.blue),
+                        SizedBox(width: 8),
+                        Text('Restaurar', style: TextStyle(color: Colors.blue)),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
                     value: 'download',
                     child: Row(
                       children: [
                         Icon(Icons.download, size: 20),
                         SizedBox(width: 8),
-                        Text('Descargar'),
+                        Text('Ver detalles'),
                       ],
                     ),
                   ),
@@ -948,6 +960,121 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
         },
       ),
     );
+  }
+
+  /// Ver detalles del backup del proyecto
+  Future<void> _viewProjectBackupDetails(
+    BuildContext context,
+    BackupViewModel viewModel,
+    BackupInfo backup,
+  ) async {
+    // Mostrar detalles del backup sin descargar
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(backup.fileName),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Fecha: ${backup.formattedDate}'),
+              Text('Tamaño: ${backup.formattedSize}'),
+              const Text('Tipo: Proyecto'),
+              if (backup.isGoogleDrive)
+                const Text(
+                  '📍 Google Drive',
+                  style: TextStyle(color: Colors.blue),
+                ),
+              const SizedBox(height: 16),
+              const Text(
+                'Para restaurar este backup, descárgalo y extrae el contenido en la ubicación deseada.',
+                style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cerrar'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _downloadProjectBackup(context, viewModel, backup);
+            },
+            icon: const Icon(Icons.download, size: 18),
+            label: const Text('Descargar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Restaurar backup del proyecto (descargar y mostrar instrucciones)
+  Future<void> _restoreProjectBackup(
+    BuildContext context,
+    BackupViewModel viewModel,
+    BackupInfo backup,
+  ) async {
+    if (backup.driveFileId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error: No se encontró el ID del archivo'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Restaurar backup del proyecto'),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '⚠️ Restaurar un backup del proyecto requiere descargarlo y extraerlo manualmente.',
+            ),
+            SizedBox(height: 16),
+            Text(
+              'Se descargará el archivo ZIP del backup. Después de descargarlo:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 8),
+            Text('1. Extrae el contenido del ZIP'),
+            Text('2. Copia los archivos a la ubicación deseada'),
+            Text('3. Reemplaza los archivos existentes si es necesario'),
+            SizedBox(height: 16),
+            Text(
+              '¿Deseas descargar el backup ahora?',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Descargar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _downloadProjectBackup(context, viewModel, backup);
+    }
   }
 
   /// Descargar backup del proyecto

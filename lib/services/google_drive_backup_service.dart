@@ -554,10 +554,31 @@ class GoogleDriveBackupService {
       final backups = <BackupInfo>[];
       if (response.files != null) {
         for (final file in response.files!) {
+          // Obtener tamaño del archivo
+          int fileSize = 0;
+          if (file.size != null && file.size!.isNotEmpty) {
+            fileSize = int.tryParse(file.size!) ?? 0;
+          } else {
+            // Si el tamaño no está en el listado, obtenerlo del archivo completo
+            try {
+              if (file.id != null) {
+                final fileDetails =
+                    await _driveApi!.files.get(file.id!) as drive.File;
+                if (fileDetails.size != null && fileDetails.size!.isNotEmpty) {
+                  fileSize = int.tryParse(fileDetails.size!) ?? 0;
+                }
+              }
+            } catch (e) {
+              print(
+                '⚠️ No se pudo obtener el tamaño del archivo ${file.name}: $e',
+              );
+            }
+          }
+
           backups.add(
             BackupInfo(
               name: file.name ?? 'unknown',
-              size: int.tryParse(file.size ?? '0') ?? 0,
+              size: fileSize,
               created: file.createdTime ?? DateTime.now(),
               type: BackupType.catalogs,
               driveFileId: file.id,
@@ -595,10 +616,31 @@ class GoogleDriveBackupService {
       final backups = <BackupInfo>[];
       if (response.files != null) {
         for (final file in response.files!) {
+          // Obtener tamaño del archivo
+          int fileSize = 0;
+          if (file.size != null && file.size!.isNotEmpty) {
+            fileSize = int.tryParse(file.size!) ?? 0;
+          } else {
+            // Si el tamaño no está en el listado, obtenerlo del archivo completo
+            try {
+              if (file.id != null) {
+                final fileDetails =
+                    await _driveApi!.files.get(file.id!) as drive.File;
+                if (fileDetails.size != null && fileDetails.size!.isNotEmpty) {
+                  fileSize = int.tryParse(fileDetails.size!) ?? 0;
+                }
+              }
+            } catch (e) {
+              print(
+                '⚠️ No se pudo obtener el tamaño del archivo ${file.name}: $e',
+              );
+            }
+          }
+
           backups.add(
             BackupInfo(
               name: file.name ?? 'unknown',
-              size: int.tryParse(file.size ?? '0') ?? 0,
+              size: fileSize,
               created: file.createdTime ?? DateTime.now(),
               type: BackupType.users,
               driveFileId: file.id,
@@ -769,10 +811,31 @@ class GoogleDriveBackupService {
       final backups = <BackupInfo>[];
       if (response.files != null) {
         for (final file in response.files!) {
+          // Obtener tamaño del archivo
+          int fileSize = 0;
+          if (file.size != null && file.size!.isNotEmpty) {
+            fileSize = int.tryParse(file.size!) ?? 0;
+          } else {
+            // Si el tamaño no está en el listado, obtenerlo del archivo completo
+            try {
+              if (file.id != null) {
+                final fileDetails =
+                    await _driveApi!.files.get(file.id!) as drive.File;
+                if (fileDetails.size != null && fileDetails.size!.isNotEmpty) {
+                  fileSize = int.tryParse(fileDetails.size!) ?? 0;
+                }
+              }
+            } catch (e) {
+              print(
+                '⚠️ No se pudo obtener el tamaño del archivo ${file.name}: $e',
+              );
+            }
+          }
+
           backups.add(
             BackupInfo(
               name: file.name ?? 'unknown',
-              size: int.tryParse(file.size ?? '0') ?? 0,
+              size: fileSize,
               created: file.createdTime ?? DateTime.now(),
               type: BackupType.project,
               driveFileId: file.id,
