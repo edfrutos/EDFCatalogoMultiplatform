@@ -119,8 +119,8 @@ class BackupViewModel extends ChangeNotifier {
       _successMessage =
           'Backup de catálogos creado correctamente en Google Drive';
 
-      // Recargar lista de backups
-      await loadBackups(type: BackupType.catalogs);
+      // Recargar lista de backups (solo de catálogos, no del proyecto)
+      await loadBackups(type: BackupType.catalogs, loadProjectBackups: false);
     } catch (e) {
       _errorMessage = 'Error al crear backup de catálogos: $e';
       print('❌ Error: $_errorMessage');
@@ -153,8 +153,8 @@ class BackupViewModel extends ChangeNotifier {
       _successMessage =
           'Backup de usuarios creado correctamente en Google Drive';
 
-      // Recargar lista de backups
-      await loadBackups(type: BackupType.users);
+      // Recargar lista de backups (solo de usuarios, no del proyecto)
+      await loadBackups(type: BackupType.users, loadProjectBackups: false);
     } catch (e) {
       _errorMessage = 'Error al crear backup de usuarios: $e';
       print('❌ Error: $_errorMessage');

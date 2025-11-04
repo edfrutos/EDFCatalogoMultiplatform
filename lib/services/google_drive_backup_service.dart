@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/mongo_service.dart';
 import '../utils/env_config.dart';
 import '../models/backup_info.dart';
@@ -27,6 +28,9 @@ class GoogleDriveBackupService {
   static const String _refreshTokenKey = 'google_drive_refresh_token';
   static const String _accessTokenKey = 'google_drive_access_token';
   static const String _tokenExpiryKey = 'google_drive_token_expiry';
+
+  // Usar SharedPreferences como fallback cuando secure storage falla
+  static SharedPreferences? _prefs;
 
   /// Inicializar el servicio de Google Drive con OAuth 2.0
   /// NOTA: La primera vez abrirá el navegador para autenticación
@@ -100,15 +104,42 @@ class GoogleDriveBackupService {
     }
   }
 
-  /// Cargar credenciales guardadas desde secure storage
+  /// Cargar credenciales guardadas desde secure storage (con fallback a SharedPreferences)
   Future<auth.AutoRefreshingAuthClient?> _loadSavedCredentials(
     auth.ClientId clientId,
     List<String> scopes,
   ) async {
     try {
-      final refreshToken = await _secureStorage.read(key: _refreshTokenKey);
-      final accessToken = await _secureStorage.read(key: _accessTokenKey);
-      final expiryStr = await _secureStorage.read(key: _tokenExpiryKey);
+      String? refreshToken;
+      String? accessToken;
+      String? expiryStr;
+
+      // Intentar cargar desde secure storage primero
+      try {
+        refreshToken = await _secureStorage.read(key: _refreshTokenKey);
+        accessToken = await _secureStorage.read(key: _accessTokenKey);
+        expiryStr = await _secureStorage.read(key: _tokenExpiryKey);
+      } catch (e) {
+        // Si secure storage falla (p.ej. en macOS sin certificado), usar SharedPreferences
+        print(
+          '⚠️ Secure storage no disponible, usando SharedPreferences como fallback',
+        );
+      }
+
+      // Si no se encontró token en secure storage, intentar SharedPreferences
+      if (refreshToken == null) {
+        try {
+          _prefs ??= await SharedPreferences.getInstance();
+          refreshToken = _prefs!.getString(_refreshTokenKey);
+          accessToken = _prefs!.getString(_accessTokenKey);
+          expiryStr = _prefs!.getString(_tokenExpiryKey);
+          if (refreshToken != null) {
+            print('✅ Token encontrado en SharedPreferences (fallback)');
+          }
+        } catch (e) {
+          print('⚠️ Error cargando desde SharedPreferences: $e');
+        }
+      }
 
       if (refreshToken == null) {
         return null; // No hay token guardado
@@ -162,18 +193,46 @@ class GoogleDriveBackupService {
     }
   }
 
-  /// Guardar credenciales en secure storage
+  /// Guardar credenciales en secure storage (con fallback a SharedPreferences)
   Future<void> _saveCredentials(auth.AccessCredentials credentials) async {
     try {
       if (credentials.refreshToken != null) {
-        await _secureStorage.write(
-          key: _refreshTokenKey,
-          value: credentials.refreshToken,
-        );
+        // Intentar guardar en secure storage primero
+        try {
+          await _secureStorage.write(
+            key: _refreshTokenKey,
+            value: credentials.refreshToken!,
+          );
+          // Guardar también access token y expiry
+          await _secureStorage.write(
+            key: _accessTokenKey,
+            value: credentials.accessToken.data,
+          );
+          await _secureStorage.write(
+            key: _tokenExpiryKey,
+            value: credentials.accessToken.expiry.toIso8601String(),
+          );
+          print('💾 Credenciales de Google Drive guardadas en secure storage');
+        } catch (e) {
+          // Si secure storage falla (p.ej. en macOS sin certificado), usar SharedPreferences
+          print(
+            '⚠️ Secure storage no disponible, usando SharedPreferences como fallback: $e',
+          );
+          _prefs ??= await SharedPreferences.getInstance();
+          await _prefs!.setString(_refreshTokenKey, credentials.refreshToken!);
+          await _prefs!.setString(
+            _accessTokenKey,
+            credentials.accessToken.data,
+          );
+          await _prefs!.setString(
+            _tokenExpiryKey,
+            credentials.accessToken.expiry.toIso8601String(),
+          );
+          print(
+            '💾 Credenciales de Google Drive guardadas en SharedPreferences (fallback)',
+          );
+        }
       }
-      // Guardar información del access token (aunque se refrescará automáticamente)
-      // Solo guardamos el refresh token que es lo realmente importante
-      print('💾 Credenciales de Google Drive guardadas (refresh token)');
     } catch (e) {
       print('⚠️ Error guardando credenciales: $e');
     }
