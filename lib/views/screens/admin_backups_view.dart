@@ -539,7 +539,12 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
 
       // Intentar crear backup sin directorio específico primero
       // uploadToGoogleDrive está en true por defecto, pero lo especificamos explícitamente
-      await viewModel.createProjectBackup(uploadToGoogleDrive: true);
+      try {
+        await viewModel.createProjectBackup(uploadToGoogleDrive: true);
+      } catch (e) {
+        // El error ya está guardado en viewModel.errorMessage
+        print('Error capturado en _createProjectBackup: $e');
+      }
 
       if (context.mounted) {
         Navigator.of(context).pop(); // Cerrar loading
@@ -548,7 +553,9 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
         if (viewModel.errorMessage != null &&
             (viewModel.errorMessage!.contains('permisos') ||
                 viewModel.errorMessage!.contains('permission') ||
-                viewModel.errorMessage!.contains('Operation not permitted'))) {
+                viewModel.errorMessage!.contains('Operation not permitted') ||
+                viewModel.errorMessage!.contains('PathAccessException') ||
+                viewModel.errorMessage!.contains('No se puede acceder'))) {
           // Preguntar si quiere seleccionar un directorio
           final selectDir = await showDialog<bool>(
             context: context,

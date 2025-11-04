@@ -44,10 +44,24 @@ class MongoService {
 
     // Verificar si estamos en web
     if (kIsWeb) {
+      // Si hay una API configurada, no lanzar error (se usará la API)
+      if (EnvConfig.useApiBackend) {
+        print('🌐 Usando backend API para conexión a MongoDB desde web');
+        print('   API URL: ${EnvConfig.apiBaseUrl}');
+        // No lanzar error, pero tampoco conectar directamente
+        // El servicio de API se encargará de las operaciones
+        return;
+      }
+
+      // Si no hay API configurada, mostrar mensaje más útil
       throw UnsupportedError(
-        'MongoDB no está soportado directamente en Flutter Web. '
-        'Por favor, usa la aplicación en macOS, iOS o Android, '
-        'o configura un backend API para acceder a MongoDB desde web.',
+        'MongoDB no está soportado directamente en Flutter Web.\n\n'
+        'Para usar la aplicación en web, tienes dos opciones:\n\n'
+        '1. Usar la aplicación en macOS, iOS o Android (recomendado)\n'
+        '2. Configurar un backend API:\n'
+        '   - Agrega API_BASE_URL=http://tu-api.com en tu archivo .env\n'
+        '   - Configura un servidor backend que gestione MongoDB\n\n'
+        'Por ahora, la aplicación funciona mejor en plataformas nativas.',
       );
     }
 

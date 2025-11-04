@@ -60,6 +60,10 @@ class EnvConfig {
     return googleClientId.isNotEmpty && googleClientSecret.isNotEmpty;
   }
 
+  // Backend API (para Flutter Web)
+  static String get apiBaseUrl => dotenv.env['API_BASE_URL'] ?? '';
+  static bool get useApiBackend => apiBaseUrl.isNotEmpty;
+
   /// Validar que las variables críticas estén configuradas
   static bool validate() {
     if (mongoUri.isEmpty || mongoDb.isEmpty) {

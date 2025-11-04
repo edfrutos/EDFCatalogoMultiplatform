@@ -54,7 +54,8 @@ void main() async {
     // No intentar cargar desde assets en desktop - solo buscar en sistema de archivos
     // Los assets solo funcionan bien en web
 
-    // Para macOS, buscar en el bundle del sistema de archivos (solo si no está cargado)
+    // Para macOS, buscar PRIMERO en el bundle del sistema de archivos
+    // Esto es crítico porque el sandbox puede bloquear acceso a archivos fuera del bundle
     if (!envLoaded && Platform.isMacOS) {
       try {
         final bundlePath = Platform.resolvedExecutable;
@@ -62,7 +63,7 @@ void main() async {
           bundlePath,
         ).parent.parent; // Contents/MacOS -> Contents
         final envPath = '${bundleDir.path}/Resources/.env';
-        print('🔍 Buscando .env en bundle: $envPath');
+        print('🔍 Buscando .env en bundle (PRIORIDAD): $envPath');
         if (File(envPath).existsSync()) {
           // Intentar cargar primero con dotenv (método más confiable)
           try {
@@ -98,7 +99,7 @@ void main() async {
               print('✅ Variables de entorno cargadas manualmente desde bundle');
               envLoaded = true;
             } catch (e2) {
-              print('⚠️ Error también con lectura manual: $e2');
+              print('⚠️ Error también con lectura manual desde bundle: $e2');
             }
           }
         } else {
@@ -145,6 +146,42 @@ void main() async {
       }
 
       final possiblePaths = <String>[];
+
+      // AGREGAR: Buscar directamente en la raíz del proyecto (desarrollo)
+      // Buscar subiendo desde el directorio actual hasta encontrar pubspec.yaml
+      try {
+        var searchDir = Directory(Directory.current.path);
+        for (int i = 0; i < 15; i++) {
+          final pubspecPath = File('${searchDir.path}/pubspec.yaml');
+          final envPath = File('${searchDir.path}/.env');
+          if (pubspecPath.existsSync()) {
+            // Encontramos la raíz del proyecto
+            if (envPath.existsSync()) {
+              possiblePaths.insert(
+                0,
+                envPath.path,
+              ); // Insertar al inicio para prioridad
+              print('✅ Encontrado .env en raíz del proyecto: ${envPath.path}');
+            }
+            break;
+          }
+          if (searchDir.path == searchDir.parent.path)
+            break; // Llegamos a la raíz del sistema
+          searchDir = searchDir.parent;
+        }
+
+        // También buscar desde la ruta absoluta del proyecto conocida
+        final projectRootPath =
+            '/Users/edefrutos/__Proyectos/EDFCatalogoMultiplatform';
+        final knownEnvPath = File('$projectRootPath/.env');
+        if (knownEnvPath.existsSync() &&
+            !possiblePaths.contains(knownEnvPath.path)) {
+          possiblePaths.insert(0, knownEnvPath.path);
+          print('✅ Encontrado .env en ruta conocida: ${knownEnvPath.path}');
+        }
+      } catch (e) {
+        print('⚠️ Error buscando .env en raíz: $e');
+      }
 
       // Si encontramos la raíz del proyecto, buscar ahí primero
       if (projectRoot != null) {

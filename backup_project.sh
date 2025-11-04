@@ -3,7 +3,8 @@
 # Script para crear backup del proyecto EDFCatalogoMultiplatform
 # Incluye todos los archivos del proyecto, incluyendo archivos sensibles (.env, credenciales, etc.)
 
-set -e  # Salir si hay algún error
+# No usar set -e para permitir manejo de errores en subida a Google Drive
+# set -e  # Salir si hay algún error
 
 # Colores para output
 GREEN='\033[0;32m'
@@ -18,6 +19,14 @@ BACKUP_FOLDER="project_backups"
 TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
 BACKUP_NAME="project_backup_${TIMESTAMP}"
 BACKUP_PATH="${BACKUP_BASE_PATH}/${BACKUP_FOLDER}/${BACKUP_NAME}"
+
+# Configuración de Google Drive (opcional)
+# Nombre del remote de rclone configurado para Google Drive
+# Si no está configurado, el script intentará subir usando rclone
+# Para configurar: rclone config
+RCLONE_REMOTE="gdrive"  # Cambiar por el nombre de tu remote configurado
+GOOGLE_DRIVE_FOLDER="Backups_CatalogoTablas"  # Carpeta en Google Drive
+UPLOAD_TO_GOOGLE_DRIVE=true  # Cambiar a false para deshabilitar subida automática
 
 # Verificar que el directorio del proyecto existe
 if [ ! -d "$PROJECT_PATH" ]; then
@@ -155,14 +164,119 @@ fi
 echo ""
 echo -e "${GREEN}💾 Nota: Los archivos sensibles (.env, credenciales, etc.) están incluidos en el backup${NC}"
 
-# Opción para abrir Finder (macOS)
-if [ "$(uname)" == "Darwin" ]; then
-    read -p "¿Abrir ubicación del backup en Finder? (s/n): " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Ss]$ ]]; then
-        if [ -n "$ZIP_PATH" ] && [ -f "$ZIP_PATH" ]; then
-            open "$(dirname "$ZIP_PATH")"
+# Subir a Google Drive si está habilitado y hay un ZIP
+if [ "$UPLOAD_TO_GOOGLE_DRIVE" = true ] && [ -n "$ZIP_PATH" ] && [ -f "$ZIP_PATH" ]; then
+    echo ""
+    echo -e "${GREEN}☁️  Subiendo backup a Google Drive...${NC}"
+    
+    # Verificar si rclone está instalado
+    if command -v rclone &> /dev/null; then
+        # Verificar si el remote está configurado
+        if rclone listremotes 2>/dev/null | grep -q "^${RCLONE_REMOTE}:$"; then
+            echo -e "   Usando remote: ${RCLONE_REMOTE}"
+            echo -e "   Carpeta destino: ${GOOGLE_DRIVE_FOLDER}"
+            
+            # Crear la carpeta en Google Drive si no existe (rclone lo hace automáticamente)
+            # Subir el archivo ZIP
+            echo -e "   Subiendo: $(basename "$ZIP_PATH")"
+            UPLOAD_SUCCESS=false
+            if rclone copy "$ZIP_PATH" "${RCLONE_REMOTE}:${GOOGLE_DRIVE_FOLDER}/" --progress --stats-one-line; then
+                UPLOAD_SUCCESS=true
+            fi
+            
+            if [ "$UPLOAD_SUCCESS" = true ]; then
+                echo -e "${GREEN}✅ Backup subido exitosamente a Google Drive${NC}"
+                echo -e "   Ubicación: ${GOOGLE_DRIVE_FOLDER}/$(basename "$ZIP_PATH")"
+                
+                # Verificar que el archivo está en Google Drive
+                echo -e "${GREEN}   Verificando archivo en Google Drive...${NC}"
+                FILE_CONFIRMED=false
+                if rclone ls "${RCLONE_REMOTE}:${GOOGLE_DRIVE_FOLDER}/" 2>/dev/null | grep -q "$(basename "$ZIP_PATH")"; then
+                    echo -e "${GREEN}   ✅ Archivo confirmado en Google Drive${NC}"
+                    FILE_CONFIRMED=true
+                else
+                    echo -e "${YELLOW}   ⚠️  No se pudo verificar el archivo (pero puede estar subido)${NC}"
+                    # Esperar un momento y volver a intentar la verificación
+                    sleep 2
+                    if rclone ls "${RCLONE_REMOTE}:${GOOGLE_DRIVE_FOLDER}/" 2>/dev/null | grep -q "$(basename "$ZIP_PATH")"; then
+                        echo -e "${GREEN}   ✅ Archivo confirmado en Google Drive (segundo intento)${NC}"
+                        FILE_CONFIRMED=true
+                    fi
+                fi
+                
+                # Si el archivo está confirmado en Google Drive, eliminar backups locales
+                if [ "$FILE_CONFIRMED" = true ]; then
+                    echo ""
+                    echo -e "${GREEN}🗑️  Eliminando backups locales (ya están en Google Drive)...${NC}"
+                    
+                    # Eliminar el archivo ZIP
+                    if [ -f "$ZIP_PATH" ]; then
+                        rm -f "$ZIP_PATH"
+                        echo -e "${GREEN}   ✅ ZIP local eliminado: $(basename "$ZIP_PATH")${NC}"
+                    fi
+                    
+                    # Eliminar el directorio de backup descomprimido
+                    if [ -d "$BACKUP_PATH" ]; then
+                        rm -rf "$BACKUP_PATH"
+                        echo -e "${GREEN}   ✅ Directorio de backup eliminado: $(basename "$BACKUP_PATH")${NC}"
+                    fi
+                    
+                    echo -e "${GREEN}✅ Backups locales eliminados. El backup está solo en Google Drive.${NC}"
+                else
+                    echo -e "${YELLOW}⚠️  No se eliminaron los backups locales (verificación no confirmada)${NC}"
+                    echo -e "${YELLOW}   Archivos locales mantenidos:${NC}"
+                    echo -e "${YELLOW}   - ZIP: ${ZIP_PATH}${NC}"
+                    echo -e "${YELLOW}   - Directorio: ${BACKUP_PATH}${NC}"
+                fi
+            else
+                echo -e "${YELLOW}⚠️  Error al subir el backup a Google Drive${NC}"
+                echo -e "${YELLOW}   El archivo local se mantiene en: ${ZIP_PATH}${NC}"
+            fi
         else
+            echo -e "${YELLOW}⚠️  Remote '${RCLONE_REMOTE}' no encontrado en rclone${NC}"
+            echo -e "${YELLOW}   Configura rclone con: rclone config${NC}"
+            echo -e "${YELLOW}   O cambia RCLONE_REMOTE en el script${NC}"
+            echo ""
+            echo -e "${YELLOW}   Para configurar Google Drive:${NC}"
+            echo -e "${YELLOW}   1. Ejecuta: rclone config${NC}"
+            echo -e "${YELLOW}   2. Selecciona 'n' para nuevo remote${NC}"
+            echo -e "${YELLOW}   3. Elige 'drive' como tipo${NC}"
+            echo -e "${YELLOW}   4. Sigue las instrucciones para autenticarte${NC}"
+            echo -e "${YELLOW}   5. Usa el nombre del remote aquí: ${RCLONE_REMOTE}${NC}"
+        fi
+    else
+        echo -e "${YELLOW}⚠️  rclone no está instalado${NC}"
+        echo -e "${YELLOW}   Para instalar rclone:${NC}"
+        if [ "$(uname)" == "Darwin" ]; then
+            echo -e "${YELLOW}   brew install rclone${NC}"
+        else
+            echo -e "${YELLOW}   Visita: https://rclone.org/install/${NC}"
+        fi
+        echo ""
+        echo -e "${YELLOW}   Alternativamente, puedes subir manualmente:${NC}"
+        echo -e "${YELLOW}   ${ZIP_PATH}${NC}"
+        echo -e "${YELLOW}   a la carpeta '${GOOGLE_DRIVE_FOLDER}' en Google Drive${NC}"
+    fi
+else
+    if [ "$UPLOAD_TO_GOOGLE_DRIVE" = true ]; then
+        echo -e "${YELLOW}⚠️  No se puede subir a Google Drive: no hay archivo ZIP creado${NC}"
+    fi
+fi
+
+# Opción para abrir Finder (macOS) - solo si hay archivos locales
+if [ "$(uname)" == "Darwin" ]; then
+    if [ -n "$ZIP_PATH" ] && [ -f "$ZIP_PATH" ]; then
+        echo ""
+        read -p "¿Abrir ubicación del backup en Finder? (s/n): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Ss]$ ]]; then
+            open "$(dirname "$ZIP_PATH")"
+        fi
+    elif [ -d "$BACKUP_PATH" ]; then
+        echo ""
+        read -p "¿Abrir ubicación del backup en Finder? (s/n): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Ss]$ ]]; then
             open "${BACKUP_PATH}"
         fi
     fi

@@ -61,6 +61,8 @@ class ProjectBackupService {
     'macos/Flutter/ephemeral',
     'windows/flutter/ephemeral',
     'linux/flutter/ephemeral',
+    // Excluir directorio de backups para evitar recursión
+    'backups',
   ];
 
   static const List<String> _excludedFiles = [
@@ -225,6 +227,23 @@ class ProjectBackupService {
         }
       }
 
+      // Verificar permisos para leer el directorio del proyecto ANTES de intentar hacer backup
+      try {
+        await projectDir.list().take(1).toList();
+      } catch (e) {
+        // Si no hay permisos para leer el directorio del proyecto, lanzar excepción clara
+        if (e.toString().contains('Operation not permitted') ||
+            e.toString().contains('permission') ||
+            e.toString().contains('PathAccessException')) {
+          throw Exception(
+            'No se puede acceder al directorio del proyecto por falta de permisos.\n'
+            'Por favor, selecciona el directorio del proyecto para otorgar permisos de lectura.\n'
+            'Error: $e',
+          );
+        }
+        rethrow;
+      }
+
       // Generar nombre del backup con timestamp
       final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
       final backupName = 'project_backup_$timestamp';
@@ -251,6 +270,14 @@ class ProjectBackupService {
         // Omitir directorios excluidos
         if (entity is Directory && _shouldExcludeDirectory(entityName)) {
           print('   ⏭️  Omitiendo directorio: $entityName');
+          continue;
+        }
+
+        // Evitar copiar el directorio de backups si está dentro del proyecto
+        final normalizedEntityPath = path.normalize(entity.path);
+        final normalizedBackupBasePath = path.normalize(_backupBasePath);
+        if (normalizedEntityPath.startsWith(normalizedBackupBasePath)) {
+          print('   ⏭️  Omitiendo directorio de backups: $entityName');
           continue;
         }
 
@@ -343,12 +370,19 @@ class ProjectBackupService {
         }
 
         final relativePath = path.relative(entity.path, from: projectRoot);
-        final entityDestPath = path.join(
-          _backupBasePath,
-          _projectBackupsFolder,
-          path.basename(destPath),
-          relativePath,
-        );
+        // Usar destPath directamente en lugar de reconstruirlo desde _backupBasePath
+        // para evitar problemas de recursión
+        final entityDestPath = path.join(destPath, relativePath);
+
+        // Evitar copiar si el destino está dentro del origen (recursión)
+        final normalizedSource = path.normalize(sourceDir.path);
+        final normalizedDest = path.normalize(entityDestPath);
+        if (normalizedDest.startsWith(normalizedSource)) {
+          print(
+            '⚠️  Evitando recursión: $entityDestPath está dentro de $normalizedSource',
+          );
+          continue;
+        }
 
         if (entity is File) {
           await _copyEntity(entity, entityDestPath);
@@ -373,6 +407,20 @@ class ProjectBackupService {
       final backupsDir = Directory(backupsDirPath);
       if (!await backupsDir.exists()) {
         return [];
+      }
+
+      // Verificar permisos antes de intentar listar
+      try {
+        await backupsDir.list().take(1).toList();
+      } catch (e) {
+        // Si no hay permisos para listar, retornar lista vacía sin error
+        // (el usuario puede seleccionar un directorio diferente cuando cree un backup)
+        if (e.toString().contains('Operation not permitted') ||
+            e.toString().contains('permission')) {
+          print('⚠️ No hay permisos para listar backups en: $backupsDirPath');
+          return [];
+        }
+        rethrow;
       }
 
       final backups = <ProjectBackupInfo>[];

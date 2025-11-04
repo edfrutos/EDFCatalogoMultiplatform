@@ -16,6 +16,7 @@ class BackupViewModel extends ChangeNotifier {
   String? _errorMessage;
   String? _successMessage;
   BackupType? _selectedType;
+  bool _isDisposed = false;
 
   List<BackupInfo> get catalogBackups => _catalogBackups;
   List<BackupInfo> get userBackups => _userBackups;
@@ -30,9 +31,10 @@ class BackupViewModel extends ChangeNotifier {
     BackupType? type,
     bool loadProjectBackups = true,
   }) async {
+    if (_isDisposed) return;
     _isLoading = true;
     _errorMessage = null;
-    notifyListeners();
+    if (!_isDisposed) notifyListeners();
 
     try {
       // Solo cargar backups de Google Drive si se solicita explícitamente
@@ -71,23 +73,38 @@ class BackupViewModel extends ChangeNotifier {
 
       // Cargar backups del proyecto solo si se solicita
       if (loadProjectBackups) {
-        _projectBackups = await _projectBackupService.listProjectBackups();
+        try {
+          _projectBackups = await _projectBackupService.listProjectBackups();
+        } catch (e) {
+          // Si falla por permisos al listar backups, no es crítico - solo mostrar warning
+          if (e.toString().contains('Operation not permitted') ||
+              e.toString().contains('permission')) {
+            print('⚠️ No se pueden listar backups del proyecto: $e');
+            _projectBackups = [];
+          } else {
+            rethrow;
+          }
+        }
       }
     } catch (e) {
       _errorMessage = 'Error al cargar backups: $e';
+      // ignore: avoid_print
       print('❌ Error: $_errorMessage');
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (!_isDisposed) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
   /// Crear backup de catálogos (Google Drive)
   Future<void> createCatalogBackup() async {
+    if (_isDisposed) return;
     _isLoading = true;
     _errorMessage = null;
     _successMessage = null;
-    notifyListeners();
+    if (!_isDisposed) notifyListeners();
 
     try {
       if (!_googleDriveService.isInitialized) {
@@ -108,17 +125,20 @@ class BackupViewModel extends ChangeNotifier {
       _errorMessage = 'Error al crear backup de catálogos: $e';
       print('❌ Error: $_errorMessage');
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (!_isDisposed) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
   /// Crear backup de usuarios (Google Drive)
   Future<void> createUserBackup() async {
+    if (_isDisposed) return;
     _isLoading = true;
     _errorMessage = null;
     _successMessage = null;
-    notifyListeners();
+    if (!_isDisposed) notifyListeners();
 
     try {
       if (!_googleDriveService.isInitialized) {
@@ -139,29 +159,82 @@ class BackupViewModel extends ChangeNotifier {
       _errorMessage = 'Error al crear backup de usuarios: $e';
       print('❌ Error: $_errorMessage');
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (!_isDisposed) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
   /// Crear backup del proyecto completo
-  /// [backupDirectory] - Directorio donde guardar el backup (si es null, intentará usar el predeterminado)
+  /// [backupDirectory] - Directorio donde guardar el backup localmente (si es null, intentará usar Google Drive primero)
   /// [projectPath] - Ruta del proyecto a hacer backup (si es null, usa la ruta predeterminada)
-  /// [uploadToGoogleDrive] - Si es true, también subirá el backup a Google Drive
+  /// [uploadToGoogleDrive] - Si es true, intentará subir a Google Drive primero (por defecto)
   Future<void> createProjectBackup({
     String? backupDirectory,
     String? projectPath,
     bool uploadToGoogleDrive = true,
   }) async {
+    if (_isDisposed) return;
     _isLoading = true;
     _errorMessage = null;
     _successMessage = null;
-    notifyListeners();
+    if (!_isDisposed) notifyListeners();
 
     try {
+      // POR DEFECTO: Intentar crear backup directamente en Google Drive (en memoria)
+      // Esto evita problemas de permisos del sandbox de macOS
+      if (uploadToGoogleDrive && backupDirectory == null) {
+        try {
+          print('📤 Intentando crear backup directamente en Google Drive...');
+
+          // Inicializar Google Drive si no está inicializado
+          if (!_googleDriveService.isInitialized) {
+            await _googleDriveService.initialize(
+              onAuthUrl: (url) {
+                print('🔗 Abriendo URL de autenticación: $url');
+              },
+            );
+          }
+
+          // Crear ZIP en memoria y subirlo directamente a Google Drive
+          final zipData = await _projectBackupService.createProjectZipInMemory(
+            projectPath: projectPath,
+          );
+          final zipBytes = zipData['bytes'] as List<int>;
+          final fileName = zipData['fileName'] as String;
+          final filesCount = zipData['filesCount'] as int;
+          final sizeBytes = zipData['sizeBytes'] as int;
+
+          print(
+            '📤 Subiendo backup del proyecto directamente a Google Drive...',
+          );
+          final driveFileId = await _googleDriveService
+              .uploadProjectBackupFromBytes(zipBytes, fileName);
+
+          _successMessage =
+              '✅ Backup del proyecto creado y subido a Google Drive\n'
+              'Archivos: $filesCount\n'
+              'Tamaño: ${(sizeBytes / (1024 * 1024)).toStringAsFixed(2)} MB\n'
+              'ID en Google Drive: $driveFileId';
+
+          print('✅ Backup del proyecto subido a Google Drive');
+
+          // Recargar backups del proyecto solo si el ViewModel no se ha disposeado
+          if (!_isDisposed) {
+            await loadBackups(loadProjectBackups: true);
+          }
+          return; // Éxito, salir
+        } catch (e) {
+          print('⚠️ Error subiendo a Google Drive: $e');
+          // Si falla Google Drive, intentar guardar localmente como fallback
+          // Continuar con el flujo local
+        }
+      }
+
+      // FALLBACK: Guardar localmente (si se especificó backupDirectory o si Google Drive falló)
       String? selectedDir = backupDirectory;
 
-      // Si no se proporciona directorio y falla por permisos, pedir al usuario que seleccione
       try {
         final backupInfo = await _projectBackupService.createProjectBackup(
           backupDirectory: selectedDir,
@@ -201,14 +274,16 @@ class BackupViewModel extends ChangeNotifier {
 
         _successMessage = message;
 
-        // Recargar backups del proyecto
-        await loadBackups(loadProjectBackups: true);
+        // Recargar backups del proyecto solo si el ViewModel no se ha disposeado
+        if (!_isDisposed) {
+          await loadBackups(loadProjectBackups: true);
+        }
       } catch (e) {
         // Si el error menciona permisos, lanzar excepción para que la UI maneje
-        // (Ya no intentamos crear ZIP en memoria porque también necesita permisos de lectura)
         if (e.toString().contains('permisos') ||
             e.toString().contains('permission') ||
-            e.toString().contains('Operation not permitted')) {
+            e.toString().contains('Operation not permitted') ||
+            e.toString().contains('No se puede acceder')) {
           rethrow; // Re-lanzar para que la UI maneje el diálogo de selección
         }
         throw e;
@@ -217,8 +292,11 @@ class BackupViewModel extends ChangeNotifier {
       _errorMessage = 'Error al crear backup del proyecto: $e';
       print('❌ Error: $_errorMessage');
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      // Solo notificar si el ViewModel no se ha disposeado
+      if (!_isDisposed) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -227,9 +305,10 @@ class BackupViewModel extends ChangeNotifier {
     String fileId,
     BackupType type,
   ) async {
+    if (_isDisposed) return null;
     _isLoading = true;
     _errorMessage = null;
-    notifyListeners();
+    if (!_isDisposed) notifyListeners();
 
     try {
       if (!_googleDriveService.isInitialized) {
@@ -239,21 +318,26 @@ class BackupViewModel extends ChangeNotifier {
       final data = await _googleDriveService.downloadBackup(fileId);
       return data;
     } catch (e) {
-      _errorMessage = 'Error al descargar backup: $e';
-      print('❌ Error: $_errorMessage');
+      if (!_isDisposed) {
+        _errorMessage = 'Error al descargar backup: $e';
+        print('❌ Error: $_errorMessage');
+      }
       return null;
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (!_isDisposed) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
   /// Eliminar un backup (Google Drive)
   Future<void> deleteBackup(String fileId, BackupType type) async {
+    if (_isDisposed) return;
     _isLoading = true;
     _errorMessage = null;
     _successMessage = null;
-    notifyListeners();
+    if (!_isDisposed) notifyListeners();
 
     try {
       if (!_googleDriveService.isInitialized) {
@@ -261,51 +345,70 @@ class BackupViewModel extends ChangeNotifier {
       }
 
       await _googleDriveService.deleteBackup(fileId);
-      _successMessage = 'Backup eliminado correctamente';
-
-      // Recargar lista de backups
-      await loadBackups(type: type);
+      if (!_isDisposed) {
+        _successMessage = 'Backup eliminado correctamente';
+        // Recargar lista de backups
+        await loadBackups(type: type);
+      }
     } catch (e) {
-      _errorMessage = 'Error al eliminar backup: $e';
-      print('❌ Error: $_errorMessage');
+      if (!_isDisposed) {
+        _errorMessage = 'Error al eliminar backup: $e';
+        print('❌ Error: $_errorMessage');
+      }
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (!_isDisposed) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
   /// Eliminar un backup del proyecto
   Future<void> deleteProjectBackup(String backupPath) async {
+    if (_isDisposed) return;
     _isLoading = true;
     _errorMessage = null;
     _successMessage = null;
-    notifyListeners();
+    if (!_isDisposed) notifyListeners();
 
     try {
       await _projectBackupService.deleteProjectBackup(backupPath);
-      _successMessage = 'Backup del proyecto eliminado correctamente';
-
-      // Recargar lista de backups
-      await loadBackups();
+      if (!_isDisposed) {
+        _successMessage = 'Backup del proyecto eliminado correctamente';
+        // Recargar lista de backups
+        await loadBackups();
+      }
     } catch (e) {
-      _errorMessage = 'Error al eliminar backup del proyecto: $e';
-      print('❌ Error: $_errorMessage');
+      if (!_isDisposed) {
+        _errorMessage = 'Error al eliminar backup del proyecto: $e';
+        print('❌ Error: $_errorMessage');
+      }
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (!_isDisposed) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
   /// Limpiar mensajes
   void clearMessages() {
+    if (_isDisposed) return;
     _errorMessage = null;
     _successMessage = null;
-    notifyListeners();
+    if (!_isDisposed) notifyListeners();
   }
 
   /// Seleccionar tipo de backup
   void selectType(BackupType? type) {
+    if (_isDisposed) return;
     _selectedType = type;
-    notifyListeners();
+    if (!_isDisposed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    super.dispose();
   }
 }

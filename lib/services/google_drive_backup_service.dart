@@ -5,6 +5,7 @@ import 'package:googleapis_auth/auth.dart' as auth;
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:path/path.dart' as path;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/mongo_service.dart';
 import '../utils/env_config.dart';
 import '../models/backup_info.dart';
@@ -22,9 +23,14 @@ class GoogleDriveBackupService {
   auth.AutoRefreshingAuthClient? _authClient;
   bool _isInitialized = false;
   String? _backupFolderId;
+  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+  static const String _refreshTokenKey = 'google_drive_refresh_token';
+  static const String _accessTokenKey = 'google_drive_access_token';
+  static const String _tokenExpiryKey = 'google_drive_token_expiry';
 
   /// Inicializar el servicio de Google Drive con OAuth 2.0
   /// NOTA: La primera vez abrirá el navegador para autenticación
+  /// Si hay un token guardado, lo reutilizará
   Future<void> initialize({Function(String)? onAuthUrl}) async {
     if (_isInitialized) return;
 
@@ -43,18 +49,28 @@ class GoogleDriveBackupService {
       final identifier = auth.ClientId(clientId, clientSecret);
       final scopes = [drive.DriveApi.driveFileScope];
 
-      // Para aplicaciones desktop, necesitamos usar un servidor HTTP local
-      // que reciba el código de autorización después de que el usuario autorice en el navegador
-      final authClient = await _authenticateWithLocalServer(
+      // Intentar cargar token guardado primero
+      auth.AutoRefreshingAuthClient? authClient = await _loadSavedCredentials(
         identifier,
         scopes,
-        onAuthUrl: onAuthUrl,
       );
 
+      // Si no hay token guardado o está expirado, autenticar de nuevo
       if (authClient == null) {
-        throw Exception(
-          'No se pudo autenticar con Google Drive. Verifica las credenciales OAuth.',
+        print('🔑 No hay token guardado, iniciando autenticación OAuth...');
+        authClient = await _authenticateWithLocalServer(
+          identifier,
+          scopes,
+          onAuthUrl: onAuthUrl,
         );
+
+        if (authClient == null) {
+          throw Exception(
+            'No se pudo autenticar con Google Drive. Verifica las credenciales OAuth.',
+          );
+        }
+      } else {
+        print('✅ Token de Google Drive restaurado desde almacenamiento seguro');
       }
 
       _authClient = authClient;
@@ -81,6 +97,85 @@ class GoogleDriveBackupService {
         '   3. Haber habilitado la API de Google Drive en Google Cloud Console',
       );
       rethrow;
+    }
+  }
+
+  /// Cargar credenciales guardadas desde secure storage
+  Future<auth.AutoRefreshingAuthClient?> _loadSavedCredentials(
+    auth.ClientId clientId,
+    List<String> scopes,
+  ) async {
+    try {
+      final refreshToken = await _secureStorage.read(key: _refreshTokenKey);
+      final accessToken = await _secureStorage.read(key: _accessTokenKey);
+      final expiryStr = await _secureStorage.read(key: _tokenExpiryKey);
+
+      if (refreshToken == null) {
+        return null; // No hay token guardado
+      }
+
+      // Si hay refresh token, intentar crear credenciales
+      DateTime? expiry;
+      if (expiryStr != null) {
+        try {
+          expiry = DateTime.parse(expiryStr);
+        } catch (e) {
+          print('⚠️ Error parseando fecha de expiración: $e');
+        }
+      }
+
+      // Si el access token está expirado o no existe, usar solo refresh token
+      auth.AccessCredentials credentials;
+      if (accessToken != null &&
+          expiry != null &&
+          expiry.isAfter(DateTime.now())) {
+        // Usar access token existente si aún no ha expirado
+        credentials = auth.AccessCredentials(
+          auth.AccessToken('Bearer', accessToken, expiry),
+          refreshToken,
+          scopes,
+        );
+      } else {
+        // Crear credenciales con solo refresh token (el cliente las refrescará)
+        credentials = auth.AccessCredentials(
+          auth.AccessToken(
+            'Bearer',
+            'dummy',
+            DateTime.now().subtract(Duration(days: 1)),
+          ),
+          refreshToken,
+          scopes,
+        );
+      }
+
+      final httpClient = http.Client();
+      final authClient = auth.autoRefreshingClient(
+        clientId,
+        credentials,
+        httpClient,
+      );
+
+      return authClient;
+    } catch (e) {
+      print('⚠️ Error cargando credenciales guardadas: $e');
+      return null;
+    }
+  }
+
+  /// Guardar credenciales en secure storage
+  Future<void> _saveCredentials(auth.AccessCredentials credentials) async {
+    try {
+      if (credentials.refreshToken != null) {
+        await _secureStorage.write(
+          key: _refreshTokenKey,
+          value: credentials.refreshToken,
+        );
+      }
+      // Guardar información del access token (aunque se refrescará automáticamente)
+      // Solo guardamos el refresh token que es lo realmente importante
+      print('💾 Credenciales de Google Drive guardadas (refresh token)');
+    } catch (e) {
+      print('⚠️ Error guardando credenciales: $e');
     }
   }
 
@@ -218,6 +313,9 @@ class GoogleDriveBackupService {
         credentials,
         httpClient,
       );
+
+      // Guardar credenciales para uso futuro
+      await _saveCredentials(credentials);
 
       return authClient;
     } catch (e) {
