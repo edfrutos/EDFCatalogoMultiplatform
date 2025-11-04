@@ -10,6 +10,7 @@ class Catalog extends Equatable {
   final List<String> columns;
   final List<CatalogRow> rows;
   final Map<String, dynamic>? legacyRows;
+  final String? thumbnailUrl; // URL de la imagen del catálogo
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -21,6 +22,7 @@ class Catalog extends Equatable {
     required this.columns,
     this.rows = const [],
     this.legacyRows,
+    this.thumbnailUrl,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -197,6 +199,12 @@ class Catalog extends Equatable {
         // Si es List, lo ignoramos (no es el formato esperado para legacyRows)
       }
 
+      // Parsear thumbnailUrl (Miniatura en MongoDB)
+      final thumbnailUrl =
+          json['Miniatura']?.toString() ??
+          json['Thumbnail']?.toString() ??
+          json['thumbnailUrl']?.toString();
+
       return Catalog(
         id: idValue,
         name: name.toString(),
@@ -205,6 +213,7 @@ class Catalog extends Equatable {
         columns: columns,
         rows: rows,
         legacyRows: legacyRowsValue,
+        thumbnailUrl: thumbnailUrl?.isNotEmpty == true ? thumbnailUrl : null,
         createdAt: createdAt,
         updatedAt: updatedAt,
       );
@@ -230,6 +239,8 @@ class Catalog extends Equatable {
       'columns': columns,
       'rows': rows.map((row) => row.toJson()).toList(),
       if (legacyRows != null) 'legacyRows': legacyRows,
+      if (thumbnailUrl != null)
+        'Miniatura': thumbnailUrl, // MongoDB usa mayúsculas
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
     };
@@ -244,6 +255,7 @@ class Catalog extends Equatable {
     List<String>? columns,
     List<CatalogRow>? rows,
     Map<String, dynamic>? legacyRows,
+    String? thumbnailUrl,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -255,9 +267,30 @@ class Catalog extends Equatable {
       columns: columns ?? this.columns,
       rows: rows ?? this.rows,
       legacyRows: legacyRows ?? this.legacyRows,
+      thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
+  }
+
+  /// Obtener la primera imagen de las filas del catálogo
+  String? getFirstImageFromRows() {
+    for (final row in rows) {
+      // Buscar en imagen singular
+      if (row.files.image != null && row.files.image!.isNotEmpty) {
+        return row.files.image;
+      }
+      // Buscar en lista de imágenes
+      if (row.files.images.isNotEmpty) {
+        return row.files.images.first;
+      }
+    }
+    return null;
+  }
+
+  /// Obtener la URL de la imagen a mostrar (thumbnailUrl o primera de filas)
+  String? getDisplayImageUrl() {
+    return thumbnailUrl ?? getFirstImageFromRows();
   }
 
   @override
@@ -267,6 +300,7 @@ class Catalog extends Equatable {
     description,
     userId,
     columns,
+    thumbnailUrl,
     rows,
     legacyRows,
     createdAt,

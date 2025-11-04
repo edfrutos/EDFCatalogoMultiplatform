@@ -593,11 +593,76 @@ class _CatalogsViewState extends State<CatalogsView> {
 
                                       final catalog = paginatedCatalogs[index];
 
+                                      final displayImageUrl = catalog
+                                          .getDisplayImageUrl();
+
                                       return Card(
                                         margin: const EdgeInsets.only(
                                           bottom: 8,
                                         ),
                                         child: ListTile(
+                                          leading: displayImageUrl != null
+                                              ? ClipRRect(
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                  child: CachedNetworkImage(
+                                                    imageUrl: displayImageUrl,
+                                                    width: 60,
+                                                    height: 60,
+                                                    fit: BoxFit.cover,
+                                                    placeholder:
+                                                        (
+                                                          context,
+                                                          url,
+                                                        ) => Container(
+                                                          width: 60,
+                                                          height: 60,
+                                                          color: Colors
+                                                              .grey
+                                                              .shade200,
+                                                          child: const Center(
+                                                            child:
+                                                                CircularProgressIndicator(
+                                                                  strokeWidth:
+                                                                      2,
+                                                                ),
+                                                          ),
+                                                        ),
+                                                    errorWidget:
+                                                        (
+                                                          context,
+                                                          url,
+                                                          error,
+                                                        ) => Container(
+                                                          width: 60,
+                                                          height: 60,
+                                                          color: Colors
+                                                              .grey
+                                                              .shade200,
+                                                          child: const Icon(
+                                                            Icons
+                                                                .image_not_supported,
+                                                            size: 30,
+                                                          ),
+                                                        ),
+                                                  ),
+                                                )
+                                              : Container(
+                                                  width: 60,
+                                                  height: 60,
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.grey.shade200,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          8,
+                                                        ),
+                                                  ),
+                                                  child: const Icon(
+                                                    Icons.image,
+                                                    size: 30,
+                                                    color: Colors.grey,
+                                                  ),
+                                                ),
                                           title: Text(
                                             catalog.name,
                                             style: const TextStyle(
@@ -709,12 +774,13 @@ class _CatalogsViewState extends State<CatalogsView> {
       context: context,
       builder: (context) => EditCatalogDialog(
         catalog: catalog,
-        onSave: (name, description, columns) async {
+        onSave: (name, description, columns, thumbnailUrl) async {
           final success = await catalogViewModel.updateCatalog(
             catalog: catalog,
             name: name,
             description: description,
             columns: columns,
+            thumbnailUrl: thumbnailUrl,
           );
 
           if (context.mounted) {

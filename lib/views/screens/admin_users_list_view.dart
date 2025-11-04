@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../models/user.dart';
 import '../../viewmodels/admin_viewmodel.dart';
 import 'admin_user_detail_view.dart';
@@ -330,17 +331,22 @@ class _UserListItem extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           child: Row(
             children: [
-              // Avatar
+              // Avatar con foto de perfil si existe
               CircleAvatar(
-                backgroundColor: Colors.blue.shade100,
                 radius: 20,
-                child: Text(
-                  user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
-                  style: TextStyle(
-                    color: Colors.blue.shade700,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                backgroundColor: Colors.blue.shade100,
+                backgroundImage: user.profileImageUrl != null
+                    ? CachedNetworkImageProvider(user.profileImageUrl!)
+                    : null,
+                child: user.profileImageUrl == null
+                    ? Text(
+                        user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
+                        style: TextStyle(
+                          color: Colors.blue.shade700,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      )
+                    : null,
               ),
               const SizedBox(width: 12),
               // User Info

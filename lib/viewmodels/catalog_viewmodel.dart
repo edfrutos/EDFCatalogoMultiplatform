@@ -158,6 +158,7 @@ class CatalogViewModel extends ChangeNotifier {
     required String name,
     required String description,
     required List<String> columns,
+    String? thumbnailUrl,
   }) async {
     _isLoading = true;
     _error = null;
@@ -172,6 +173,7 @@ class CatalogViewModel extends ChangeNotifier {
         columns: columns,
         rows: catalog.rows,
         legacyRows: catalog.legacyRows,
+        thumbnailUrl: thumbnailUrl,
         createdAt: catalog.createdAt,
         updatedAt: DateTime.now(),
       );

@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart' as file_picker;
+import 'package:cached_network_image/cached_network_image.dart';
+import 'dart:io';
 import '../../models/user.dart';
 import '../../viewmodels/admin_viewmodel.dart';
+import '../../services/s3_service.dart';
+import '../../models/file_type.dart';
 
 class AdminUserDetailView extends StatefulWidget {
   final User user;
 
-  const AdminUserDetailView({
-    super.key,
-    required this.user,
-  });
+  const AdminUserDetailView({super.key, required this.user});
 
   @override
   State<AdminUserDetailView> createState() => _AdminUserDetailViewState();
@@ -29,6 +31,11 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
   late bool _isActive;
   bool _isEditing = false;
 
+  // Foto de perfil
+  File? _selectedImageFile;
+  bool _isUploadingImage = false;
+  bool _shouldRemoveImage = false;
+
   @override
   void initState() {
     super.initState();
@@ -39,11 +46,15 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
     _emailController = TextEditingController(text: widget.user.email);
     _usernameController = TextEditingController(text: widget.user.username);
     _nameController = TextEditingController(text: widget.user.name);
-    _fullNameController = TextEditingController(text: widget.user.fullName ?? '');
+    _fullNameController = TextEditingController(
+      text: widget.user.fullName ?? '',
+    );
     _phoneController = TextEditingController(text: widget.user.phone ?? '');
     _companyController = TextEditingController(text: widget.user.company ?? '');
     _addressController = TextEditingController(text: widget.user.address ?? '');
-    _occupationController = TextEditingController(text: widget.user.occupation ?? '');
+    _occupationController = TextEditingController(
+      text: widget.user.occupation ?? '',
+    );
     _isAdmin = widget.user.isAdmin;
     _isActive = widget.user.isActive ?? true;
   }
@@ -71,7 +82,9 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
         _addressController.text != (widget.user.address ?? '') ||
         _occupationController.text != (widget.user.occupation ?? '') ||
         _isAdmin != widget.user.isAdmin ||
-        _isActive != (widget.user.isActive ?? true);
+        _isActive != (widget.user.isActive ?? true) ||
+        _selectedImageFile != null ||
+        _shouldRemoveImage;
   }
 
   Future<void> _handleSave() async {
@@ -83,6 +96,50 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
     }
 
     final viewModel = context.read<AdminViewModel>();
+
+    String? profileImageUrl = widget.user.profileImageUrl;
+
+    // Si se debe eliminar la imagen, establecer como null
+    if (_shouldRemoveImage && _selectedImageFile == null) {
+      profileImageUrl = null;
+    }
+    // Subir imagen si hay una nueva seleccionada
+    else if (_selectedImageFile != null) {
+      setState(() {
+        _isUploadingImage = true;
+      });
+
+      try {
+        final s3Service = S3Service();
+        profileImageUrl = await s3Service.uploadFile(
+          filePath: _selectedImageFile!.path,
+          userId: widget.user.id,
+          catalogId:
+              'profile', // Usar 'profile' como catalogId para fotos de perfil
+          fileType: FileType.image,
+        );
+
+        print('✅ Imagen de perfil subida: $profileImageUrl');
+      } catch (e) {
+        setState(() {
+          _isUploadingImage = false;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error al subir imagen: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      setState(() {
+        _isUploadingImage = false;
+      });
+    }
+
     final updatedUser = User(
       id: widget.user.id,
       email: _emailController.text.trim(),
@@ -105,14 +162,62 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
           ? null
           : _occupationController.text.trim(),
       isActive: _isActive,
-      profileImageUrl: widget.user.profileImageUrl,
+      profileImageUrl: profileImageUrl,
       createdAt: widget.user.createdAt,
       lastLoginAt: widget.user.lastLoginAt,
     );
 
     await viewModel.updateUser(updatedUser);
+
+    // Limpiar archivo seleccionado y flags después de guardar
     setState(() {
+      _selectedImageFile = null;
+      _shouldRemoveImage = false;
       _isEditing = false;
+    });
+  }
+
+  /// Seleccionar foto de perfil usando file_picker
+  Future<void> _selectProfileImage() async {
+    try {
+      file_picker.FilePickerResult? result = await file_picker
+          .FilePicker
+          .platform
+          .pickFiles(
+            type: file_picker.FileType.image,
+            allowMultiple: false,
+            withData: false,
+            withReadStream: false,
+          );
+
+      if (result != null && result.files.single.path != null) {
+        final filePath = result.files.single.path!;
+        setState(() {
+          _selectedImageFile = File(filePath);
+          _shouldRemoveImage = false; // Si selecciona nueva, no eliminar
+        });
+        print('✅ Imagen seleccionada: $filePath');
+      } else {
+        print('⚠️ No se seleccionó ninguna imagen');
+      }
+    } catch (e) {
+      print('❌ Error al seleccionar imagen: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al seleccionar imagen: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Eliminar foto de perfil
+  void _removeProfileImage() {
+    setState(() {
+      _selectedImageFile = null;
+      _shouldRemoveImage = true; // Marcar que se debe eliminar la imagen actual
     });
   }
 
@@ -126,7 +231,10 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
             const Text('Detalles del Usuario'),
             Text(
               widget.user.email,
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.normal,
+              ),
             ),
           ],
         ),
@@ -137,17 +245,21 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
                 _initializeControllers();
                 setState(() {
                   _isEditing = false;
+                  _selectedImageFile = null;
+                  _shouldRemoveImage = false;
                 });
               },
               child: const Text('Cancelar'),
             ),
           IconButton(
             icon: Icon(_isEditing ? Icons.save : Icons.edit),
-            onPressed: _isEditing ? _handleSave : () {
-              setState(() {
-                _isEditing = true;
-              });
-            },
+            onPressed: _isEditing
+                ? _handleSave
+                : () {
+                    setState(() {
+                      _isEditing = true;
+                    });
+                  },
           ),
         ],
       ),
@@ -155,15 +267,122 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // Avatar
-            CircleAvatar(
-              radius: 30,
-              backgroundColor: Colors.blue.shade100,
-              child: Text(
-                widget.user.name.isNotEmpty
-                    ? widget.user.name[0].toUpperCase()
-                    : 'U',
-                style: const TextStyle(fontSize: 30, fontWeight: FontWeight.bold),
+            // Avatar con foto de perfil
+            Center(
+              child: Column(
+                children: [
+                  Stack(
+                    children: [
+                      // Imagen de perfil o placeholder
+                      CircleAvatar(
+                        radius: 50,
+                        backgroundColor: Colors.blue.shade100,
+                        backgroundImage: _selectedImageFile != null
+                            ? FileImage(_selectedImageFile!)
+                            : widget.user.profileImageUrl != null
+                            ? CachedNetworkImageProvider(
+                                widget.user.profileImageUrl!,
+                              )
+                            : null,
+                        child:
+                            _selectedImageFile == null &&
+                                widget.user.profileImageUrl == null
+                            ? Text(
+                                widget.user.name.isNotEmpty
+                                    ? widget.user.name[0].toUpperCase()
+                                    : 'U',
+                                style: const TextStyle(
+                                  fontSize: 40,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              )
+                            : null,
+                      ),
+                      // Botón de editar foto (solo en modo edición)
+                      if (_isEditing)
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.blue,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 3),
+                            ),
+                            child: IconButton(
+                              icon: const Icon(
+                                Icons.camera_alt,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                              onPressed: _isUploadingImage
+                                  ? null
+                                  : _selectProfileImage,
+                              tooltip: 'Cambiar foto',
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  // Botones de acción (solo en modo edición)
+                  if (_isEditing) ...[
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: _isUploadingImage
+                              ? null
+                              : _selectProfileImage,
+                          icon: const Icon(Icons.photo_library, size: 18),
+                          label: const Text('Seleccionar Foto'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                          ),
+                        ),
+                        if ((_selectedImageFile != null ||
+                                widget.user.profileImageUrl != null) &&
+                            !_isUploadingImage) ...[
+                          const SizedBox(width: 12),
+                          OutlinedButton.icon(
+                            onPressed: _removeProfileImage,
+                            icon: const Icon(Icons.delete, size: 18),
+                            label: const Text('Eliminar'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.red,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    // Indicador de carga de imagen
+                    if (_isUploadingImage) ...[
+                      const SizedBox(height: 12),
+                      const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'Subiendo imagen...',
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ],
               ),
             ),
             const SizedBox(height: 24),
@@ -213,33 +432,84 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
               _buildReadOnlySection('Rol', Icons.admin_panel_settings, [
                 Chip(
                   label: Text(_isAdmin ? 'Administrador' : 'Usuario Normal'),
-                  avatar: Icon(_isAdmin ? Icons.admin_panel_settings : Icons.person),
+                  avatar: Icon(
+                    _isAdmin ? Icons.admin_panel_settings : Icons.person,
+                  ),
                 ),
               ]),
               const SizedBox(height: 16),
               _buildReadOnlySection('Estado', Icons.circle, [
                 Chip(
                   label: Text(_isActive ? 'Activo' : 'Inactivo'),
-                  avatar: Icon(_isActive ? Icons.check_circle : Icons.circle_notifications),
+                  avatar: Icon(
+                    _isActive ? Icons.check_circle : Icons.circle_notifications,
+                  ),
                 ),
               ]),
             ],
             const SizedBox(height: 16),
-            _buildTextField('Email', Icons.email, _emailController, enabled: _isEditing),
+            _buildTextField(
+              'Email',
+              Icons.email,
+              _emailController,
+              enabled: _isEditing,
+            ),
             const SizedBox(height: 16),
-            _buildTextField('Usuario', Icons.person, _usernameController, enabled: _isEditing),
+            _buildTextField(
+              'Usuario',
+              Icons.person,
+              _usernameController,
+              enabled: _isEditing,
+            ),
             const SizedBox(height: 16),
-            _buildTextField('Nombre', Icons.badge, _nameController, enabled: _isEditing),
+            _buildTextField(
+              'Nombre',
+              Icons.badge,
+              _nameController,
+              enabled: _isEditing,
+            ),
             const SizedBox(height: 16),
-            _buildTextField('Nombre Completo', Icons.account_box, _fullNameController, enabled: _isEditing, optional: true),
+            _buildTextField(
+              'Nombre Completo',
+              Icons.account_box,
+              _fullNameController,
+              enabled: _isEditing,
+              optional: true,
+            ),
             const SizedBox(height: 16),
-            _buildTextField('Teléfono', Icons.phone, _phoneController, enabled: _isEditing, optional: true, keyboardType: TextInputType.phone),
+            _buildTextField(
+              'Teléfono',
+              Icons.phone,
+              _phoneController,
+              enabled: _isEditing,
+              optional: true,
+              keyboardType: TextInputType.phone,
+            ),
             const SizedBox(height: 16),
-            _buildTextField('Empresa', Icons.business, _companyController, enabled: _isEditing, optional: true),
+            _buildTextField(
+              'Empresa',
+              Icons.business,
+              _companyController,
+              enabled: _isEditing,
+              optional: true,
+            ),
             const SizedBox(height: 16),
-            _buildTextField('Ocupación', Icons.work, _occupationController, enabled: _isEditing, optional: true),
+            _buildTextField(
+              'Ocupación',
+              Icons.work,
+              _occupationController,
+              enabled: _isEditing,
+              optional: true,
+            ),
             const SizedBox(height: 16),
-            _buildTextField('Dirección', Icons.location_on, _addressController, enabled: _isEditing, optional: true, maxLines: 3),
+            _buildTextField(
+              'Dirección',
+              Icons.location_on,
+              _addressController,
+              enabled: _isEditing,
+              optional: true,
+              maxLines: 3,
+            ),
           ],
         ),
       ),
@@ -268,7 +538,11 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
     );
   }
 
-  Widget _buildEditableSection(String title, IconData icon, List<Widget> children) {
+  Widget _buildEditableSection(
+    String title,
+    IconData icon,
+    List<Widget> children,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -298,7 +572,11 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
     );
   }
 
-  Widget _buildReadOnlySection(String title, IconData icon, List<Widget> children) {
+  Widget _buildReadOnlySection(
+    String title,
+    IconData icon,
+    List<Widget> children,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -328,4 +606,3 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
     );
   }
 }
-
