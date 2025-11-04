@@ -836,16 +836,53 @@ class MongoService {
   Future<Catalog> createCatalogFromMap(Map<String, dynamic> catalogData) async {
     try {
       final collection = await getCatalogsCollection();
+
+      // Asegurar que el documento tenga un _id si no lo tiene
+      if (!catalogData.containsKey('_id')) {
+        catalogData['_id'] = ObjectId();
+      }
+
       final result = await collection.insertOne(catalogData);
 
       if (result.isSuccess) {
-        final createdCatalog = await getCatalogById(result.id.toString());
-        if (createdCatalog == null) {
-          throw Exception('Error al recuperar catálogo creado');
+        // Construir el Catalog directamente desde los datos insertados
+        // en lugar de intentar recuperar el catálogo de la base de datos
+        // (evita problemas de timing y formato de ID)
+
+        // El ID ya está en catalogData (lo añadimos antes si no existía)
+        // MongoDB puede haberlo modificado, así que usamos el ID del resultado
+        final insertedId = result.id;
+
+        // Asegurar que el ID esté en el formato correcto
+        final catalogWithId = Map<String, dynamic>.from(catalogData);
+        if (insertedId is ObjectId) {
+          // Mantener el ObjectId para que Catalog.fromJson lo maneje correctamente
+          catalogWithId['_id'] = insertedId;
+        } else {
+          // Si no es ObjectId, convertir a string
+          catalogWithId['_id'] = insertedId.toString();
         }
-        return createdCatalog;
+
+        try {
+          return Catalog.fromJson(catalogWithId);
+        } catch (e) {
+          // Si falla al parsear, intentar recuperar de la base de datos como fallback
+          print(
+            '⚠️ Error parseando catálogo desde datos, intentando recuperar de BD: $e',
+          );
+          final idString = insertedId is ObjectId
+              ? insertedId.oid
+              : insertedId.toString();
+          final createdCatalog = await getCatalogById(idString);
+          if (createdCatalog == null) {
+            throw Exception(
+              'Error al crear y recuperar catálogo: no se pudo parsear ni recuperar',
+            );
+          }
+          return createdCatalog;
+        }
       } else {
-        throw Exception('Error al crear catálogo');
+        throw Exception('Error al crear catálogo: inserción falló');
       }
     } catch (e) {
       print('❌ Error creando catálogo: $e');

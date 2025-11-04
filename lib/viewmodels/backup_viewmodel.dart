@@ -1,7 +1,10 @@
 import 'package:flutter/foundation.dart';
+import 'package:mongo_dart/mongo_dart.dart' as mongo;
 import '../services/google_drive_backup_service.dart';
 import '../services/project_backup_service.dart';
+import '../services/mongo_service.dart';
 import '../models/backup_info.dart';
+import '../models/catalog.dart';
 
 /// ViewModel para gestionar backups (Google Drive, Local y Proyecto)
 class BackupViewModel extends ChangeNotifier {
@@ -37,12 +40,16 @@ class BackupViewModel extends ChangeNotifier {
     if (!_isDisposed) notifyListeners();
 
     try {
-      // Solo cargar backups de Google Drive si se solicita explícitamente
-      // (no inicializar Google Drive si solo queremos backups del proyecto)
-      if (type == BackupType.catalogs ||
-          (type == null && !loadProjectBackups)) {
+      print(
+        '📋 Cargando backups - type: $type, loadProjectBackups: $loadProjectBackups',
+      );
+
+      // Cargar backups de Google Drive según el tipo
+      if (type == BackupType.catalogs) {
+        print('📂 Cargando backups de catálogos desde Google Drive...');
         try {
           if (!_googleDriveService.isInitialized) {
+            print('🔧 Inicializando Google Drive Service...');
             await _googleDriveService.initialize(
               onAuthUrl: (url) {
                 print('🔗 Abriendo URL de autenticación: $url');
@@ -50,15 +57,17 @@ class BackupViewModel extends ChangeNotifier {
             );
           }
           _catalogBackups = await _googleDriveService.listCatalogBackups();
-        } catch (e) {
-          print('⚠️ Error cargando backups de Google Drive: $e');
-          // Continuar con backups locales
+          print('✅ Backups de catálogos cargados: ${_catalogBackups.length}');
+        } catch (e, stackTrace) {
+          print('❌ Error cargando backups de catálogos desde Google Drive: $e');
+          print('   Stack trace: $stackTrace');
+          _catalogBackups = [];
         }
-      }
-
-      if (type == BackupType.users || (type == null && !loadProjectBackups)) {
+      } else if (type == BackupType.users) {
+        print('👥 Cargando backups de usuarios desde Google Drive...');
         try {
           if (!_googleDriveService.isInitialized) {
+            print('🔧 Inicializando Google Drive Service...');
             await _googleDriveService.initialize(
               onAuthUrl: (url) {
                 print('🔗 Abriendo URL de autenticación: $url');
@@ -66,15 +75,20 @@ class BackupViewModel extends ChangeNotifier {
             );
           }
           _userBackups = await _googleDriveService.listUserBackups();
-        } catch (e) {
-          print('⚠️ Error cargando backups de Google Drive: $e');
+          print('✅ Backups de usuarios cargados: ${_userBackups.length}');
+        } catch (e, stackTrace) {
+          print('❌ Error cargando backups de usuarios desde Google Drive: $e');
+          print('   Stack trace: $stackTrace');
+          _userBackups = [];
         }
       }
 
-      // Cargar backups del proyecto solo si se solicita
+      // Cargar backups del proyecto SOLO si se solicita explícitamente
       if (loadProjectBackups) {
+        print('📁 Cargando backups del proyecto desde directorio local...');
         try {
           _projectBackups = await _projectBackupService.listProjectBackups();
+          print('✅ Backups del proyecto cargados: ${_projectBackups.length}');
         } catch (e) {
           // Si falla por permisos al listar backups, no es crítico - solo mostrar warning
           if (e.toString().contains('Operation not permitted') ||
@@ -85,6 +99,10 @@ class BackupViewModel extends ChangeNotifier {
             rethrow;
           }
         }
+      } else {
+        print(
+          '⏭️  Omitiendo carga de backups del proyecto (loadProjectBackups=false)',
+        );
       }
     } catch (e) {
       _errorMessage = 'Error al cargar backups: $e';
@@ -355,6 +373,310 @@ class BackupViewModel extends ChangeNotifier {
         _errorMessage = 'Error al eliminar backup: $e';
         print('❌ Error: $_errorMessage');
       }
+    } finally {
+      if (!_isDisposed) {
+        _isLoading = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  /// Restaurar backup de catálogos
+  Future<void> restoreCatalogBackup(String fileId) async {
+    if (_isDisposed) return;
+    _isLoading = true;
+    _errorMessage = null;
+    _successMessage = null;
+    if (!_isDisposed) notifyListeners();
+
+    try {
+      if (!_googleDriveService.isInitialized) {
+        await _googleDriveService.initialize(
+          onAuthUrl: (url) {
+            print('🔗 Abriendo URL de autenticación: $url');
+          },
+        );
+      }
+
+      // Descargar backup
+      final backupData = await _googleDriveService.downloadBackup(fileId);
+
+      // Validar estructura del backup
+      if (backupData['catalogs'] == null ||
+          backupData['catalogs'] is! List<dynamic>) {
+        throw Exception(
+          'Formato de backup inválido: no se encontraron catálogos',
+        );
+      }
+
+      final catalogsJson = backupData['catalogs'] as List<dynamic>;
+      final mongoService = MongoService();
+
+      // Restaurar cada catálogo
+      int restored = 0;
+      int updated = 0;
+      int skipped = 0;
+      int errors = 0;
+
+      for (final catalogJson in catalogsJson) {
+        try {
+          if (catalogJson is! Map<String, dynamic>) {
+            print('⚠️ Catálogo inválido en backup, saltando...');
+            skipped++;
+            continue;
+          }
+
+          final catalogData = Map<String, dynamic>.from(catalogJson);
+
+          // Obtener información del catálogo del backup
+          final catalogName = catalogData['Name'] ?? catalogData['name'] ?? '';
+          final backupUserId =
+              catalogData['Owner'] ??
+              catalogData['CreatedBy'] ??
+              catalogData['userId'] ??
+              '';
+          final backupUpdatedAtStr =
+              catalogData['UpdatedAt'] ??
+              catalogData['updatedAt'] ??
+              catalogData['CreatedAt'] ??
+              catalogData['createdAt'];
+
+          DateTime? backupUpdatedAt;
+          if (backupUpdatedAtStr != null) {
+            try {
+              backupUpdatedAt = DateTime.parse(backupUpdatedAtStr.toString());
+            } catch (e) {
+              print('⚠️ Error parseando fecha del backup: $e');
+            }
+          }
+
+          // Buscar catálogo existente por nombre y userId
+          Catalog? existingCatalog;
+          if (catalogName.isNotEmpty && backupUserId.toString().isNotEmpty) {
+            try {
+              final allCatalogs = await mongoService.getCatalogs(
+                backupUserId.toString(),
+                isAdmin: true, // Necesitamos acceso admin para buscar todos
+              );
+
+              // Buscar por nombre exacto y mismo propietario
+              existingCatalog = allCatalogs.firstWhere(
+                (c) =>
+                    c.name == catalogName &&
+                    (c.userId == backupUserId.toString() ||
+                        c.userId.contains(backupUserId.toString())),
+                orElse: () => throw StateError('No encontrado'),
+              );
+            } catch (e) {
+              // No existe, continuar para crear nuevo
+              existingCatalog = null;
+            }
+          }
+
+          if (existingCatalog != null) {
+            // Comparar timestamps: si el backup es más reciente, actualizar
+            if (backupUpdatedAt != null &&
+                backupUpdatedAt.isAfter(existingCatalog.updatedAt)) {
+              print(
+                '🔄 Catálogo existente encontrado (${existingCatalog.name}), '
+                'backup es más reciente. Actualizando...',
+              );
+
+              // Construir el catálogo desde el backup
+              final backupCatalog = Catalog.fromJson(catalogData);
+
+              // Actualizar el catálogo existente
+              final updates = <String, dynamic>{
+                'Name': backupCatalog.name,
+                'Description': backupCatalog.description,
+                'Headers': backupCatalog.columns,
+                'Rows': backupCatalog.rows.map((row) => row.toJson()).toList(),
+                'UpdatedAt': backupUpdatedAt.toIso8601String(),
+              };
+
+              await mongoService.updateCatalog(existingCatalog.id, updates);
+              updated++;
+              print('✅ Catálogo actualizado: ${catalogName}');
+            } else {
+              print(
+                '⏭️  Catálogo existente (${existingCatalog.name}) es más reciente o igual. '
+                'Manteniendo versión existente.',
+              );
+              skipped++;
+            }
+          } else {
+            // No existe, crear nuevo catálogo
+            // Limpiar el ID del catálogo para que MongoDB genere uno nuevo
+            catalogData.remove('_id');
+            catalogData.remove('id');
+
+            // Mantener timestamps del backup si están disponibles
+            if (backupUpdatedAt != null) {
+              catalogData['UpdatedAt'] = backupUpdatedAt.toIso8601String();
+            } else {
+              final now = DateTime.now();
+              catalogData['UpdatedAt'] = now.toIso8601String();
+            }
+
+            if (catalogData['CreatedAt'] == null) {
+              final now = DateTime.now();
+              catalogData['CreatedAt'] = now.toIso8601String();
+            }
+
+            // Crear catálogo en MongoDB
+            await mongoService.createCatalogFromMap(catalogData);
+            restored++;
+            print('✅ Catálogo restaurado (nuevo): ${catalogName}');
+          }
+        } catch (e) {
+          print('❌ Error restaurando catálogo: $e');
+          errors++;
+        }
+      }
+
+      _successMessage =
+          '✅ Backup restaurado correctamente\n'
+          'Catálogos nuevos: $restored\n'
+          'Catálogos actualizados: $updated\n'
+          'Omitidos: $skipped\n'
+          'Errores: $errors';
+
+      print(
+        '✅ Restauración completada: $restored nuevos, $updated actualizados, $skipped omitidos, $errors errores',
+      );
+    } catch (e) {
+      _errorMessage = 'Error al restaurar backup de catálogos: $e';
+      print('❌ Error: $_errorMessage');
+    } finally {
+      if (!_isDisposed) {
+        _isLoading = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  /// Restaurar backup de usuarios
+  Future<void> restoreUserBackup(String fileId) async {
+    if (_isDisposed) return;
+    _isLoading = true;
+    _errorMessage = null;
+    _successMessage = null;
+    if (!_isDisposed) notifyListeners();
+
+    try {
+      if (!_googleDriveService.isInitialized) {
+        await _googleDriveService.initialize(
+          onAuthUrl: (url) {
+            print('🔗 Abriendo URL de autenticación: $url');
+          },
+        );
+      }
+
+      // Descargar backup
+      final backupData = await _googleDriveService.downloadBackup(fileId);
+
+      // Validar estructura del backup
+      if (backupData['users'] == null ||
+          backupData['users'] is! List<dynamic>) {
+        throw Exception(
+          'Formato de backup inválido: no se encontraron usuarios',
+        );
+      }
+
+      final usersJson = backupData['users'] as List<dynamic>;
+      final mongoService = MongoService();
+
+      // Restaurar cada usuario
+      int restored = 0;
+      int skipped = 0;
+      int errors = 0;
+
+      for (final userJson in usersJson) {
+        try {
+          if (userJson is! Map<String, dynamic>) {
+            print('⚠️ Usuario inválido en backup, saltando...');
+            skipped++;
+            continue;
+          }
+
+          // Verificar si el usuario ya existe por email
+          final email = userJson['Email'] ?? userJson['email'];
+          if (email == null || email.toString().isEmpty) {
+            print('⚠️ Usuario sin email, saltando...');
+            skipped++;
+            continue;
+          }
+
+          final existingUser = await mongoService.getUserByEmail(
+            email.toString(),
+          );
+          if (existingUser != null) {
+            print('⚠️ Usuario ya existe: $email, saltando...');
+            skipped++;
+            continue;
+          }
+
+          // Limpiar el ID del usuario para que MongoDB genere uno nuevo
+          final userData = Map<String, dynamic>.from(userJson);
+          userData.remove('_id');
+          userData.remove('id');
+
+          // Validar campos requeridos
+          final username = userData['Username'] ?? userData['username'] ?? '';
+          final name = userData['Name'] ?? userData['name'] ?? '';
+          final password = userData['Password'] ?? userData['password'] ?? '';
+
+          if (username.toString().isEmpty || password.toString().isEmpty) {
+            print('⚠️ Usuario sin username o password, saltando...');
+            skipped++;
+            continue;
+          }
+
+          // Crear usuario en MongoDB (usando createUser que hace el hash de la contraseña)
+          // Si el backup tiene passwordHash, necesitamos crear el usuario directamente
+          if (userData.containsKey('Password') ||
+              userData.containsKey('passwordHash')) {
+            // Si tiene hash, usar inserción directa
+            final collection = await mongoService.getUsersCollection();
+            final userDoc = {
+              '_id': mongo.ObjectId().toString(),
+              'Email': email.toString(),
+              'Username': username.toString(),
+              'Name': name.toString(),
+              'Password': password.toString(), // Ya viene hasheado del backup
+              'Role': userData['Role'] ?? userData['role'] ?? 'user',
+              'IsActive': userData['IsActive'] ?? userData['isActive'] ?? true,
+              'CreatedAt': DateTime.now().toIso8601String(),
+            };
+            await collection.insertOne(userDoc);
+          } else {
+            // Si no tiene hash, crear usuario nuevo (generará nueva contraseña)
+            // En este caso, no podemos restaurar usuarios sin contraseña
+            print('⚠️ Usuario sin contraseña en backup, saltando...');
+            skipped++;
+            continue;
+          }
+
+          restored++;
+          print('✅ Usuario restaurado: $email');
+        } catch (e) {
+          print('❌ Error restaurando usuario: $e');
+          errors++;
+        }
+      }
+
+      _successMessage =
+          '✅ Backup restaurado correctamente\n'
+          'Usuarios restaurados: $restored\n'
+          'Omitidos: $skipped\n'
+          'Errores: $errors';
+
+      print(
+        '✅ Restauración completada: $restored restaurados, $skipped omitidos, $errors errores',
+      );
+    } catch (e) {
+      _errorMessage = 'Error al restaurar backup de usuarios: $e';
+      print('❌ Error: $_errorMessage');
     } finally {
       if (!_isDisposed) {
         _isLoading = false;

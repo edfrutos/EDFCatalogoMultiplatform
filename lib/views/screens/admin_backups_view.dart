@@ -21,14 +21,55 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    // Escuchar cambios de pestaña para cargar backups automáticamente
+    _tabController.addListener(_handleTabChange);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Cargar solo backups del proyecto inicialmente (sin inicializar Google Drive)
-      context.read<BackupViewModel>().loadBackups(loadProjectBackups: true);
+      // Cargar backups según la pestaña inicial (índice 0 = Catálogos)
+      final viewModel = context.read<BackupViewModel>();
+      print(
+        '🎯 Inicializando vista de backups - pestaña inicial: ${_tabController.index}',
+      );
+      _loadBackupsForTab(_tabController.index, viewModel);
     });
+  }
+
+  void _handleTabChange() {
+    if (!_tabController.indexIsChanging) {
+      final viewModel = context.read<BackupViewModel>();
+      print(
+        '🔄 Cambio de pestaña detectado - nueva pestaña: ${_tabController.index}',
+      );
+      _loadBackupsForTab(_tabController.index, viewModel);
+    }
+  }
+
+  void _loadBackupsForTab(int tabIndex, BackupViewModel viewModel) {
+    // Cargar backups según la pestaña seleccionada
+    switch (tabIndex) {
+      case 0: // Backups de Catálogos
+        print('📂 Cargando backups de catálogos desde Google Drive');
+        viewModel.loadBackups(
+          type: BackupType.catalogs,
+          loadProjectBackups: false,
+        );
+        break;
+      case 1: // Backups de Usuarios
+        print('👥 Cargando backups de usuarios desde Google Drive');
+        viewModel.loadBackups(
+          type: BackupType.users,
+          loadProjectBackups: false,
+        );
+        break;
+      case 2: // Backups del Proyecto
+        print('📁 Cargando backups del proyecto desde directorio local');
+        viewModel.loadBackups(loadProjectBackups: true);
+        break;
+    }
   }
 
   @override
   void dispose() {
+    _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
     super.dispose();
   }
@@ -279,9 +320,21 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                     _deleteBackup(context, viewModel, backup, type);
                   } else if (value == 'download') {
                     _downloadBackup(context, viewModel, backup, type);
+                  } else if (value == 'restore') {
+                    _restoreBackup(context, viewModel, backup, type);
                   }
                 },
                 itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: 'restore',
+                    child: Row(
+                      children: [
+                        Icon(Icons.restore, size: 20, color: Colors.blue),
+                        SizedBox(width: 8),
+                        Text('Restaurar', style: TextStyle(color: Colors.blue)),
+                      ],
+                    ),
+                  ),
                   const PopupMenuItem(
                     value: 'download',
                     child: Row(
@@ -412,6 +465,123 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
 
     if (confirmed == true) {
       await viewModel.deleteBackup(backup.driveFileId!, type);
+    }
+  }
+
+  Future<void> _restoreBackup(
+    BuildContext context,
+    BackupViewModel viewModel,
+    BackupInfo backup,
+    BackupType type,
+  ) async {
+    if (backup.driveFileId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error: No se encontró el ID del archivo'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Mostrar confirmación con advertencia
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          'Restaurar backup de ${type == BackupType.catalogs ? 'catálogos' : 'usuarios'}',
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '¿Estás seguro de que deseas restaurar el backup "${backup.fileName}"?',
+            ),
+            const SizedBox(height: 16),
+            if (type == BackupType.catalogs)
+              const Text(
+                '⚠️ Se crearán nuevos catálogos en la base de datos. Los catálogos existentes no serán modificados.',
+                style: TextStyle(color: Colors.orange),
+              )
+            else
+              const Text(
+                '⚠️ Se crearán nuevos usuarios en la base de datos. Los usuarios existentes (por email) no serán restaurados.',
+                style: TextStyle(color: Colors.orange),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Restaurar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    // Mostrar loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text(
+              'Restaurando backup de ${type == BackupType.catalogs ? 'catálogos' : 'usuarios'}...',
+            ),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      if (type == BackupType.catalogs) {
+        await viewModel.restoreCatalogBackup(backup.driveFileId!);
+      } else {
+        await viewModel.restoreUserBackup(backup.driveFileId!);
+      }
+
+      if (context.mounted) {
+        Navigator.of(context).pop(); // Cerrar loading
+
+        // Mostrar resultado
+        if (viewModel.successMessage != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(viewModel.successMessage!),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+
+        // Recargar lista de backups
+        await viewModel.loadBackups(type: type, loadProjectBackups: false);
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.of(context).pop(); // Cerrar loading
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al restaurar backup: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
