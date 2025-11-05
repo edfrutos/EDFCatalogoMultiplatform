@@ -48,67 +48,99 @@ class _AdminUsersListViewState extends State<AdminUsersListView> {
       builder: (context, viewModel, _) {
         final filteredUsers = _getFilteredUsers(viewModel.users);
 
+        final isMobile = MediaQuery.of(context).size.width < 600;
+
         return Column(
           children: [
             // Header
             Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Row(
+              padding: EdgeInsets.all(isMobile ? 12 : 16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  // Primera fila: Título y botón refresh
+                  Row(
                     children: [
-                      const Text(
-                        'Gestión de Usuarios',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Gestión de Usuarios',
+                              style: TextStyle(
+                                fontSize: isMobile ? 18 : 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Total: ${viewModel.users.length} usuarios',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Total: ${viewModel.users.length} usuarios',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey,
-                        ),
+                      IconButton(
+                        icon: const Icon(Icons.refresh),
+                        color: Colors.blue,
+                        onPressed: viewModel.isLoading
+                            ? null
+                            : () {
+                                viewModel.loadUsers();
+                              },
                       ),
                     ],
                   ),
-                  const Spacer(),
-                  // Botón Crear Usuario
-                  ElevatedButton.icon(
-                    onPressed: viewModel.isLoading
-                        ? null
-                        : () {
-                            showDialog(
-                              context: context,
-                              builder: (context) => const CreateUserDialog(),
-                            );
-                          },
-                    icon: const Icon(Icons.person_add),
-                    label: const Text('Crear Usuario'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: const Icon(Icons.refresh),
-                    color: Colors.blue,
-                    onPressed: viewModel.isLoading
-                        ? null
-                        : () {
-                            viewModel.loadUsers();
-                          },
-                  ),
+                  // Segunda fila: Botón Crear Usuario (en móvil, solo icono)
+                  const SizedBox(height: 8),
+                  isMobile
+                      ? IconButton(
+                          onPressed: viewModel.isLoading
+                              ? null
+                              : () {
+                                  showDialog(
+                                    context: context,
+                                    builder: (context) =>
+                                        const CreateUserDialog(),
+                                  );
+                                },
+                          icon: const Icon(Icons.person_add),
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.all(12),
+                          ),
+                          tooltip: 'Crear Usuario',
+                        )
+                      : SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: viewModel.isLoading
+                                ? null
+                                : () {
+                                    showDialog(
+                                      context: context,
+                                      builder: (context) =>
+                                          const CreateUserDialog(),
+                                    );
+                                  },
+                            icon: const Icon(Icons.person_add),
+                            label: const Text('Crear Usuario'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ),
                 ],
               ),
             ),
             // Search Bar
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              padding: EdgeInsets.symmetric(horizontal: isMobile ? 12.0 : 16.0),
               child: TextField(
                 controller: _searchController,
                 decoration: InputDecoration(

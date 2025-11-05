@@ -86,76 +86,90 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                 color: Colors.white,
                 border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
               ),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.backup, color: Colors.blue),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: const Text(
-                      'Gestión de Backups',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Botón crear backup de catálogos
-                  ElevatedButton.icon(
-                    onPressed: viewModel.isLoading
-                        ? null
-                        : () => _createBackup(
-                            context,
-                            viewModel,
-                            BackupType.catalogs,
+                  // Título
+                  Row(
+                    children: [
+                      const Icon(Icons.backup, color: Colors.blue),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'Gestión de Backups',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
                           ),
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Catálogos'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  // Botón crear backup de usuarios
-                  ElevatedButton.icon(
-                    onPressed: viewModel.isLoading
-                        ? null
-                        : () => _createBackup(
-                            context,
-                            viewModel,
-                            BackupType.users,
+                  const SizedBox(height: 12),
+                  // Botones de acción - scroll horizontal si es necesario
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        // Botón crear backup de catálogos
+                        ElevatedButton.icon(
+                          onPressed: viewModel.isLoading
+                              ? null
+                              : () => _createBackup(
+                                  context,
+                                  viewModel,
+                                  BackupType.catalogs,
+                                ),
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text('Catálogos'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
                           ),
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Usuarios'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Botón crear backup del proyecto
-                  ElevatedButton.icon(
-                    onPressed: viewModel.isLoading
-                        ? null
-                        : () => _createProjectBackup(context, viewModel),
-                    icon: const Icon(Icons.folder_copy, size: 18),
-                    label: const Text('Proyecto'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Botón crear backup de usuarios
+                        ElevatedButton.icon(
+                          onPressed: viewModel.isLoading
+                              ? null
+                              : () => _createBackup(
+                                  context,
+                                  viewModel,
+                                  BackupType.users,
+                                ),
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text('Usuarios'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Botón crear backup del proyecto
+                        ElevatedButton.icon(
+                          onPressed: viewModel.isLoading
+                              ? null
+                              : () => _createProjectBackup(context, viewModel),
+                          icon: const Icon(Icons.folder_copy, size: 18),
+                          label: const Text('Proyecto'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.orange,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -304,13 +318,22 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
               title: Text(
                 backup.fileName,
                 style: const TextStyle(fontWeight: FontWeight.bold),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 2,
               ),
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   const SizedBox(height: 4),
-                  Text('Tamaño: ${backup.formattedSize}'),
-                  Text('Fecha: ${backup.formattedDate}'),
+                  Text(
+                    'Tamaño: ${backup.formattedSize}',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    'Fecha: ${backup.formattedDate}',
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ],
               ),
               trailing: PopupMenuButton<String>(
@@ -846,7 +869,10 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                         backgroundColor: Colors.orange,
                         foregroundColor: Colors.white,
                       ),
-                      label: const Text('Seleccionar Directorio del Proyecto'),
+                      label: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: const Text('Seleccionar Directorio'),
+                      ),
                     ),
                   ],
                 ),
@@ -995,13 +1021,22 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
               title: Text(
                 backup.fileName,
                 style: const TextStyle(fontWeight: FontWeight.bold),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 2,
               ),
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   const SizedBox(height: 4),
-                  Text('Tamaño: ${backup.formattedSize}'),
-                  Text('Fecha: ${backup.formattedDate}'),
+                  Text(
+                    'Tamaño: ${backup.formattedSize}',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    'Fecha: ${backup.formattedDate}',
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   if (backup.isGoogleDrive)
                     const Text(
                       '📍 Google Drive',

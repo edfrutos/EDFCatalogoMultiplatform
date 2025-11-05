@@ -180,119 +180,160 @@ class _CatalogsViewState extends State<CatalogsView> {
             allFilteredCatalogs.length,
           );
 
+          final isMobile = MediaQuery.of(context).size.width < 600;
+
           return Scaffold(
             body: Column(
               children: [
-                // Header
+                // Header - Responsive
                 Padding(
                   padding: const EdgeInsets.all(16.0),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Catálogos',
-                              style: TextStyle(
-                                fontSize: 28,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            if (catalogViewModel.isOffline)
-                              Row(
-                                children: [
-                                  Icon(
-                                    Icons.cloud_off,
-                                    size: 14,
-                                    color: Colors.orange,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  const Text(
-                                    'Modo offline',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.orange,
-                                      fontStyle: FontStyle.italic,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                          ],
-                        ),
-                      ),
-                      // Botón de perfil de usuario
-                      if (currentUser != null)
-                        OutlinedButton.icon(
-                          onPressed: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (context) => const ProfileView(),
-                              ),
-                            );
-                          },
-                          icon: currentUser.profileImageUrl != null
-                              ? CircleAvatar(
-                                  radius: 12,
-                                  backgroundColor: Colors.transparent,
-                                  backgroundImage: CachedNetworkImageProvider(
-                                    currentUser.profileImageUrl!,
-                                  ),
-                                )
-                              : CircleAvatar(
-                                  radius: 12,
-                                  backgroundColor: Colors.blue,
-                                  child: Text(
-                                    currentUser.name.isNotEmpty
-                                        ? currentUser.name[0].toUpperCase()
-                                        : 'U',
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      color: Colors.white,
-                                    ),
+                      // Primera fila: Título y botón nuevo
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Catálogos',
+                                  style: TextStyle(
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.bold,
                                   ),
                                 ),
-                          label: Text(currentUser.name),
-                        ),
-                      const SizedBox(width: 8),
-                      // Botón de sincronizar (si está offline o hay cambios pendientes)
-                      if (catalogViewModel.isOffline)
-                        IconButton(
-                          icon: const Icon(Icons.sync),
-                          onPressed: currentUser == null
-                              ? null
-                              : () {
+                                if (catalogViewModel.isOffline)
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.cloud_off,
+                                        size: 14,
+                                        color: Colors.orange,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      const Text(
+                                        'Modo offline',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.orange,
+                                          fontStyle: FontStyle.italic,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                              ],
+                            ),
+                          ),
+                          // Botón nuevo catálogo
+                          if (currentUser != null)
+                            isMobile
+                                ? IconButton(
+                                    icon: const Icon(Icons.add),
+                                    onPressed: () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (context) =>
+                                            CreateCatalogDialog(
+                                              onCreate:
+                                                  (name, description, columns) {
+                                                    catalogViewModel
+                                                        .createCatalog(
+                                                          name: name,
+                                                          description:
+                                                              description,
+                                                          userId:
+                                                              currentUser.id,
+                                                          columns: columns,
+                                                        );
+                                                  },
+                                            ),
+                                      );
+                                    },
+                                    tooltip: 'Nuevo catálogo',
+                                  )
+                                : ElevatedButton.icon(
+                                    onPressed: () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (context) =>
+                                            CreateCatalogDialog(
+                                              onCreate:
+                                                  (name, description, columns) {
+                                                    catalogViewModel
+                                                        .createCatalog(
+                                                          name: name,
+                                                          description:
+                                                              description,
+                                                          userId:
+                                                              currentUser.id,
+                                                          columns: columns,
+                                                        );
+                                                  },
+                                            ),
+                                      );
+                                    },
+                                    icon: const Icon(Icons.add),
+                                    label: const Text('Nuevo'),
+                                  ),
+                        ],
+                      ),
+                      // Segunda fila: Perfil y sincronizar (solo en móvil si no hay espacio)
+                      if (currentUser != null && !isMobile) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (context) => const ProfileView(),
+                                  ),
+                                );
+                              },
+                              icon: currentUser.profileImageUrl != null
+                                  ? CircleAvatar(
+                                      radius: 12,
+                                      backgroundColor: Colors.transparent,
+                                      backgroundImage:
+                                          CachedNetworkImageProvider(
+                                            currentUser.profileImageUrl!,
+                                          ),
+                                    )
+                                  : CircleAvatar(
+                                      radius: 12,
+                                      backgroundColor: Colors.blue,
+                                      child: Text(
+                                        currentUser.name.isNotEmpty
+                                            ? currentUser.name[0].toUpperCase()
+                                            : 'U',
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                              label: Text(currentUser.name),
+                            ),
+                            if (catalogViewModel.isOffline) ...[
+                              const SizedBox(width: 8),
+                              IconButton(
+                                icon: const Icon(Icons.sync),
+                                onPressed: () {
                                   catalogViewModel.syncPendingData(
                                     userId: currentUser.id,
                                     isAdmin: currentUser.isAdmin,
                                     userEmail: currentUser.email,
                                   );
                                 },
-                          tooltip: 'Sincronizar',
+                                tooltip: 'Sincronizar',
+                              ),
+                            ],
+                          ],
                         ),
-                      const SizedBox(width: 8),
-                      // Botón nuevo catálogo
-                      ElevatedButton.icon(
-                        onPressed: currentUser == null
-                            ? null
-                            : () {
-                                showDialog(
-                                  context: context,
-                                  builder: (context) => CreateCatalogDialog(
-                                    onCreate: (name, description, columns) {
-                                      catalogViewModel.createCatalog(
-                                        name: name,
-                                        description: description,
-                                        userId: currentUser.id,
-                                        columns: columns,
-                                      );
-                                    },
-                                  ),
-                                );
-                              },
-                        icon: const Icon(Icons.add),
-                        label: const Text('Nuevo'),
-                      ),
+                      ],
                     ],
                   ),
                 ),
@@ -463,84 +504,89 @@ class _CatalogsViewState extends State<CatalogsView> {
                                       vertical: 8,
                                     ),
                                     color: Colors.grey.shade100,
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(
-                                          itemsRange,
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.grey,
+                                    child: SingleChildScrollView(
+                                      scrollDirection: Axis.horizontal,
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            itemsRange,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey,
+                                            ),
                                           ),
-                                        ),
-                                        Row(
-                                          children: [
-                                            IconButton(
-                                              icon: const Icon(
-                                                Icons.chevron_left,
+                                          const SizedBox(width: 16),
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              IconButton(
+                                                icon: const Icon(
+                                                  Icons.chevron_left,
+                                                ),
+                                                onPressed:
+                                                    PaginationService.hasPreviousPage(
+                                                      _currentPage,
+                                                    )
+                                                    ? () {
+                                                        setState(() {
+                                                          _currentPage--;
+                                                        });
+                                                        _scrollController
+                                                            .animateTo(
+                                                              0,
+                                                              duration:
+                                                                  const Duration(
+                                                                    milliseconds:
+                                                                        300,
+                                                                  ),
+                                                              curve: Curves
+                                                                  .easeOut,
+                                                            );
+                                                      }
+                                                    : null,
+                                                tooltip: 'Página anterior',
                                               ),
-                                              onPressed:
-                                                  PaginationService.hasPreviousPage(
-                                                    _currentPage,
-                                                  )
-                                                  ? () {
-                                                      setState(() {
-                                                        _currentPage--;
-                                                      });
-                                                      _scrollController
-                                                          .animateTo(
-                                                            0,
-                                                            duration:
-                                                                const Duration(
-                                                                  milliseconds:
-                                                                      300,
-                                                                ),
-                                                            curve:
-                                                                Curves.easeOut,
-                                                          );
-                                                    }
-                                                  : null,
-                                              tooltip: 'Página anterior',
-                                            ),
-                                            Text(
-                                              'Página $_currentPage de $totalPages',
-                                              style: const TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.bold,
+                                              Text(
+                                                'Página $_currentPage de $totalPages',
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
                                               ),
-                                            ),
-                                            IconButton(
-                                              icon: const Icon(
-                                                Icons.chevron_right,
+                                              IconButton(
+                                                icon: const Icon(
+                                                  Icons.chevron_right,
+                                                ),
+                                                onPressed:
+                                                    PaginationService.hasNextPage(
+                                                      _currentPage,
+                                                      totalPages,
+                                                    )
+                                                    ? () {
+                                                        setState(() {
+                                                          _currentPage++;
+                                                        });
+                                                        _scrollController
+                                                            .animateTo(
+                                                              0,
+                                                              duration:
+                                                                  const Duration(
+                                                                    milliseconds:
+                                                                        300,
+                                                                  ),
+                                                              curve: Curves
+                                                                  .easeOut,
+                                                            );
+                                                      }
+                                                    : null,
+                                                tooltip: 'Página siguiente',
                                               ),
-                                              onPressed:
-                                                  PaginationService.hasNextPage(
-                                                    _currentPage,
-                                                    totalPages,
-                                                  )
-                                                  ? () {
-                                                      setState(() {
-                                                        _currentPage++;
-                                                      });
-                                                      _scrollController
-                                                          .animateTo(
-                                                            0,
-                                                            duration:
-                                                                const Duration(
-                                                                  milliseconds:
-                                                                      300,
-                                                                ),
-                                                            curve:
-                                                                Curves.easeOut,
-                                                          );
-                                                    }
-                                                  : null,
-                                              tooltip: 'Página siguiente',
-                                            ),
-                                          ],
-                                        ),
-                                      ],
+                                            ],
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 // Lista de catálogos
@@ -668,8 +714,14 @@ class _CatalogsViewState extends State<CatalogsView> {
                                             style: const TextStyle(
                                               fontWeight: FontWeight.bold,
                                             ),
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 2,
                                           ),
-                                          subtitle: Text(catalog.description),
+                                          subtitle: Text(
+                                            catalog.description,
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 2,
+                                          ),
                                           trailing: Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [

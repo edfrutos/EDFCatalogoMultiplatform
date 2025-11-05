@@ -45,5 +45,32 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Esta app necesita acceso a la biblioteca de fotos para seleccionar imágenes para los catálogos.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Esta app necesita acceso para guardar imágenes en la biblioteca de fotos.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Esta app necesita acceso a la cámara para tomar fotos para los catálogos.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Esta app necesita acceso al micrófono para grabar videos.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Esta app necesita acceso a documentos para importar y exportar archivos.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Esta app necesita acceso a descargas para guardar archivos exportados.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Esta app necesita acceso a la red local para conectarse a MongoDB.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<false/>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>localhost</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
 </dict>
 </plist>

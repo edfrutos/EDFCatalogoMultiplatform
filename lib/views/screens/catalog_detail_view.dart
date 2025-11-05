@@ -993,35 +993,42 @@ class _FilesModalDialogState extends State<_FilesModalDialog> {
       child: Container(
         width: MediaQuery.of(context).size.width * 0.8,
         height: MediaQuery.of(context).size.height * 0.8,
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(
+          MediaQuery.of(context).size.width < 600 ? 12 : 16,
+        ),
         child: Column(
           children: [
             // Encabezado
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    if (_selectedRow != null)
-                      IconButton(
-                        icon: const Icon(Icons.arrow_back),
-                        onPressed: _goBack,
-                        tooltip: 'Volver a la lista de filas',
-                      ),
-                    Text(
-                      _selectedRow != null
-                          ? 'Archivos de la Fila ${_selectedRowIndex! + 1}'
-                          : 'Seleccionar Fila',
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
+                if (_selectedRow != null)
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: _goBack,
+                    tooltip: 'Volver a la lista de filas',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                Expanded(
+                  child: Text(
+                    _selectedRow != null
+                        ? 'Archivos de la Fila ${_selectedRowIndex! + 1}'
+                        : 'Seleccionar Fila',
+                    style: TextStyle(
+                      fontSize: MediaQuery.of(context).size.width < 600
+                          ? 16
+                          : 20,
+                      fontWeight: FontWeight.bold,
                     ),
-                  ],
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.close),
                   onPressed: () => Navigator.of(context).pop(),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
                 ),
               ],
             ),

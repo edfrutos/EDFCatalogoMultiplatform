@@ -54,15 +54,26 @@ void main() async {
     // No intentar cargar desde assets en desktop - solo buscar en sistema de archivos
     // Los assets solo funcionan bien en web
 
-    // Para macOS, buscar PRIMERO en el bundle del sistema de archivos
+    // Para macOS/iOS, buscar PRIMERO en el bundle del sistema de archivos
     // Esto es crítico porque el sandbox puede bloquear acceso a archivos fuera del bundle
-    if (!envLoaded && Platform.isMacOS) {
+    if (!envLoaded && (Platform.isMacOS || Platform.isIOS)) {
       try {
         final bundlePath = Platform.resolvedExecutable;
-        final bundleDir = File(
-          bundlePath,
-        ).parent.parent; // Contents/MacOS -> Contents
-        final envPath = '${bundleDir.path}/Resources/.env';
+        String envPath;
+        if (Platform.isIOS) {
+          // Para iOS, el bundle está estructurado diferente
+          // Platform.resolvedExecutable apunta al ejecutable dentro del bundle
+          final bundleDir = File(
+            bundlePath,
+          ).parent.parent; // ejecutable -> bundle.app
+          envPath = '${bundleDir.path}/.env';
+        } else {
+          // Para macOS
+          final bundleDir = File(
+            bundlePath,
+          ).parent.parent; // Contents/MacOS -> Contents
+          envPath = '${bundleDir.path}/Resources/.env';
+        }
         print('🔍 Buscando .env en bundle (PRIORIDAD): $envPath');
         if (File(envPath).existsSync()) {
           // Intentar cargar primero con dotenv (método más confiable)
