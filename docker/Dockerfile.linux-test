@@ -1,0 +1,56 @@
+# Dockerfile para probar la aplicación Flutter en Linux
+FROM ubuntu:22.04
+
+# Evitar prompts interactivos durante la instalación
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Instalar dependencias necesarias
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    unzip \
+    xz-utils \
+    zip \
+    libglu1-mesa \
+    mesa-utils \
+    cmake \
+    ninja-build \
+    libgtk-3-dev \
+    pkg-config \
+    gcc \
+    g++ \
+    clang \
+    build-essential \
+    libx11-dev \
+    libxrandr-dev \
+    libxinerama-dev \
+    libxcursor-dev \
+    libxi-dev \
+    libxext-dev \
+    libsecret-1-dev \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Instalar Flutter
+RUN git clone https://github.com/flutter/flutter.git -b stable /usr/local/flutter
+ENV PATH="/usr/local/flutter/bin:/usr/local/flutter/bin/cache/dart-sdk/bin:${PATH}"
+
+# Configurar Flutter
+RUN flutter doctor -v
+RUN flutter config --enable-linux-desktop
+
+# Crear directorio de trabajo
+WORKDIR /app
+
+# Copiar el proyecto
+COPY . .
+
+# Instalar dependencias
+RUN flutter pub get
+
+# Exponer puerto para X11 (opcional, para GUI)
+ENV DISPLAY=:0
+
+# Comando por defecto: mostrar ayuda
+CMD ["flutter", "doctor", "-v"]
+

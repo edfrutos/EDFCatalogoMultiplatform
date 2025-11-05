@@ -310,7 +310,7 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
                               border: Border.all(color: Colors.white, width: 3),
                             ),
                             child: IconButton(
-                              icon: const Icon(
+                              icon: Icon(
                                 Icons.camera_alt,
                                 color: Colors.white,
                                 size: 20,
@@ -334,10 +334,10 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
                           onPressed: _isUploadingImage
                               ? null
                               : _selectProfileImage,
-                          icon: const Icon(Icons.photo_library, size: 18),
-                          label: const Text('Seleccionar Foto'),
+                          icon: Icon(Icons.photo_library, size: 18),
+                          label: Text('Seleccionar Foto'),
                           style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
+                            padding: EdgeInsets.symmetric(
                               horizontal: 16,
                               vertical: 8,
                             ),
@@ -349,11 +349,11 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
                           const SizedBox(width: 12),
                           OutlinedButton.icon(
                             onPressed: _removeProfileImage,
-                            icon: const Icon(Icons.delete, size: 18),
-                            label: const Text('Eliminar'),
+                            icon: Icon(Icons.delete, size: 18),
+                            label: Text('Eliminar'),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: Colors.red,
-                              padding: const EdgeInsets.symmetric(
+                              padding: EdgeInsets.symmetric(
                                 horizontal: 16,
                                 vertical: 8,
                               ),
@@ -364,8 +364,8 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
                     ),
                     // Indicador de carga de imagen
                     if (_isUploadingImage) ...[
-                      const SizedBox(height: 12),
-                      const Row(
+                      SizedBox(height: 12),
+                      Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           SizedBox(
@@ -388,7 +388,7 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
             const SizedBox(height: 24),
             // Edit/View Toggle
             SegmentedButton<bool>(
-              segments: const [
+              segments: [
                 ButtonSegment(value: false, label: Text('Ver')),
                 ButtonSegment(value: true, label: Text('Editar')),
               ],
@@ -404,7 +404,7 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
             if (_isEditing) ...[
               _buildEditableSection('Rol', Icons.admin_panel_settings, [
                 SegmentedButton<bool>(
-                  segments: const [
+                  segments: [
                     ButtonSegment(value: false, label: Text('Usuario Normal')),
                     ButtonSegment(value: true, label: Text('Administrador')),
                   ],
@@ -533,7 +533,7 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
       decoration: InputDecoration(
         labelText: '$label${optional ? ' (Opcional)' : ''}',
         prefixIcon: Icon(icon),
-        border: const OutlineInputBorder(),
+        border: OutlineInputBorder(),
       ),
     );
   }

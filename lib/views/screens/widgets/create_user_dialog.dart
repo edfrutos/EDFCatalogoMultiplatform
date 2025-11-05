@@ -80,7 +80,7 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                   // Username
                   TextFormField(
                     controller: _usernameController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Nombre de usuario',
                       hintText: 'Ej: juan_perez',
                       prefixIcon: Icon(Icons.person_outline),
@@ -94,7 +94,7 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                   // Name
                   TextFormField(
                     controller: _nameController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Nombre completo',
                       hintText: 'Ej: Juan Pérez',
                       prefixIcon: Icon(Icons.badge_outlined),
@@ -111,7 +111,7 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                   // Email
                   TextFormField(
                     controller: _emailController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Email',
                       hintText: 'Ej: juan@ejemplo.com',
                       prefixIcon: Icon(Icons.email_outlined),
@@ -129,7 +129,7 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                     decoration: InputDecoration(
                       labelText: 'Contraseña',
                       hintText: 'Mínimo 6 caracteres',
-                      prefixIcon: const Icon(Icons.lock_outlined),
+                      prefixIcon: Icon(Icons.lock_outlined),
                       suffixIcon: IconButton(
                         icon: Icon(
                           _obscurePassword
@@ -142,7 +142,7 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                           });
                         },
                       ),
-                      border: const OutlineInputBorder(),
+                      border: OutlineInputBorder(),
                     ),
                     obscureText: _obscurePassword,
                     validator: Validators.validatePassword,
@@ -156,7 +156,7 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                     decoration: InputDecoration(
                       labelText: 'Confirmar contraseña',
                       hintText: 'Repite la contraseña',
-                      prefixIcon: const Icon(Icons.lock_outlined),
+                      prefixIcon: Icon(Icons.lock_outlined),
                       suffixIcon: IconButton(
                         icon: Icon(
                           _obscureConfirmPassword
@@ -169,7 +169,7 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                           });
                         },
                       ),
-                      border: const OutlineInputBorder(),
+                      border: OutlineInputBorder(),
                     ),
                     obscureText: _obscureConfirmPassword,
                     validator: (value) => Validators.validatePasswordMatch(

@@ -53,6 +53,7 @@ class _AdminStatisticsViewState extends State<AdminStatisticsView> {
       }
 
       // Cargar catálogos
+      if (!mounted) return;
       final authViewModel = context.read<AuthViewModel>();
       final user = authViewModel.currentUser;
 
@@ -199,7 +200,7 @@ class _StatisticCard extends StatelessWidget {
             width: 50,
             height: 50,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(icon, color: color, size: 28),

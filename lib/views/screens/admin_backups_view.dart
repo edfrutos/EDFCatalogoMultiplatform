@@ -415,6 +415,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
     );
 
     if (confirmed == true) {
+      if (!context.mounted) return;
       // Mostrar loading
       showDialog(
         context: context,
@@ -551,6 +552,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
     );
 
     if (confirmed != true) return;
+    if (!context.mounted) return;
 
     // Mostrar loading
     showDialog(
@@ -656,6 +658,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
           if (result != null) {
             final file = File(result);
             await file.writeAsBytes(zipBytes);
+            if (!context.mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text('✅ Backup descargado: ${file.path}'),
@@ -734,6 +737,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
     );
 
     if (confirmed == true) {
+      if (!context.mounted) return;
       // Mostrar loading
       showDialog(
         context: context,
@@ -777,6 +781,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
         await Future.delayed(const Duration(milliseconds: 200));
 
         // Verificar si hay mensaje de éxito o error
+        if (!context.mounted) return;
         if (viewModel.successMessage != null) {
           print('✅ UI - Mostrando mensaje de éxito');
           ScaffoldMessenger.of(context).showSnackBar(
@@ -962,6 +967,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
             }
           } else {
             // Error no relacionado con permisos, mostrar mensaje de error
+            if (!context.mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(viewModel.errorMessage!),
@@ -1205,6 +1211,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
     );
 
     if (confirmed == true) {
+      if (!context.mounted) return;
       await _downloadProjectBackup(context, viewModel, backup);
     }
   }
@@ -1261,6 +1268,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
           if (result != null) {
             final file = File(result);
             await file.writeAsBytes(zipBytes);
+            if (!context.mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text('✅ Backup descargado: ${file.path}'),
@@ -1269,6 +1277,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
             );
           }
         } else {
+          if (!context.mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Error: No se pudo descargar el backup'),

@@ -279,7 +279,7 @@ Future<void> main() async {
 
       final bestId = bestCatalog['_id'].toString();
       print(
-        '   ✅ Mejor catálogo seleccionado: $bestId (${maxFileTitles} FileTitles)',
+        '   ✅ Mejor catálogo seleccionado: $bestId ($maxFileTitles FileTitles)',
       );
 
       // Verificar si el mejor catálogo tiene el formato correcto (mayúsculas)
@@ -333,7 +333,7 @@ Future<void> main() async {
     }
 
     // Resumen
-    print('\n' + '=' * 60);
+    print('\n${'=' * 60}');
     print('📊 RESUMEN DE LIMPIEZA');
     print('=' * 60);
     print('Grupos de duplicados encontrados: $duplicatesFound');

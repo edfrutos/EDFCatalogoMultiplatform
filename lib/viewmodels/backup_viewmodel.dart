@@ -5,6 +5,7 @@ import '../services/project_backup_service.dart';
 import '../services/mongo_service.dart';
 import '../models/backup_info.dart';
 import '../models/catalog.dart';
+import '../utils/logger.dart';
 
 /// ViewModel para gestionar backups (Google Drive, Local y Proyecto)
 class BackupViewModel extends ChangeNotifier {
@@ -40,19 +41,19 @@ class BackupViewModel extends ChangeNotifier {
     if (!_isDisposed) notifyListeners();
 
     try {
-      print(
-        '📋 Cargando backups - type: $type, loadProjectBackups: $loadProjectBackups',
+      Logger.debug(
+        'Cargando backups - type: $type, loadProjectBackups: $loadProjectBackups',
       );
 
       // Cargar backups de Google Drive según el tipo
       if (type == BackupType.catalogs) {
-        print('📂 Cargando backups de catálogos desde Google Drive...');
+        Logger.debug('Cargando backups de catálogos desde Google Drive...');
         try {
           if (!_googleDriveService.isInitialized) {
-            print('🔧 Inicializando Google Drive Service...');
+            Logger.debug('Inicializando Google Drive Service...');
             await _googleDriveService.initialize(
               onAuthUrl: (url) {
-                print('🔗 Abriendo URL de autenticación: $url');
+                Logger.debug('Abriendo URL de autenticación: $url');
               },
             );
           }
@@ -67,10 +68,10 @@ class BackupViewModel extends ChangeNotifier {
         print('👥 Cargando backups de usuarios desde Google Drive...');
         try {
           if (!_googleDriveService.isInitialized) {
-            print('🔧 Inicializando Google Drive Service...');
+            Logger.debug('Inicializando Google Drive Service...');
             await _googleDriveService.initialize(
               onAuthUrl: (url) {
-                print('🔗 Abriendo URL de autenticación: $url');
+                Logger.debug('Abriendo URL de autenticación: $url');
               },
             );
           }
@@ -85,10 +86,10 @@ class BackupViewModel extends ChangeNotifier {
         print('📁 Cargando backups de proyectos desde Google Drive...');
         try {
           if (!_googleDriveService.isInitialized) {
-            print('🔧 Inicializando Google Drive Service...');
+            Logger.debug('Inicializando Google Drive Service...');
             await _googleDriveService.initialize(
               onAuthUrl: (url) {
-                print('🔗 Abriendo URL de autenticación: $url');
+                Logger.debug('Abriendo URL de autenticación: $url');
               },
             );
           }
@@ -111,7 +112,7 @@ class BackupViewModel extends ChangeNotifier {
           if (!_googleDriveService.isInitialized) {
             await _googleDriveService.initialize(
               onAuthUrl: (url) {
-                print('🔗 Abriendo URL de autenticación: $url');
+                Logger.debug('Abriendo URL de autenticación: $url');
               },
             );
           }
@@ -231,7 +232,7 @@ class BackupViewModel extends ChangeNotifier {
           if (!_googleDriveService.isInitialized) {
             await _googleDriveService.initialize(
               onAuthUrl: (url) {
-                print('🔗 Abriendo URL de autenticación: $url');
+                Logger.debug('Abriendo URL de autenticación: $url');
               },
             );
           }
@@ -317,7 +318,7 @@ class BackupViewModel extends ChangeNotifier {
             if (!_googleDriveService.isInitialized) {
               await _googleDriveService.initialize(
                 onAuthUrl: (url) {
-                  print('🔗 Abriendo URL de autenticación: $url');
+                  Logger.debug('Abriendo URL de autenticación: $url');
                 },
               );
             }
@@ -349,7 +350,7 @@ class BackupViewModel extends ChangeNotifier {
             e.toString().contains('No se puede acceder')) {
           rethrow; // Re-lanzar para que la UI maneje el diálogo de selección
         }
-        throw e;
+        rethrow;
       }
     } catch (e) {
       // Solo establecer el mensaje de error si no se estableció previamente
@@ -402,7 +403,7 @@ class BackupViewModel extends ChangeNotifier {
     } catch (e) {
       if (!_isDisposed) {
         _errorMessage = 'Error al descargar backup: $e';
-        print('❌ Error: $_errorMessage');
+        Logger.error('Error al descargar backup', e);
       }
       return null;
     } finally {
@@ -435,7 +436,7 @@ class BackupViewModel extends ChangeNotifier {
     } catch (e) {
       if (!_isDisposed) {
         _errorMessage = 'Error al eliminar backup: $e';
-        print('❌ Error: $_errorMessage');
+        Logger.error('Error al eliminar backup', e);
       }
     } finally {
       if (!_isDisposed) {
@@ -485,7 +486,7 @@ class BackupViewModel extends ChangeNotifier {
       for (final catalogJson in catalogsJson) {
         try {
           if (catalogJson is! Map<String, dynamic>) {
-            print('⚠️ Catálogo inválido en backup, saltando...');
+            Logger.warning('Catálogo inválido en backup, saltando...');
             skipped++;
             continue;
           }
@@ -510,7 +511,7 @@ class BackupViewModel extends ChangeNotifier {
             try {
               backupUpdatedAt = DateTime.parse(backupUpdatedAtStr.toString());
             } catch (e) {
-              print('⚠️ Error parseando fecha del backup: $e');
+              Logger.warning('Error parseando fecha del backup: $e');
             }
           }
 
@@ -524,10 +525,10 @@ class BackupViewModel extends ChangeNotifier {
               // Intentar buscar por ID directamente
               existingCatalog = await mongoService.getCatalogById(catalogId);
               if (existingCatalog != null) {
-                print('🔍 Catálogo existente encontrado por ID: $catalogId');
+                Logger.debug('Catálogo existente encontrado por ID: $catalogId');
               }
             } catch (e) {
-              print('⚠️ No se pudo buscar por ID: $e');
+              Logger.warning('No se pudo buscar por ID: $e');
             }
           }
 
@@ -549,12 +550,12 @@ class BackupViewModel extends ChangeNotifier {
                         c.userId.contains(backupUserId.toString())),
                 orElse: () => throw StateError('No encontrado'),
               );
-              print(
-                '🔍 Catálogo existente encontrado por nombre: $catalogName',
+              Logger.debug(
+                'Catálogo existente encontrado por nombre: $catalogName',
               );
             } catch (e) {
               // No existe, continuar para crear nuevo
-              print('⚠️ No se encontró catálogo existente: $e');
+              Logger.debug('No se encontró catálogo existente: $e');
               existingCatalog = null;
             }
           }
@@ -563,8 +564,8 @@ class BackupViewModel extends ChangeNotifier {
             // Comparar timestamps: si el backup es más reciente, actualizar
             if (backupUpdatedAt != null &&
                 backupUpdatedAt.isAfter(existingCatalog.updatedAt)) {
-              print(
-                '🔄 Catálogo existente encontrado (${existingCatalog.name}), '
+              Logger.debug(
+                'Catálogo existente encontrado (${existingCatalog.name}), '
                 'backup es más reciente. Actualizando...',
               );
 
@@ -592,10 +593,10 @@ class BackupViewModel extends ChangeNotifier {
 
               await mongoService.updateCatalogFromObject(updatedCatalog);
               updated++;
-              print('✅ Catálogo actualizado: ${catalogName}');
+              Logger.success('Catálogo actualizado: $catalogName');
             } else {
-              print(
-                '⏭️  Catálogo existente (${existingCatalog.name}) es más reciente o igual. '
+              Logger.debug(
+                'Catálogo existente (${existingCatalog.name}) es más reciente o igual. '
                 'Manteniendo versión existente.',
               );
               skipped++;
@@ -622,10 +623,10 @@ class BackupViewModel extends ChangeNotifier {
             // Crear catálogo en MongoDB
             await mongoService.createCatalogFromMap(catalogData);
             restored++;
-            print('✅ Catálogo restaurado (nuevo): ${catalogName}');
+            Logger.success('Catálogo restaurado (nuevo): $catalogName');
           }
         } catch (e) {
-          print('❌ Error restaurando catálogo: $e');
+          Logger.error('Error restaurando catálogo', e);
           errors++;
         }
       }

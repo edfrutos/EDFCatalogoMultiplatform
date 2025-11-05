@@ -54,6 +54,71 @@ void main() async {
     // No intentar cargar desde assets en desktop - solo buscar en sistema de archivos
     // Los assets solo funcionan bien en web
 
+    // Para Linux, buscar PRIMERO relativo al ejecutable o en el directorio de datos
+    if (!envLoaded && Platform.isLinux) {
+      try {
+        final executablePath = Platform.resolvedExecutable;
+        final executableDir = File(executablePath).parent;
+
+        // En Linux, el bundle normalmente está en: build/linux/<arch>/bundle/
+        // El .env puede estar en el mismo directorio que el ejecutable o en el directorio de datos
+        final possibleLinuxPaths = [
+          '${executableDir.path}/.env', // Mismo directorio que el ejecutable
+          '${executableDir.path}/data/.env', // Directorio de datos del bundle
+          '${executableDir.parent.path}/.env', // Un nivel arriba
+          '${executableDir.parent.parent.path}/.env', // Dos niveles arriba (raíz del bundle)
+        ];
+
+        print('🔍 Buscando .env en Linux (PRIORIDAD):');
+        for (final envPath in possibleLinuxPaths) {
+          print('   - $envPath');
+          final file = File(envPath);
+          if (file.existsSync()) {
+            try {
+              await dotenv.load(fileName: envPath);
+              print('✅ Variables cargadas con dotenv desde: $envPath');
+              envLoaded = true;
+              break;
+            } catch (e) {
+              // Si dotenv falla, intentar lectura manual
+              try {
+                final content = await file.readAsString();
+                final lines = content.split('\n');
+                for (final line in lines) {
+                  final trimmed = line.trim();
+                  if (trimmed.isNotEmpty && !trimmed.startsWith('#')) {
+                    final parts = trimmed.split('=');
+                    if (parts.length >= 2) {
+                      final key = parts[0].trim();
+                      final value = parts.sublist(1).join('=').trim();
+                      final cleanValue = value
+                          .replaceAll(RegExp(r'^"'), '')
+                          .replaceAll(RegExp(r'"$'), '')
+                          .replaceAll(RegExp(r"^'"), '')
+                          .replaceAll(RegExp(r"'$"), '');
+                      dotenv.env[key] = cleanValue;
+                    }
+                  }
+                }
+                print(
+                  '✅ Variables de entorno cargadas manualmente desde: $envPath',
+                );
+                envLoaded = true;
+                break;
+              } catch (e2) {
+                print('⚠️ Error leyendo archivo: $e2');
+              }
+            }
+          }
+        }
+        if (!envLoaded) {
+          print('⚠️ .env no encontrado en ubicaciones de Linux');
+        }
+      } catch (e) {
+        print('⚠️ Error buscando .env en Linux: $e');
+      }
+    }
+
     // Para macOS/iOS, buscar PRIMERO en el bundle del sistema de archivos
     // Esto es crítico porque el sandbox puede bloquear acceso a archivos fuera del bundle
     if (!envLoaded && (Platform.isMacOS || Platform.isIOS)) {
@@ -176,8 +241,9 @@ void main() async {
             }
             break;
           }
-          if (searchDir.path == searchDir.parent.path)
+          if (searchDir.path == searchDir.parent.path) {
             break; // Llegamos a la raíz del sistema
+          }
           searchDir = searchDir.parent;
         }
 

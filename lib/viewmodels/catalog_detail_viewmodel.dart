@@ -3,6 +3,7 @@ import '../models/catalog.dart';
 import '../services/mongo_service.dart';
 import '../services/pagination_service.dart';
 import '../services/local_storage_service.dart';
+import '../utils/logger.dart';
 
 enum SortDirection { none, ascending, descending }
 
@@ -62,20 +63,7 @@ class CatalogDetailViewModel extends ChangeNotifier {
       _originalRows = List.from(_catalog.rows);
 
       // Debug: verificar archivos al cargar
-      print('📥 Cargando ${_originalRows.length} filas del catálogo');
-      for (int i = 0; i < _originalRows.length; i++) {
-        final row = _originalRows[i];
-        print(
-          '   Fila $i (id=${row.id}): hasAnyFiles=${row.files.hasAnyFiles}',
-        );
-        if (row.files.hasAnyFiles) {
-          print(
-            '     ✅ Tiene archivos: image=${row.files.image != null}, document=${row.files.document != null}, multimedia=${row.files.multimedia != null}',
-          );
-        } else {
-          print('     ❌ NO tiene archivos');
-        }
-      }
+      Logger.debug('Cargando ${_originalRows.length} filas del catálogo');
 
       // Si no hay filas pero hay legacyRows, convertirlas
       if (_originalRows.isEmpty && _catalog.legacyRows != null) {
@@ -268,20 +256,9 @@ class CatalogDetailViewModel extends ChangeNotifier {
   void updateRow(int index, Map<String, String> data, RowFiles files) {
     if (index < 0 || index >= _rows.length) return;
 
-    print('🔄 Actualizando fila en índice $index');
-    print('   Archivos recibidos:');
-    print('     image: ${files.image}');
-    print('     images: ${files.images}');
-    print('     document: ${files.document}');
-    print('     documents: ${files.documents}');
-    print('     multimedia: ${files.multimedia}');
-    print('     multimediaFiles: ${files.multimediaFiles}');
-    print('     hasAnyFiles: ${files.hasAnyFiles}');
-    // Debug: mostrar fileTitles recibidos
+    Logger.debug('Actualizando fila en índice $index');
     if (files.fileTitles.isNotEmpty) {
-      print('     📝 fileTitles recibidos: ${files.fileTitles}');
-    } else {
-      print('     ⚠️ fileTitles vacío en archivos recibidos');
+      Logger.debug('fileTitles recibidos: ${files.fileTitles}');
     }
 
     // Obtener la fila desde rows (ya ordenada)
@@ -300,21 +277,15 @@ class CatalogDetailViewModel extends ChangeNotifier {
     );
     if (originalIndex != -1) {
       _originalRows[originalIndex] = updatedRow;
-      print('✅ Fila actualizada en originalRows[${originalIndex}]');
-      print(
-        '   Archivos después de actualizar: hasAnyFiles=${updatedRow.files.hasAnyFiles}',
-      );
-      // Debug: verificar fileTitles después de actualizar
+      Logger.debug('Fila actualizada en originalRows[$originalIndex]');
       if (updatedRow.files.fileTitles.isNotEmpty) {
-        print(
-          '   📝 fileTitles después de actualizar: ${updatedRow.files.fileTitles}',
+        Logger.debug(
+          'fileTitles después de actualizar: ${updatedRow.files.fileTitles}',
         );
-      } else {
-        print('   ⚠️ fileTitles vacío después de actualizar');
       }
     } else {
-      print(
-        '⚠️ No se encontró la fila en originalRows con originalId=${updatedRow.originalId}',
+      Logger.warning(
+        'No se encontró la fila en originalRows con originalId=${updatedRow.originalId}',
       );
     }
 
@@ -375,28 +346,11 @@ class CatalogDetailViewModel extends ChangeNotifier {
     _catalog = updatedCatalog;
 
     try {
-      print('💾 Guardando catálogo en MongoDB...');
-      print('   Total de filas: ${_originalRows.length}');
-      for (int i = 0; i < _originalRows.length; i++) {
-        final row = _originalRows[i];
-        print('   Fila $i: hasAnyFiles=${row.files.hasAnyFiles}');
-        if (row.files.hasAnyFiles) {
-          print('     image: ${row.files.image}, images: ${row.files.images}');
-          print(
-            '     document: ${row.files.document}, documents: ${row.files.documents}',
-          );
-          print(
-            '     multimedia: ${row.files.multimedia}, multimediaFiles: ${row.files.multimediaFiles}',
-          );
-          // Debug: mostrar fileTitles
-          if (row.files.fileTitles.isNotEmpty) {
-            print('     fileTitles: ${row.files.fileTitles}');
-          }
-        }
-      }
+      Logger.debug('Guardando catálogo en MongoDB...');
+      Logger.debug('Total de filas: ${_originalRows.length}');
 
       await _mongoService.updateCatalogFromObject(updatedCatalog);
-      print('✅ Catálogo guardado correctamente');
+      Logger.success('Catálogo guardado correctamente');
 
       // Invalidar caché local para forzar recarga desde MongoDB
       // Esto asegura que cuando vuelvas a CatalogsView, se carguen los datos actualizados
@@ -409,15 +363,15 @@ class CatalogDetailViewModel extends ChangeNotifier {
         if (index != -1) {
           localCatalogs[index] = updatedCatalog;
           await localStorage.saveCatalogsLocally(localCatalogs);
-          print('✅ Caché local actualizado');
+          Logger.debug('Caché local actualizado');
         } else {
           // Si no está en el caché, agregarlo
           localCatalogs.add(updatedCatalog);
           await localStorage.saveCatalogsLocally(localCatalogs);
-          print('✅ Catálogo agregado al caché local');
+          Logger.debug('Catálogo agregado al caché local');
         }
       } catch (e) {
-        print('⚠️ Error actualizando caché local: $e');
+        Logger.warning('Error actualizando caché local: $e');
         // No es crítico, continuar
       }
 
@@ -425,7 +379,7 @@ class CatalogDetailViewModel extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       _errorMessage = 'Error al guardar cambios: $e';
-      print('❌ Error guardando catálogo: $e');
+      Logger.error('Error guardando catálogo', e);
       notifyListeners();
     }
   }

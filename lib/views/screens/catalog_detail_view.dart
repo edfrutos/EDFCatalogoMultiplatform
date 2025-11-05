@@ -621,7 +621,7 @@ class _CatalogRowCard extends StatelessWidget {
   final VoidCallback onDelete;
   final Function(String url, String fileName) onFileTap;
 
-  _CatalogRowCard({
+  const _CatalogRowCard({
     required this.row,
     required this.columns,
     required this.index,
@@ -1323,7 +1323,7 @@ class _FileCategorySection extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: iconColor.withOpacity(0.2),
+                color: iconColor.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(

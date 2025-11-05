@@ -126,3 +126,14 @@ if(NOT CMAKE_BUILD_TYPE MATCHES "Debug")
   install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
     COMPONENT Runtime)
 endif()
+
+# Copy .env file to bundle (if it exists)
+# This ensures the .env file is available at runtime
+set(ENV_FILE "${CMAKE_SOURCE_DIR}/.env")
+if(EXISTS "${ENV_FILE}")
+  install(FILES "${ENV_FILE}" DESTINATION "${CMAKE_INSTALL_PREFIX}" COMPONENT Runtime)
+  install(FILES "${ENV_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}" COMPONENT Runtime)
+  message(STATUS "✅ .env file will be copied to bundle")
+else()
+  message(STATUS "⚠️ .env file not found, skipping copy")
+endif()
