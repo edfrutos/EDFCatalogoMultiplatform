@@ -79,13 +79,26 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
     // Inicializar títulos existentes
     _fileTitles = Map<String, String>.from(_files.fileTitles);
 
+    // Debug: verificar títulos cargados
+    if (_fileTitles.isNotEmpty) {
+      print(
+        '📝 AddEditRowDialog - Títulos cargados desde fila existente: $_fileTitles',
+      );
+    } else {
+      print('⚠️ AddEditRowDialog - No hay títulos en la fila existente');
+    }
+
     // Inicializar controladores de títulos para URLs existentes
     final allUrls = [..._imageUrls, ..._documentUrls, ..._multimediaUrls];
     for (final url in allUrls) {
       if (!_titleControllers.containsKey(url)) {
-        _titleControllers[url] = TextEditingController(
-          text: _fileTitles[url] ?? '',
-        );
+        final title = _fileTitles[url] ?? '';
+        _titleControllers[url] = TextEditingController(text: title);
+        if (title.isNotEmpty) {
+          print(
+            '📝 AddEditRowDialog - Controlador inicializado para $url con título: "$title"',
+          );
+        }
       }
     }
   }

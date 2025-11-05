@@ -890,13 +890,53 @@ class MongoService {
   /// Actualizar catálogo (sobrecarga que acepta objeto Catalog)
   Future<bool> updateCatalogFromObject(Catalog catalog) async {
     try {
+      // Convertir filas a JSON y verificar que FileTitles se incluye
+      final rowsJson = catalog.rows.map((row) {
+        final rowJson = row.toJson();
+        // Verificar que FileTitles está presente en cada fila
+        if (rowJson['Files'] != null && rowJson['Files'] is Map) {
+          final filesMap = rowJson['Files'] as Map;
+          if (filesMap.containsKey('FileTitles')) {
+            final fileTitles = filesMap['FileTitles'];
+            if (fileTitles is Map) {
+              print(
+                '💾 updateCatalogFromObject - Fila ${row.id} tiene FileTitles con ${fileTitles.length} entradas',
+              );
+            } else {
+              print(
+                '⚠️ updateCatalogFromObject - Fila ${row.id} tiene FileTitles pero NO es Map: ${fileTitles.runtimeType}',
+              );
+            }
+          } else {
+            print(
+              '⚠️ updateCatalogFromObject - Fila ${row.id} NO tiene FileTitles en Files',
+            );
+          }
+        }
+        return rowJson;
+      }).toList();
+
       final updates = <String, dynamic>{
         'Name': catalog.name,
         'Description': catalog.description,
         'Headers': catalog.columns,
-        'Rows': catalog.rows.map((row) => row.toJson()).toList(),
+        'Rows': rowsJson,
         'UpdatedAt': catalog.updatedAt.toIso8601String(),
       };
+
+      // Incluir Miniatura (thumbnailUrl)
+      if (catalog.thumbnailUrl != null && catalog.thumbnailUrl!.isNotEmpty) {
+        updates['Miniatura'] = catalog.thumbnailUrl;
+      } else {
+        // Si es null o vacío, eliminar el campo usando $unset
+        updates['Miniatura'] = null;
+      }
+
+      // Debug: verificar que thumbnailUrl se está incluyendo
+      print('💾 Actualizando catálogo - Miniatura: ${catalog.thumbnailUrl}');
+      print(
+        '💾 Actualizando catálogo - Total de filas a actualizar: ${rowsJson.length}',
+      );
 
       return await updateCatalog(catalog.id, updates);
     } catch (e) {
@@ -909,21 +949,90 @@ class MongoService {
   Future<bool> updateCatalog(String id, Map<String, dynamic> updates) async {
     try {
       final collection = await getCatalogsCollection();
+
+      // Separar campos a establecer ($set) y campos a eliminar ($unset)
+      final setFields = <String, dynamic>{};
+      final unsetFields = <String, dynamic>{};
+
+      for (final entry in updates.entries) {
+        if (entry.value == null) {
+          unsetFields[entry.key] = '';
+        } else {
+          setFields[entry.key] = entry.value;
+        }
+      }
+
+      final updateDoc = <String, dynamic>{};
+      if (setFields.isNotEmpty) {
+        updateDoc['\$set'] = setFields;
+        // Debug: verificar que Rows se está incluyendo en $set
+        if (setFields.containsKey('Rows') && setFields['Rows'] is List) {
+          final rowsList = setFields['Rows'] as List;
+          print(
+            '💾 updateCatalog - Actualizando ${rowsList.length} filas en MongoDB',
+          );
+          for (int i = 0; i < rowsList.length; i++) {
+            final row = rowsList[i];
+            if (row is Map && row.containsKey('Files')) {
+              final files = row['Files'];
+              if (files is Map) {
+                if (files.containsKey('FileTitles')) {
+                  final fileTitles = files['FileTitles'];
+                  if (fileTitles is Map) {
+                    print(
+                      '   Fila $i: FileTitles con ${fileTitles.length} entradas',
+                    );
+                  } else {
+                    print(
+                      '   ⚠️ Fila $i: FileTitles NO es Map: ${fileTitles.runtimeType}',
+                    );
+                  }
+                } else {
+                  print('   ⚠️ Fila $i: NO tiene FileTitles');
+                }
+              }
+            }
+          }
+        }
+      }
+      if (unsetFields.isNotEmpty) {
+        updateDoc['\$unset'] = unsetFields;
+      }
+
+      if (updateDoc.isEmpty) {
+        print('⚠️ No hay campos para actualizar');
+        return true;
+      }
+
       ObjectId? objectId;
       try {
         objectId = ObjectId.fromHexString(id);
       } catch (_) {
         // Si no es un ObjectId válido, actualizar directamente
-        final result = await collection.update(where.eq('_id', id), {
-          '\$set': updates,
-        });
-        return result['ok'] == 1.0;
+        print('💾 updateCatalog - Actualizando con _id como string: $id');
+        final result = await collection.update(where.eq('_id', id), updateDoc);
+        final success = result['ok'] == 1.0;
+        print(
+          '💾 updateCatalog - Resultado de actualización: ${success ? "✅ Éxito" : "❌ Falló"}',
+        );
+        return success;
       }
-      final result = await collection.update(where.id(objectId), {
-        '\$set': updates,
-      });
+      final objectIdValue = objectId; // Para evitar el warning del linter
+      print(
+        '💾 updateCatalog - Actualizando con ObjectId: ${objectIdValue.oid}',
+      );
+      final result = await collection.update(where.id(objectId), updateDoc);
+      final success = result['ok'] == 1.0;
+      print(
+        '💾 updateCatalog - Resultado de actualización: ${success ? "✅ Éxito" : "❌ Falló"}',
+      );
+      if (success && result.containsKey('nModified')) {
+        print(
+          '💾 updateCatalog - Documentos modificados: ${result['nModified']}',
+        );
+      }
 
-      return result['ok'] == 1.0;
+      return success;
     } catch (e) {
       print('❌ Error actualizando catálogo: $e');
       rethrow;

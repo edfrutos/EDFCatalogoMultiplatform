@@ -266,13 +266,29 @@ class BackupViewModel extends ChangeNotifier {
           return; // Éxito, salir
         } catch (e) {
           print('⚠️ Error subiendo a Google Drive: $e');
-          // Si falla por permisos, re-lanzar para que la UI maneje la selección de directorio
-          if (e.toString().contains('permisos') ||
-              e.toString().contains('permission') ||
-              e.toString().contains('Operation not permitted') ||
-              e.toString().contains('PathAccessException') ||
-              e.toString().contains('No se puede acceder')) {
-            rethrow;
+          // Si falla por permisos, establecer el mensaje de error y salir
+          final errorStr = e.toString().toLowerCase();
+          if (errorStr.contains('permisos') ||
+              errorStr.contains('permission') ||
+              errorStr.contains('operation not permitted') ||
+              errorStr.contains('pathaccessexception') ||
+              errorStr.contains('no se puede acceder')) {
+            if (!_isDisposed) {
+              // Usar el mensaje original de la excepción, no el toString completo
+              _errorMessage = e is Exception
+                  ? e.toString()
+                  : 'Error de permisos: No se puede acceder al directorio del proyecto';
+              _isLoading = false;
+              print('🔴 Error de permisos establecido: $_errorMessage');
+              print(
+                '🔴 Estado antes de notifyListeners: isLoading=$_isLoading, errorMessage=$_errorMessage',
+              );
+              notifyListeners();
+              print(
+                '🔴 Estado después de notifyListeners: isLoading=$_isLoading, errorMessage=$_errorMessage',
+              );
+            }
+            rethrow; // Re-lanzar para que la UI maneje la selección de directorio
           }
           // Si falla por otra razón, intentar guardar localmente como fallback
           // Continuar con el flujo local
@@ -336,13 +352,21 @@ class BackupViewModel extends ChangeNotifier {
         throw e;
       }
     } catch (e) {
-      _errorMessage = 'Error al crear backup del proyecto: $e';
-      print('❌ Error: $_errorMessage');
+      // Solo establecer el mensaje de error si no se estableció previamente
+      // (por ejemplo, en el caso de errores de permisos que ya se manejaron)
+      if (!_isDisposed && _errorMessage == null) {
+        _errorMessage = 'Error al crear backup del proyecto: $e';
+        print('❌ Error: $_errorMessage');
+      } else if (!_isDisposed && _errorMessage != null) {
+        print('✅ Error ya establecido previamente (permisos): $_errorMessage');
+      }
     } finally {
       // Solo notificar si el ViewModel no se ha disposeado
+      // No limpiar _errorMessage aquí porque la UI lo necesita para mostrar el diálogo
       if (!_isDisposed) {
         _isLoading = false;
         notifyListeners();
+        print('📢 Listeners notificados. errorMessage: $_errorMessage');
       }
     }
   }
@@ -490,9 +514,27 @@ class BackupViewModel extends ChangeNotifier {
             }
           }
 
-          // Buscar catálogo existente por nombre y userId
+          // Buscar catálogo existente primero por _id, luego por nombre y userId
           Catalog? existingCatalog;
-          if (catalogName.isNotEmpty && backupUserId.toString().isNotEmpty) {
+
+          // Si el backup tiene un _id, intentar buscar por ese ID primero
+          if (catalogData.containsKey('_id')) {
+            try {
+              final catalogId = catalogData['_id'].toString();
+              // Intentar buscar por ID directamente
+              existingCatalog = await mongoService.getCatalogById(catalogId);
+              if (existingCatalog != null) {
+                print('🔍 Catálogo existente encontrado por ID: $catalogId');
+              }
+            } catch (e) {
+              print('⚠️ No se pudo buscar por ID: $e');
+            }
+          }
+
+          // Si no se encontró por ID, buscar por nombre y userId
+          if (existingCatalog == null &&
+              catalogName.isNotEmpty &&
+              backupUserId.toString().isNotEmpty) {
             try {
               final allCatalogs = await mongoService.getCatalogs(
                 backupUserId.toString(),
@@ -502,13 +544,17 @@ class BackupViewModel extends ChangeNotifier {
               // Buscar por nombre exacto y mismo propietario
               existingCatalog = allCatalogs.firstWhere(
                 (c) =>
-                    c.name == catalogName &&
+                    c.name.toLowerCase() == catalogName.toLowerCase() &&
                     (c.userId == backupUserId.toString() ||
                         c.userId.contains(backupUserId.toString())),
                 orElse: () => throw StateError('No encontrado'),
               );
+              print(
+                '🔍 Catálogo existente encontrado por nombre: $catalogName',
+              );
             } catch (e) {
               // No existe, continuar para crear nuevo
+              print('⚠️ No se encontró catálogo existente: $e');
               existingCatalog = null;
             }
           }
@@ -525,16 +571,26 @@ class BackupViewModel extends ChangeNotifier {
               // Construir el catálogo desde el backup
               final backupCatalog = Catalog.fromJson(catalogData);
 
-              // Actualizar el catálogo existente
-              final updates = <String, dynamic>{
-                'Name': backupCatalog.name,
-                'Description': backupCatalog.description,
-                'Headers': backupCatalog.columns,
-                'Rows': backupCatalog.rows.map((row) => row.toJson()).toList(),
-                'UpdatedAt': backupUpdatedAt.toIso8601String(),
-              };
+              // Actualizar el catálogo existente usando updateCatalogFromObject
+              // Esto asegura que se use el formato correcto y se incluyan todos los campos
+              final updatedCatalog = Catalog(
+                id: existingCatalog.id, // Mantener el ID existente
+                name: backupCatalog.name,
+                description: backupCatalog.description,
+                userId: backupCatalog.userId.isNotEmpty
+                    ? backupCatalog.userId
+                    : existingCatalog
+                          .userId, // Mantener userId existente si el backup no tiene
+                columns: backupCatalog.columns,
+                rows: backupCatalog.rows,
+                legacyRows: backupCatalog.legacyRows,
+                thumbnailUrl: backupCatalog.thumbnailUrl,
+                createdAt: existingCatalog
+                    .createdAt, // Mantener fecha de creación original
+                updatedAt: backupUpdatedAt,
+              );
 
-              await mongoService.updateCatalog(existingCatalog.id, updates);
+              await mongoService.updateCatalogFromObject(updatedCatalog);
               updated++;
               print('✅ Catálogo actualizado: ${catalogName}');
             } else {

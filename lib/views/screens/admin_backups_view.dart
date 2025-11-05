@@ -744,108 +744,205 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
       if (context.mounted) {
         Navigator.of(context).pop(); // Cerrar loading
 
-        // Si hay error relacionado con permisos, pedir al usuario que seleccione directorio del proyecto
-        if (viewModel.errorMessage != null &&
-            (viewModel.errorMessage!.contains('permisos') ||
-                viewModel.errorMessage!.contains('permission') ||
-                viewModel.errorMessage!.contains('Operation not permitted') ||
-                viewModel.errorMessage!.contains('PathAccessException') ||
-                viewModel.errorMessage!.contains('No se puede acceder'))) {
-          // Preguntar si quiere seleccionar el directorio del proyecto
-          final selectDir = await showDialog<bool>(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Permisos insuficientes'),
-              content: const Text(
-                'No se puede acceder al directorio del proyecto por falta de permisos.\n\n'
-                'Por favor, selecciona el directorio del proyecto para otorgar permisos de lectura.\n\n'
-                'El backup se subirá directamente a Google Drive.',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('Cancelar'),
-                ),
-                ElevatedButton(
-                  onPressed: () => Navigator.of(context).pop(true),
-                  child: const Text('Seleccionar Directorio del Proyecto'),
-                ),
-              ],
+        // Debug: verificar estado del ViewModel
+        print('🔍 UI - Después de crear backup:');
+        print('   isLoading: ${viewModel.isLoading}');
+        print('   successMessage: ${viewModel.successMessage}');
+        print('   errorMessage: ${viewModel.errorMessage}');
+
+        // Esperar un momento para asegurar que los listeners se hayan actualizado
+        await Future.delayed(const Duration(milliseconds: 200));
+
+        // Verificar si hay mensaje de éxito o error
+        if (viewModel.successMessage != null) {
+          print('✅ UI - Mostrando mensaje de éxito');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(viewModel.successMessage!),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 5),
             ),
           );
+          // Recargar backups
+          await viewModel.loadBackups(type: BackupType.project);
+        } else if (viewModel.errorMessage != null) {
+          print('❌ UI - Hay error: ${viewModel.errorMessage}');
+          // Si hay error relacionado con permisos, pedir al usuario que seleccione directorio del proyecto
+          final errorMsg = viewModel.errorMessage!.toLowerCase();
+          final isPermissionError =
+              errorMsg.contains('permisos') ||
+              errorMsg.contains('permission') ||
+              errorMsg.contains('operation not permitted') ||
+              errorMsg.contains('pathaccessexception') ||
+              errorMsg.contains('no se puede acceder');
 
-          if (selectDir == true) {
-            // Pedir al usuario que seleccione el directorio del proyecto
-            // (para obtener permisos de lectura)
-            final selectedProjectDir = await file_picker.FilePicker.platform
-                .getDirectoryPath(
-                  dialogTitle:
-                      'Selecciona el directorio del PROYECTO para hacer backup',
-                );
+          print('🔍 UI - ¿Es error de permisos? $isPermissionError');
 
-            if (selectedProjectDir != null) {
-              // Cerrar cualquier diálogo anterior
-              if (context.mounted) {
-                Navigator.of(context).pop();
-              }
+          if (isPermissionError && context.mounted) {
+            print('🔐 UI - Mostrando diálogo de permisos');
 
-              // Mostrar loading nuevamente
-              showDialog(
-                context: context,
-                barrierDismissible: false,
-                builder: (context) => AlertDialog(
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
+            // Esperar un frame adicional para asegurar que la UI esté lista
+            await Future.delayed(const Duration(milliseconds: 100));
+
+            // Verificar que el contexto siga siendo válido
+            if (!context.mounted) {
+              print('⚠️ UI - Contexto no válido, no se puede mostrar diálogo');
+              return;
+            }
+
+            // Usar rootNavigator para que el diálogo persista incluso si cambia la pestaña
+            // Preguntar si quiere seleccionar el directorio del proyecto
+            // Asegurar que el diálogo se muestre de forma prominente
+            final selectDir = await showDialog<bool>(
+              context: context,
+              barrierDismissible: false, // No permitir cerrar tocando fuera
+              useRootNavigator:
+                  true, // Usar el Navigator root para que persista
+              barrierColor:
+                  Colors.black54, // Fondo más oscuro para destacar el diálogo
+              builder: (dialogContext) => PopScope(
+                canPop: false, // Prevenir cierre con botón de retroceso
+                child: AlertDialog(
+                  title: Row(
                     children: [
-                      const CircularProgressIndicator(),
-                      const SizedBox(height: 16),
-                      const Text('Creando backup del proyecto...'),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Esto puede tardar varios minutos',
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      Icon(Icons.warning, color: Colors.orange, size: 28),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Permisos insuficientes',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
                     ],
                   ),
+                  content: const Text(
+                    'No se puede acceder al directorio del proyecto por falta de permisos.\n\n'
+                    'Por favor, selecciona el directorio del proyecto para otorgar permisos de lectura.\n\n'
+                    'El backup se subirá directamente a Google Drive.',
+                    style: TextStyle(fontSize: 16),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(
+                          dialogContext,
+                          rootNavigator: true,
+                        ).pop(false);
+                      },
+                      child: const Text('Cancelar'),
+                    ),
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.folder_open),
+                      onPressed: () {
+                        Navigator.of(
+                          dialogContext,
+                          rootNavigator: true,
+                        ).pop(true);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        foregroundColor: Colors.white,
+                      ),
+                      label: const Text('Seleccionar Directorio del Proyecto'),
+                    ),
+                  ],
                 ),
-              );
+              ),
+            );
 
-              // Crear backup usando el directorio del proyecto seleccionado
-              // uploadToGoogleDrive está en true por defecto, se subirá directamente a Google Drive
-              try {
-                await viewModel.createProjectBackup(
-                  projectPath: selectedProjectDir,
-                  uploadToGoogleDrive: true,
-                );
-              } catch (e) {
-                print(
-                  'Error capturado al crear backup con directorio seleccionado: $e',
-                );
-              }
+            print('🔐 UI - Diálogo cerrado con resultado: $selectDir');
 
-              if (context.mounted) {
-                Navigator.of(context).pop(); // Cerrar loading
-
-                // Mostrar mensaje de éxito o error
-                if (viewModel.successMessage != null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(viewModel.successMessage!),
-                      backgroundColor: Colors.green,
-                      duration: const Duration(seconds: 5),
-                    ),
+            if (selectDir == true) {
+              // Pedir al usuario que seleccione el directorio del proyecto
+              // (para obtener permisos de lectura)
+              final selectedProjectDir = await file_picker.FilePicker.platform
+                  .getDirectoryPath(
+                    dialogTitle:
+                        'Selecciona el directorio del PROYECTO para hacer backup',
                   );
-                } else if (viewModel.errorMessage != null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(viewModel.errorMessage!),
-                      backgroundColor: Colors.red,
-                      duration: const Duration(seconds: 5),
+
+              if (selectedProjectDir != null && context.mounted) {
+                // Mostrar loading nuevamente
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => AlertDialog(
+                    content: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const CircularProgressIndicator(),
+                        const SizedBox(height: 16),
+                        const Text('Creando backup del proyecto...'),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Esto puede tardar varios minutos',
+                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                      ],
                     ),
+                  ),
+                );
+
+                // Crear backup usando el directorio del proyecto seleccionado
+                // uploadToGoogleDrive está en true por defecto, se subirá directamente a Google Drive
+                try {
+                  await viewModel.createProjectBackup(
+                    projectPath: selectedProjectDir,
+                    uploadToGoogleDrive: true,
+                  );
+                } catch (e) {
+                  // El error ya está guardado en viewModel.errorMessage
+                  print(
+                    'Error capturado al crear backup con directorio seleccionado: $e',
                   );
                 }
+
+                if (context.mounted) {
+                  Navigator.of(context).pop(); // Cerrar loading
+
+                  // Mostrar mensaje de éxito o error (igual que para catálogos/usuarios)
+                  if (viewModel.successMessage != null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(viewModel.successMessage!),
+                        backgroundColor: Colors.green,
+                        duration: const Duration(seconds: 5),
+                      ),
+                    );
+                    // Recargar backups
+                    await viewModel.loadBackups(type: BackupType.project);
+                  } else if (viewModel.errorMessage != null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(viewModel.errorMessage!),
+                        backgroundColor: Colors.red,
+                        duration: const Duration(seconds: 5),
+                      ),
+                    );
+                  }
+                }
+              } else if (selectedProjectDir == null) {
+                // Usuario canceló la selección de directorio, limpiar mensaje de error
+                print('⚠️ UI - Usuario canceló la selección de directorio');
+                viewModel.clearMessages();
               }
+            } else {
+              // Usuario canceló el diálogo de permisos, limpiar mensaje de error
+              print('⚠️ UI - Usuario canceló el diálogo de permisos');
+              viewModel.clearMessages();
             }
+          } else {
+            // Error no relacionado con permisos, mostrar mensaje de error
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(viewModel.errorMessage!),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 5),
+              ),
+            );
           }
         }
       }

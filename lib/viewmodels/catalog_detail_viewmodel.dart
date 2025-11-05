@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import '../models/catalog.dart';
 import '../services/mongo_service.dart';
 import '../services/pagination_service.dart';
+import '../services/local_storage_service.dart';
 
 enum SortDirection { none, ascending, descending }
 
@@ -276,6 +277,12 @@ class CatalogDetailViewModel extends ChangeNotifier {
     print('     multimedia: ${files.multimedia}');
     print('     multimediaFiles: ${files.multimediaFiles}');
     print('     hasAnyFiles: ${files.hasAnyFiles}');
+    // Debug: mostrar fileTitles recibidos
+    if (files.fileTitles.isNotEmpty) {
+      print('     📝 fileTitles recibidos: ${files.fileTitles}');
+    } else {
+      print('     ⚠️ fileTitles vacío en archivos recibidos');
+    }
 
     // Obtener la fila desde rows (ya ordenada)
     final updatedRow = CatalogRow(
@@ -297,6 +304,14 @@ class CatalogDetailViewModel extends ChangeNotifier {
       print(
         '   Archivos después de actualizar: hasAnyFiles=${updatedRow.files.hasAnyFiles}',
       );
+      // Debug: verificar fileTitles después de actualizar
+      if (updatedRow.files.fileTitles.isNotEmpty) {
+        print(
+          '   📝 fileTitles después de actualizar: ${updatedRow.files.fileTitles}',
+        );
+      } else {
+        print('   ⚠️ fileTitles vacío después de actualizar');
+      }
     } else {
       print(
         '⚠️ No se encontró la fila en originalRows con originalId=${updatedRow.originalId}',
@@ -352,6 +367,7 @@ class CatalogDetailViewModel extends ChangeNotifier {
       columns: _catalog.columns,
       rows: _originalRows,
       legacyRows: _catalog.legacyRows,
+      thumbnailUrl: _catalog.thumbnailUrl,
       createdAt: _catalog.createdAt,
       updatedAt: DateTime.now(),
     );
@@ -372,11 +388,39 @@ class CatalogDetailViewModel extends ChangeNotifier {
           print(
             '     multimedia: ${row.files.multimedia}, multimediaFiles: ${row.files.multimediaFiles}',
           );
+          // Debug: mostrar fileTitles
+          if (row.files.fileTitles.isNotEmpty) {
+            print('     fileTitles: ${row.files.fileTitles}');
+          }
         }
       }
 
       await _mongoService.updateCatalogFromObject(updatedCatalog);
       print('✅ Catálogo guardado correctamente');
+
+      // Invalidar caché local para forzar recarga desde MongoDB
+      // Esto asegura que cuando vuelvas a CatalogsView, se carguen los datos actualizados
+      try {
+        final localStorage = LocalStorageService.shared;
+        final localCatalogs = await localStorage.loadCatalogsLocally();
+        final index = localCatalogs.indexWhere(
+          (c) => c.id == updatedCatalog.id,
+        );
+        if (index != -1) {
+          localCatalogs[index] = updatedCatalog;
+          await localStorage.saveCatalogsLocally(localCatalogs);
+          print('✅ Caché local actualizado');
+        } else {
+          // Si no está en el caché, agregarlo
+          localCatalogs.add(updatedCatalog);
+          await localStorage.saveCatalogsLocally(localCatalogs);
+          print('✅ Catálogo agregado al caché local');
+        }
+      } catch (e) {
+        print('⚠️ Error actualizando caché local: $e');
+        // No es crítico, continuar
+      }
+
       // Notificar a los listeners después de guardar
       notifyListeners();
     } catch (e) {

@@ -141,25 +141,28 @@ class SyncService {
   }
 
   /// Obtiene catálogos (desde servidor si hay conexión, sino desde local)
+  /// [forceRefresh] - Si es true, siempre carga desde MongoDB ignorando caché local
   Future<List<Catalog>> getCatalogs({
     required String userId,
     required bool isAdmin,
     String? userEmail,
+    bool forceRefresh = false,
   }) async {
     if (await hasConnection()) {
       try {
-        // Intentar desde servidor
+        // Siempre cargar desde servidor si hay conexión (para obtener datos actualizados)
+        // Solo usar caché local como fallback si falla la conexión
         final catalogs = await _mongoService.getCatalogs(
           userId,
           isAdmin: isAdmin,
           userEmail: userEmail,
         );
-        // Guardar localmente
+        // Guardar localmente para uso offline
         await _localStorage.saveCatalogsLocally(catalogs);
         return catalogs;
       } catch (e) {
         print('⚠️ Error obteniendo desde servidor, usando datos locales: $e');
-        // Fallback a datos locales
+        // Fallback a datos locales solo si falla la conexión
         final localCatalogs = await _localStorage.loadCatalogsLocally();
         // Filtrar por userId si no es admin
         if (!isAdmin) {

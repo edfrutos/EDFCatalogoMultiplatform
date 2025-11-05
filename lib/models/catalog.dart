@@ -99,10 +99,23 @@ class Catalog extends Equatable {
       if (json['Rows'] != null) {
         final rowsList = json['Rows'] as List<dynamic>?;
         if (rowsList != null) {
+          print(
+            '📋 Catalog.fromJson - Parseando ${rowsList.length} filas desde MongoDB (Rows con mayúscula)',
+          );
           for (final e in rowsList) {
             if (e is Map<String, dynamic>) {
               try {
+                print(
+                  '📋 Catalog.fromJson - Parseando fila, keys disponibles: ${e.keys.toList()}',
+                );
                 final row = CatalogRow.fromJson(e);
+                if (row.files.fileTitles.isNotEmpty) {
+                  print(
+                    '📋 Catalog.fromJson - Fila parseada con ${row.files.fileTitles.length} títulos: ${row.files.fileTitles}',
+                  );
+                } else {
+                  print('📋 Catalog.fromJson - Fila parseada sin títulos');
+                }
                 processRow(row);
               } catch (e) {
                 print('⚠️ Error parseando fila: $e');
@@ -111,14 +124,30 @@ class Catalog extends Equatable {
               print('⚠️ Fila no es un Map, es: ${e.runtimeType}');
             }
           }
+          print(
+            '📋 Catalog.fromJson - Total de filas únicas procesadas: ${rowsMap.length}',
+          );
         }
       } else if (json['rows'] != null) {
         final rowsList = json['rows'] as List<dynamic>?;
         if (rowsList != null) {
+          print(
+            '📋 Catalog.fromJson - Parseando ${rowsList.length} filas desde MongoDB (rows con minúscula)',
+          );
           for (final e in rowsList) {
             if (e is Map<String, dynamic>) {
               try {
+                print(
+                  '📋 Catalog.fromJson - Parseando fila, keys disponibles: ${e.keys.toList()}',
+                );
                 final row = CatalogRow.fromJson(e);
+                if (row.files.fileTitles.isNotEmpty) {
+                  print(
+                    '📋 Catalog.fromJson - Fila parseada con ${row.files.fileTitles.length} títulos: ${row.files.fileTitles}',
+                  );
+                } else {
+                  print('📋 Catalog.fromJson - Fila parseada sin títulos');
+                }
                 processRow(row);
               } catch (e) {
                 print('⚠️ Error parseando fila: $e');
@@ -127,7 +156,14 @@ class Catalog extends Equatable {
               print('⚠️ Fila no es un Map, es: ${e.runtimeType}');
             }
           }
+          print(
+            '📋 Catalog.fromJson - Total de filas únicas procesadas: ${rowsMap.length}',
+          );
         }
+      } else {
+        print(
+          '⚠️ Catalog.fromJson - No se encontraron filas (Rows/rows no presentes)',
+        );
       }
 
       // Convertir el Map a lista, manteniendo el orden de inserción
@@ -369,7 +405,39 @@ class CatalogRow extends Equatable {
       // Debug: mostrar el contenido del Map antes de parsear
       print('📦 Parseando archivos de fila:');
       print('   filesMap keys: ${filesMap.keys.toList()}');
-      print('   filesMap content: $filesMap');
+
+      // Debug: verificar si FileTitles está presente
+      if (filesMap.containsKey('FileTitles')) {
+        final fileTitlesRaw = filesMap['FileTitles'];
+        print(
+          '   📝 FileTitles encontrado (tipo: ${fileTitlesRaw.runtimeType})',
+        );
+        print('   📝 FileTitles contenido: $fileTitlesRaw');
+        if (fileTitlesRaw is Map) {
+          print('   📝 FileTitles es Map con ${fileTitlesRaw.length} entradas');
+          fileTitlesRaw.forEach((key, value) {
+            print(
+              '      - "$key": "$value" (tipo valor: ${value.runtimeType})',
+            );
+          });
+        }
+      } else if (filesMap.containsKey('fileTitles')) {
+        final fileTitlesRaw = filesMap['fileTitles'];
+        print(
+          '   📝 fileTitles encontrado (minúsculas, tipo: ${fileTitlesRaw.runtimeType})',
+        );
+        print('   📝 fileTitles contenido: $fileTitlesRaw');
+        if (fileTitlesRaw is Map) {
+          print('   📝 fileTitles es Map con ${fileTitlesRaw.length} entradas');
+          fileTitlesRaw.forEach((key, value) {
+            print(
+              '      - "$key": "$value" (tipo valor: ${value.runtimeType})',
+            );
+          });
+        }
+      } else {
+        print('   ⚠️ No se encontró FileTitles ni fileTitles en filesMap');
+      }
 
       rowFiles = RowFiles.fromJson(filesMap);
 
@@ -379,6 +447,14 @@ class CatalogRow extends Equatable {
         print('      image: ${rowFiles.image}');
         print('      document: ${rowFiles.document}');
         print('      multimedia: ${rowFiles.multimedia}');
+      }
+      // Debug: verificar fileTitles parseados
+      if (rowFiles.fileTitles.isNotEmpty) {
+        print(
+          '      📝 fileTitles parseados (${rowFiles.fileTitles.length} entradas): ${rowFiles.fileTitles}',
+        );
+      } else {
+        print('      ⚠️ fileTitles vacío después de parsear');
       }
     } else {
       // Debug: no se encontraron archivos
@@ -427,14 +503,30 @@ class CatalogRow extends Equatable {
   Map<String, dynamic> toJson() {
     final filesJson = files.toJson();
     // Debug: verificar que fileTitles se está incluyendo
-    if (files.fileTitles.isNotEmpty) {
-      print('📝 CatalogRow.toJson - fileTitles: ${files.fileTitles}');
+    print(
+      '📝 CatalogRow.toJson - fileTitles en objeto: ${files.fileTitles.length} entradas',
+    );
+    print('📝 CatalogRow.toJson - fileTitles contenido: ${files.fileTitles}');
+    print(
+      '📝 CatalogRow.toJson - filesJson contiene FileTitles: ${filesJson.containsKey('FileTitles')}',
+    );
+    if (filesJson.containsKey('FileTitles')) {
+      final fileTitlesInJson = filesJson['FileTitles'];
+      if (fileTitlesInJson is Map) {
+        print(
+          '📝 CatalogRow.toJson - filesJson[FileTitles] es Map con ${fileTitlesInJson.length} entradas: $fileTitlesInJson',
+        );
+      } else {
+        print(
+          '📝 CatalogRow.toJson - filesJson[FileTitles] NO es Map, es: ${fileTitlesInJson.runtimeType}',
+        );
+      }
     }
     return {
       '_id': id,
       if (originalId != null) 'originalId': originalId,
       'Data': data, // MongoDB usa mayúsculas
-      'Files': filesJson, // MongoDB usa mayúsculas
+      'Files': filesJson, // MongoDB usa mayúsculas - contiene FileTitles
       'CreatedAt': createdAt.toIso8601String(),
       'UpdatedAt': updatedAt.toIso8601String(),
     };
@@ -494,18 +586,101 @@ class RowFiles extends Equatable {
   // Factory constructor para crear desde JSON
   // MongoDB usa mayúsculas: Image, Images, Document, Documents, Multimedia, MultimediaFiles
   factory RowFiles.fromJson(Map<String, dynamic> json) {
-    // Parsear fileTitles (verificar tanto minúsculas como mayúsculas para compatibilidad)
+    // Parsear fileTitles (verificar tanto mayúsculas como minúsculas para compatibilidad)
     Map<String, String> titles = {};
-    if (json['fileTitles'] != null && json['fileTitles'] is Map) {
-      final titlesMap = json['fileTitles'] as Map;
-      titles = titlesMap.map(
-        (key, value) => MapEntry(key.toString(), value.toString()),
+
+    // Verificar primero FileTitles (mayúsculas) que es lo que guardamos ahora
+    if (json['FileTitles'] != null) {
+      final fileTitlesValue = json['FileTitles'];
+      print(
+        '📝 RowFiles.fromJson - FileTitles encontrado, tipo: ${fileTitlesValue.runtimeType}',
       );
-    } else if (json['FileTitles'] != null && json['FileTitles'] is Map) {
-      // También verificar mayúsculas para compatibilidad con MongoDB
-      final titlesMap = json['FileTitles'] as Map;
-      titles = titlesMap.map(
-        (key, value) => MapEntry(key.toString(), value.toString()),
+
+      if (fileTitlesValue is Map) {
+        final titlesMap = fileTitlesValue;
+        print(
+          '📝 RowFiles.fromJson - FileTitles es Map con ${titlesMap.length} entradas antes de procesar',
+        );
+
+        // Procesar cada entrada del Map
+        for (final entry in titlesMap.entries) {
+          final keyStr = entry.key.toString();
+          final value = entry.value;
+          print(
+            '   Procesando entrada: "$keyStr" = $value (tipo: ${value.runtimeType})',
+          );
+
+          // Convertir valor a string, manejar null y vacíos
+          String? valueStr;
+          if (value == null) {
+            valueStr = null;
+          } else if (value is String) {
+            valueStr = value.trim();
+          } else {
+            valueStr = value.toString().trim();
+          }
+
+          if (valueStr != null && valueStr.isNotEmpty) {
+            titles[keyStr] = valueStr;
+            print('   ✅ Añadido a titles: "$keyStr" = "$valueStr"');
+          } else {
+            print('   ⚠️ Omitido (vacío o null): "$keyStr"');
+          }
+        }
+
+        print(
+          '📝 RowFiles.fromJson - FileTitles parseado (mayúsculas): ${titles.length} entradas finales',
+        );
+        if (titles.isNotEmpty) {
+          print('   Contenido final: $titles');
+        }
+      } else {
+        print(
+          '⚠️ RowFiles.fromJson - FileTitles no es un Map, es: ${fileTitlesValue.runtimeType}',
+        );
+      }
+    } else if (json['fileTitles'] != null) {
+      // Fallback a minúsculas para compatibilidad
+      final fileTitlesValue = json['fileTitles'];
+      print(
+        '📝 RowFiles.fromJson - fileTitles encontrado (minúsculas), tipo: ${fileTitlesValue.runtimeType}',
+      );
+
+      if (fileTitlesValue is Map) {
+        final titlesMap = fileTitlesValue;
+        print(
+          '📝 RowFiles.fromJson - fileTitles es Map con ${titlesMap.length} entradas antes de procesar',
+        );
+
+        // Procesar cada entrada del Map
+        for (final entry in titlesMap.entries) {
+          final keyStr = entry.key.toString();
+          final value = entry.value;
+
+          String? valueStr;
+          if (value == null) {
+            valueStr = null;
+          } else if (value is String) {
+            valueStr = value.trim();
+          } else {
+            valueStr = value.toString().trim();
+          }
+
+          if (valueStr != null && valueStr.isNotEmpty) {
+            titles[keyStr] = valueStr;
+          }
+        }
+
+        print(
+          '📝 RowFiles.fromJson - fileTitles parseado (minúsculas): ${titles.length} entradas finales',
+        );
+        if (titles.isNotEmpty) {
+          print('   Contenido final: $titles');
+        }
+      }
+    } else {
+      print(
+        '⚠️ RowFiles.fromJson - No se encontró FileTitles ni fileTitles en el JSON',
       );
     }
 
@@ -547,9 +722,27 @@ class RowFiles extends Equatable {
   // Convertir a JSON
   Map<String, dynamic> toJson() {
     // Debug: verificar que fileTitles se está incluyendo
-    if (fileTitles.isNotEmpty) {
-      print('📝 RowFiles.toJson - fileTitles: $fileTitles');
+    print(
+      '📝 RowFiles.toJson - fileTitles contiene ${fileTitles.length} entradas: $fileTitles',
+    );
+
+    // Crear un Map limpio solo con valores no vacíos
+    final cleanFileTitles = <String, String>{};
+    for (final entry in fileTitles.entries) {
+      final key = entry.key.trim();
+      final value = entry.value.trim();
+      if (key.isNotEmpty && value.isNotEmpty) {
+        cleanFileTitles[key] = value;
+        print('   ✅ Guardando título: "$key" = "$value"');
+      } else {
+        print('   ⚠️ Omitiendo título vacío o inválido: "$key" = "$value"');
+      }
     }
+
+    print(
+      '📝 RowFiles.toJson - Total de títulos a guardar: ${cleanFileTitles.length}',
+    );
+
     return {
       if (image != null) 'Image': image, // MongoDB usa mayúsculas
       'Images': images, // MongoDB usa mayúsculas
@@ -558,8 +751,9 @@ class RowFiles extends Equatable {
       if (multimedia != null)
         'Multimedia': multimedia, // MongoDB usa mayúsculas
       'MultimediaFiles': multimediaFiles, // MongoDB usa mayúsculas
-      if (fileTitles.isNotEmpty)
-        'fileTitles': fileTitles, // Mantener minúsculas para compatibilidad
+      // Incluir FileTitles siempre (incluso si está vacío) para mantener consistencia
+      // Usar 'FileTitles' con mayúscula para consistencia con MongoDB
+      'FileTitles': cleanFileTitles,
     };
   }
 
