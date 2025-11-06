@@ -113,8 +113,8 @@ Usar Xvfb dentro del contenedor y acceder vía VNC:
 ## 💡 Recomendación
 
 Para **desarrollo y pruebas**:
-- Usa Docker para **compilar** la aplicación
-- Usa una **máquina Linux real** o **VM** para **ejecutar** con GUI
+- Usa Docker con **VNC** (Xvfb) para ejecutar con GUI ✅ **IMPLEMENTADO**
+- O usa una **máquina Linux real** o **VM** para mejor performance
 
 Para **producción**:
 - Compila en Docker o CI/CD

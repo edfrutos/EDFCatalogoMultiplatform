@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart' as file_picker;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../services/mongo_service.dart';
 import '../../services/s3_service.dart';
@@ -197,14 +198,20 @@ class _ProfileViewState extends State<ProfileView> {
       }
     } catch (e) {
       print('❌ Error al seleccionar imagen: $e');
+      final isLinux = !kIsWeb && Platform.isLinux;
+      final errorMessage = isLinux && e.toString().contains('zenity')
+          ? 'Error: zenity no está disponible. En Docker, el selector de archivos puede no funcionar. Por favor, reconstruye la imagen Docker o usa la aplicación fuera de Docker.'
+          : 'Error al seleccionar imagen: $e';
+
       setState(() {
-        _errorMessage = 'Error al seleccionar imagen: $e';
+        _errorMessage = errorMessage;
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al seleccionar imagen: $e'),
+            content: Text(errorMessage),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
           ),
         );
       }

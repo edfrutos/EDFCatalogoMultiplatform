@@ -4,13 +4,14 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:file_picker/file_picker.dart' as file_picker;
 import 'dart:convert' show utf8, latin1;
 import 'dart:io';
 import 'package:path/path.dart' as path;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../../models/file_type.dart';
 
 /// Visualizador completo de archivos con soporte para PDF, video, audio e imágenes
@@ -905,6 +906,63 @@ class _FileViewerViewState extends State<FileViewerView> {
         widget.url.toLowerCase().contains('youtu.be');
     final videoId = isYouTube ? _extractYouTubeVideoId(widget.url) : null;
 
+    // En Linux, WebView no está soportado, usar url_launcher para abrir en navegador externo
+    final isLinux = !kIsWeb && Platform.isLinux;
+    if (isLinux && isYouTube) {
+      return SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.video_library, size: 64, color: Colors.blue),
+                const SizedBox(height: 16),
+                const Text(
+                  'Reproducir video en navegador',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'En Linux, los videos de YouTube se abren en tu navegador predeterminado.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 14),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    final uri = Uri.parse(widget.url);
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(
+                        uri,
+                        mode: LaunchMode.externalApplication,
+                      );
+                    } else {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('No se pudo abrir el video'),
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  icon: const Icon(Icons.open_in_browser),
+                  label: const Text('Abrir en navegador'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     // Si el videoId cambió o el WebViewController no está inicializado, reinicializar
     if (isYouTube && videoId != null) {
       if (_webViewController == null || _currentVideoId != videoId) {
@@ -918,61 +976,89 @@ class _FileViewerViewState extends State<FileViewerView> {
           _currentVideoId = videoId;
         }
 
-        _webViewController = WebViewController()
-          ..setJavaScriptMode(JavaScriptMode.unrestricted)
-          ..setNavigationDelegate(
-            NavigationDelegate(
-              onNavigationRequest: (NavigationRequest request) {
-                // Si es el main frame
-                if (request.isMainFrame) {
-                  // Permitir solo la carga inicial del HTML local
-                  if (!_hasLoadedInitialContent) {
-                    // Permitir la primera navegación (puede ser cualquier cosa de la carga inicial)
-                    _hasLoadedInitialContent = true;
+        try {
+          _webViewController = WebViewController()
+            ..setJavaScriptMode(JavaScriptMode.unrestricted)
+            ..setNavigationDelegate(
+              NavigationDelegate(
+                onNavigationRequest: (NavigationRequest request) {
+                  // Si es el main frame
+                  if (request.isMainFrame) {
+                    // Permitir solo la carga inicial del HTML local
+                    if (!_hasLoadedInitialContent) {
+                      // Permitir la primera navegación (puede ser cualquier cosa de la carga inicial)
+                      _hasLoadedInitialContent = true;
+                      print(
+                        '✅ Permitida navegación inicial del main frame: ${request.url}',
+                      );
+                      return NavigationDecision.navigate;
+                    }
+
+                    // Después de la carga inicial, bloquear TODAS las navegaciones del main frame
+                    // IMPORTANTE: Esto previene que YouTube intente redirigir o abrir ventanas nuevas
                     print(
-                      '✅ Permitida navegación inicial del main frame: ${request.url}',
+                      '🚫 BLOQUEADA navegación principal (ya cargado): ${request.url}',
                     );
-                    return NavigationDecision.navigate;
+                    return NavigationDecision.prevent;
                   }
 
-                  // Después de la carga inicial, bloquear TODAS las navegaciones del main frame
-                  // IMPORTANTE: Esto previene que YouTube intente redirigir o abrir ventanas nuevas
-                  print(
-                    '🚫 BLOQUEADA navegación principal (ya cargado): ${request.url}',
-                  );
-                  return NavigationDecision.prevent;
-                }
+                  // Permitir TODAS las navegaciones dentro del iframe (subframes)
+                  // Esto incluye recursos de YouTube dentro del embed que necesita cargar
+                  print('✅ Permitida navegación de subframe: ${request.url}');
+                  return NavigationDecision.navigate;
+                },
+                onPageStarted: (String url) {
+                  print('🎥 Cargando YouTube WebView: $url');
+                },
+                onPageFinished: (String url) {
+                  print('✅ YouTube WebView cargado: $url');
+                  if (mounted) {
+                    setState(() {});
+                  }
+                },
+                onWebResourceError: (WebResourceError error) {
+                  print('❌ Error en WebView: ${error.description}');
+                  print('   Error code: ${error.errorCode}');
+                  print('   Error type: ${error.errorType}');
+                  print('   URL: ${error.url}');
+                },
+              ),
+            );
 
-                // Permitir TODAS las navegaciones dentro del iframe (subframes)
-                // Esto incluye recursos de YouTube dentro del embed que necesita cargar
-                print('✅ Permitida navegación de subframe: ${request.url}');
-                return NavigationDecision.navigate;
-              },
-              onPageStarted: (String url) {
-                print('🎥 Cargando YouTube WebView: $url');
-              },
-              onPageFinished: (String url) {
-                print('✅ YouTube WebView cargado: $url');
-                if (mounted) {
-                  setState(() {});
-                }
-              },
-              onWebResourceError: (WebResourceError error) {
-                print('❌ Error en WebView: ${error.description}');
-                print('   Error code: ${error.errorCode}');
-                print('   Error type: ${error.errorType}');
-                print('   URL: ${error.url}');
-              },
-            ),
+          // Cargar HTML con iframe embebido
+          // IMPORTANTE: Usar el dominio de YouTube como baseUrl para que el iframe funcione
+          _webViewController!.loadHtmlString(
+            _getYouTubeEmbedHtml(videoId),
+            baseUrl: 'https://www.youtube-nocookie.com',
           );
-
-        // Cargar HTML con iframe embebido
-        // IMPORTANTE: Usar el dominio de YouTube como baseUrl para que el iframe funcione
-        _webViewController!.loadHtmlString(
-          _getYouTubeEmbedHtml(videoId),
-          baseUrl: 'https://www.youtube-nocookie.com',
-        );
-        print('🎥 HTML con iframe cargado para video ID: $videoId');
+          print('🎥 HTML con iframe cargado para video ID: $videoId');
+        } catch (e) {
+          // Si falla la creación del WebViewController (puede pasar en Linux),
+          // mostrar un mensaje y permitir abrir en navegador externo
+          print('❌ Error creando WebViewController: $e');
+          _webViewController = null;
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text(
+                  'No se pudo cargar el video. Usa el botón para abrirlo en el navegador.',
+                ),
+                action: SnackBarAction(
+                  label: 'Abrir',
+                  onPressed: () async {
+                    final uri = Uri.parse(widget.url);
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(
+                        uri,
+                        mode: LaunchMode.externalApplication,
+                      );
+                    }
+                  },
+                ),
+              ),
+            );
+          }
+        }
       }
     }
 

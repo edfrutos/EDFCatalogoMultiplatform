@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:mongo_dart/mongo_dart.dart' as mongo;
 import '../services/google_drive_backup_service.dart';
@@ -63,6 +64,39 @@ class BackupViewModel extends ChangeNotifier {
           print('❌ Error cargando backups de catálogos desde Google Drive: $e');
           print('   Stack trace: $stackTrace');
           _catalogBackups = [];
+          // Si es un error de autenticación, mostrar mensaje más claro
+          if (e.toString().contains('autenticar') ||
+              e.toString().contains('OAuth') ||
+              e.toString().contains('navegador')) {
+            bool isDocker = false;
+            if (!kIsWeb && Platform.isLinux) {
+              if (Platform.environment.containsKey('DOCKER_CONTAINER')) {
+                isDocker = true;
+              } else if (File('/.dockerenv').existsSync()) {
+                isDocker = true;
+              } else {
+                try {
+                  final cgroupFile = File('/proc/self/cgroup');
+                  if (cgroupFile.existsSync()) {
+                    final cgroupContent = cgroupFile.readAsStringSync();
+                    if (cgroupContent.contains('docker')) {
+                      isDocker = true;
+                    }
+                  }
+                } catch (e) {
+                  // Si no se puede leer, asumir que no estamos en Docker
+                }
+              }
+            }
+            if (isDocker) {
+              _errorMessage =
+                  'Autenticación requerida. Revisa los logs de la consola para obtener la URL de autenticación.';
+            } else {
+              _errorMessage = 'Error de autenticación con Google Drive: $e';
+            }
+          } else {
+            _errorMessage = 'Error al cargar backups: $e';
+          }
         }
       } else if (type == BackupType.users) {
         print('👥 Cargando backups de usuarios desde Google Drive...');
@@ -162,7 +196,40 @@ class BackupViewModel extends ChangeNotifier {
       // Recargar lista de backups (solo de catálogos, no del proyecto)
       await loadBackups(type: BackupType.catalogs, loadProjectBackups: false);
     } catch (e) {
-      _errorMessage = 'Error al crear backup de catálogos: $e';
+      // Mejorar mensaje de error si es problema de autenticación
+      bool isDocker = false;
+      if (!kIsWeb && Platform.isLinux) {
+        if (Platform.environment.containsKey('DOCKER_CONTAINER')) {
+          isDocker = true;
+        } else if (File('/.dockerenv').existsSync()) {
+          isDocker = true;
+        } else {
+          try {
+            final cgroupFile = File('/proc/self/cgroup');
+            if (cgroupFile.existsSync()) {
+              final cgroupContent = cgroupFile.readAsStringSync();
+              if (cgroupContent.contains('docker')) {
+                isDocker = true;
+              }
+            }
+          } catch (e) {
+            // Si no se puede leer, asumir que no estamos en Docker
+          }
+        }
+      }
+
+      if (e.toString().contains('autenticar') ||
+          e.toString().contains('OAuth') ||
+          e.toString().contains('navegador')) {
+        if (isDocker) {
+          _errorMessage =
+              'Autenticación requerida. Revisa los logs de la consola para obtener la URL de autenticación y seguir las instrucciones.';
+        } else {
+          _errorMessage = 'Error de autenticación con Google Drive: $e';
+        }
+      } else {
+        _errorMessage = 'Error al crear backup de catálogos: $e';
+      }
       print('❌ Error: $_errorMessage');
     } finally {
       if (!_isDisposed) {
@@ -196,7 +263,40 @@ class BackupViewModel extends ChangeNotifier {
       // Recargar lista de backups (solo de usuarios, no del proyecto)
       await loadBackups(type: BackupType.users, loadProjectBackups: false);
     } catch (e) {
-      _errorMessage = 'Error al crear backup de usuarios: $e';
+      // Mejorar mensaje de error si es problema de autenticación
+      bool isDocker = false;
+      if (!kIsWeb && Platform.isLinux) {
+        if (Platform.environment.containsKey('DOCKER_CONTAINER')) {
+          isDocker = true;
+        } else if (File('/.dockerenv').existsSync()) {
+          isDocker = true;
+        } else {
+          try {
+            final cgroupFile = File('/proc/self/cgroup');
+            if (cgroupFile.existsSync()) {
+              final cgroupContent = cgroupFile.readAsStringSync();
+              if (cgroupContent.contains('docker')) {
+                isDocker = true;
+              }
+            }
+          } catch (e) {
+            // Si no se puede leer, asumir que no estamos en Docker
+          }
+        }
+      }
+
+      if (e.toString().contains('autenticar') ||
+          e.toString().contains('OAuth') ||
+          e.toString().contains('navegador')) {
+        if (isDocker) {
+          _errorMessage =
+              'Autenticación requerida. Revisa los logs de la consola para obtener la URL de autenticación y seguir las instrucciones.';
+        } else {
+          _errorMessage = 'Error de autenticación con Google Drive: $e';
+        }
+      } else {
+        _errorMessage = 'Error al crear backup de usuarios: $e';
+      }
       print('❌ Error: $_errorMessage');
     } finally {
       if (!_isDisposed) {
@@ -525,7 +625,9 @@ class BackupViewModel extends ChangeNotifier {
               // Intentar buscar por ID directamente
               existingCatalog = await mongoService.getCatalogById(catalogId);
               if (existingCatalog != null) {
-                Logger.debug('Catálogo existente encontrado por ID: $catalogId');
+                Logger.debug(
+                  'Catálogo existente encontrado por ID: $catalogId',
+                );
               }
             } catch (e) {
               Logger.warning('No se pudo buscar por ID: $e');

@@ -56,11 +56,11 @@ class ExportService {
       final cell = sheet.cell(
         CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0),
       );
-      cell.value = catalog.columns[i];
+      cell.value = TextCellValue(catalog.columns[i]);
       // Estilo para encabezado
       cell.cellStyle = CellStyle(
         bold: true,
-        backgroundColorHex: '#E8E8E8',
+        backgroundColorHex: ExcelColor.fromHexString('#E8E8E8'),
         horizontalAlign: HorizontalAlign.Center,
       );
     }
@@ -76,7 +76,7 @@ class ExportService {
             rowIndex: rowIndex + 1,
           ),
         );
-        cell.value = row.data[column] ?? '';
+        cell.value = TextCellValue(row.data[column] ?? '');
       }
     }
 
@@ -116,10 +116,10 @@ class ExportService {
         final cell = sheet.cell(
           CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0),
         );
-        cell.value = catalog.columns[i];
+        cell.value = TextCellValue(catalog.columns[i]);
         cell.cellStyle = CellStyle(
           bold: true,
-          backgroundColorHex: '#E8E8E8',
+          backgroundColorHex: ExcelColor.fromHexString('#E8E8E8'),
           horizontalAlign: HorizontalAlign.Center,
         );
       }
@@ -135,7 +135,7 @@ class ExportService {
               rowIndex: rowIndex + 1,
             ),
           );
-          cell.value = row.data[column] ?? '';
+          cell.value = TextCellValue(row.data[column] ?? '');
         }
       }
 
@@ -241,11 +241,11 @@ class ExportService {
         final cell = sheet.cell(
           CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0),
         );
-        cell.value = catalog.columns[i];
+        cell.value = TextCellValue(catalog.columns[i]);
         // Estilo para encabezado
         cell.cellStyle = CellStyle(
           bold: true,
-          backgroundColorHex: '#E8E8E8',
+          backgroundColorHex: ExcelColor.fromHexString('#E8E8E8'),
           horizontalAlign: HorizontalAlign.Center,
         );
       }
@@ -261,7 +261,7 @@ class ExportService {
               rowIndex: rowIndex + 1,
             ),
           );
-          cell.value = row.data[column] ?? '';
+          cell.value = TextCellValue(row.data[column] ?? '');
         }
       }
 

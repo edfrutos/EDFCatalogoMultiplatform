@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../services/mongo_service.dart';
 import '../utils/env_config.dart';
 import '../models/backup_info.dart';
@@ -268,14 +269,81 @@ class GoogleDriveBackupService {
         queryParameters: params.map((key, value) => MapEntry(key, value)),
       );
 
-      // Mostrar URL al usuario y abrir en navegador
+      // Detectar si estamos en Docker/Linux
+      final isLinux = !kIsWeb && Platform.isLinux;
+      bool isDocker = false;
+      if (isLinux) {
+        if (Platform.environment.containsKey('DOCKER_CONTAINER')) {
+          isDocker = true;
+        } else if (File('/.dockerenv').existsSync()) {
+          isDocker = true;
+        } else {
+          try {
+            final cgroupFile = File('/proc/self/cgroup');
+            if (cgroupFile.existsSync()) {
+              final cgroupContent = cgroupFile.readAsStringSync();
+              if (cgroupContent.contains('docker')) {
+                isDocker = true;
+              }
+            }
+          } catch (e) {
+            // Si no se puede leer, asumir que no estamos en Docker
+            print('⚠️ No se pudo verificar si estamos en Docker: $e');
+          }
+        }
+      }
+
+      // Mostrar URL al usuario
       if (onAuthUrl != null) {
         onAuthUrl(uri.toString());
       }
 
-      print('🔗 Abriendo navegador para autenticación...');
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      // En Docker, mostrar la URL de forma prominente en los logs
+      if (isDocker) {
+        print('');
+        print('=' * 80);
+        print('🔐 AUTENTICACIÓN REQUERIDA PARA GOOGLE DRIVE');
+        print('=' * 80);
+        print('');
+        print(
+          '⚠️  Estás ejecutando en Docker. El navegador no se puede abrir automáticamente.',
+        );
+        print('');
+        print('📋 INSTRUCCIONES:');
+        print(
+          '   1. Copia la siguiente URL y ábrela en tu navegador LOCAL (fuera de Docker):',
+        );
+        print('');
+        print('   ${uri.toString()}');
+        print('');
+        print('   2. Autoriza el acceso a Google Drive');
+        print('   3. Después de autorizar, serás redirigido a localhost:8080');
+        print(
+          '   4. El servidor OAuth en Docker recibirá el código automáticamente',
+        );
+        print('');
+        print(
+          '💡 NOTA: Asegúrate de que el puerto 8080 esté mapeado en docker-compose',
+        );
+        print('   (ej: "8080:8080" en la sección ports)');
+        print('');
+        print('=' * 80);
+        print('');
+      } else {
+        print('🔗 Abriendo navegador para autenticación...');
+        try {
+          if (await canLaunchUrl(uri)) {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          } else {
+            print('⚠️  No se pudo abrir el navegador automáticamente.');
+            print('📋 Por favor, abre manualmente esta URL:');
+            print('   ${uri.toString()}');
+          }
+        } catch (e) {
+          print('⚠️  Error al abrir navegador: $e');
+          print('📋 Por favor, abre manualmente esta URL:');
+          print('   ${uri.toString()}');
+        }
       }
 
       // Esperar a recibir el código de autorización

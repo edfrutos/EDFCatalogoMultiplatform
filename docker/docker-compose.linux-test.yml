@@ -14,11 +14,20 @@ services:
     environment:
       - DISPLAY=${DISPLAY:-:0}
       - FLUTTER_ROOT=/usr/local/flutter
+      - LIBGL_ALWAYS_SOFTWARE=1
+      - GALLIUM_DRIVER=llvmpipe
+      - MESA_GL_VERSION_OVERRIDE=3.3
     working_dir: /app
     stdin_open: true
     tty: true
-    # Para permitir acceso a la red
-    network_mode: host
+    ports:
+      # Puerto VNC para acceder a la GUI
+      - "5900:5900"
+      # Puerto OAuth para autenticación de Google Drive
+      - "8080:8080"
     # Permisos adicionales
     privileged: false
+    # En macOS, necesitamos usar la red por defecto y TCP para X11
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 

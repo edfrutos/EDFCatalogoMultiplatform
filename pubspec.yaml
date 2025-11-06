@@ -50,19 +50,19 @@ dependencies:
   dio: ^5.4.0
 
   # Environment Variables
-  flutter_dotenv: ^5.1.0
+  flutter_dotenv: ^6.0.0
 
   # Secure Storage (Keychain/Keystore)
   flutter_secure_storage: ^9.0.0
   shared_preferences: ^2.2.2
 
   # File Handling
-  file_picker: ^8.1.0
+  file_picker: ^10.3.3
   path_provider: ^2.1.1
   path: ^1.8.3
   
   # Markdown rendering
-  flutter_markdown: ^0.6.18
+  flutter_markdown_plus: ^1.0.5
 
   # Image & Media
   cached_network_image: ^3.3.1
@@ -70,7 +70,7 @@ dependencies:
   url_launcher: ^6.2.5
   
   # PDF Viewer
-  syncfusion_flutter_pdfviewer: ^28.1.36
+  syncfusion_flutter_pdfviewer: ^31.2.5
   
   # Video Player
   video_player: ^2.8.1
@@ -81,21 +81,21 @@ dependencies:
   youtube_player_iframe: ^5.0.0
 
   # Utilities
-  intl: ^0.19.0
+  intl: ^0.20.2
   uuid: ^4.5.1
   equatable: ^2.0.5
   
   # Export
-  excel: ^3.0.0
+  excel: ^4.0.6
   csv: ^6.0.0
-  share_plus: ^7.2.1
+  share_plus: ^12.0.1
   
   # Connectivity
-  connectivity_plus: ^5.0.2
+  connectivity_plus: ^7.0.0
   
   # Google Cloud Storage
-  googleapis: ^12.0.0
-  googleapis_auth: ^1.5.0
+  googleapis: ^15.0.0
+  googleapis_auth: ^2.0.0
   
   # Archive (para comprimir backups)
   archive: ^3.4.0
@@ -109,7 +109,7 @@ dev_dependencies:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^5.0.0
+  flutter_lints: ^6.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

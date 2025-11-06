@@ -13,6 +13,31 @@ RUN apt-get update && apt-get install -y \
     zip \
     libglu1-mesa \
     mesa-utils \
+    mesa-utils-extra \
+    libgl1-mesa-glx \
+    libgl1-mesa-dri \
+    libgl1-mesa-dev \
+    mesa-common-dev \
+    libglapi-mesa \
+    libosmesa6 \
+    libosmesa6-dev \
+    libglib2.0-0 \
+    libx11-dev \
+    libxrandr-dev \
+    libxinerama-dev \
+    libxcursor-dev \
+    libxi-dev \
+    libxext-dev \
+    libxfixes-dev \
+    libxrender-dev \
+    libxcomposite-dev \
+    libxdamage-dev \
+    libxkbcommon-dev \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libatspi2.0-0 \
+    libdrm2 \
+    libgbm1 \
     cmake \
     ninja-build \
     libgtk-3-dev \
@@ -21,14 +46,13 @@ RUN apt-get update && apt-get install -y \
     g++ \
     clang \
     build-essential \
-    libx11-dev \
-    libxrandr-dev \
-    libxinerama-dev \
-    libxcursor-dev \
-    libxi-dev \
-    libxext-dev \
     libsecret-1-dev \
     ca-certificates \
+    xvfb \
+    x11vnc \
+    fluxbox \
+    zenity \
+    firefox \
     && rm -rf /var/lib/apt/lists/*
 
 # Instalar Flutter

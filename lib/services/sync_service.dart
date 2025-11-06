@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../models/catalog.dart';
 import '../services/mongo_service.dart';
@@ -23,16 +24,27 @@ class SyncService {
   /// Verifica si hay conexión a internet
   Future<bool> hasConnection() async {
     try {
-      final result = await _connectivity.checkConnectivity();
-      return result != ConnectivityResult.none;
+      // Usar timeout para evitar que el error de DBus bloquee indefinidamente
+      final results = await _connectivity.checkConnectivity().timeout(
+        const Duration(seconds: 2),
+        onTimeout: () {
+          print('⚠️ Timeout verificando conexión (normal en Docker sin DBus)');
+          throw TimeoutException('Timeout verificando conectividad');
+        },
+      );
+      // En la nueva API, se devuelve una lista. Si está vacía o contiene 'none', está offline
+      return results.isNotEmpty && !results.contains(ConnectivityResult.none);
     } catch (e) {
-      print('❌ Error verificando conexión: $e');
-      return false;
+      // En Docker/Linux, DBus puede no estar disponible, pero la conexión real puede funcionar
+      // Asumimos que hay conexión si la verificación falla (especialmente en Linux)
+      print('⚠️ Error verificando conexión (puede ser normal en Docker): $e');
+      print('   Asumiendo que hay conexión y continuando...');
+      return true; // Asumir conexión si la verificación falla
     }
   }
 
   /// Escucha cambios en la conectividad
-  Stream<ConnectivityResult> get connectivityStream =>
+  Stream<List<ConnectivityResult>> get connectivityStream =>
       _connectivity.onConnectivityChanged;
 
   /// Sincroniza datos pendientes cuando se recupera la conexión
