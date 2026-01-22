@@ -5,54 +5,80 @@ import 'package:flutter/services.dart'
 import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:media_kit/media_kit.dart';
 import 'utils/env_config.dart';
+import 'utils/env_loader.dart';
 import 'viewmodels/auth_viewmodel.dart';
 import 'viewmodels/admin_viewmodel.dart';
 import 'views/content_view.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (!kIsWeb && Platform.isLinux) {
+    MediaKit.ensureInitialized();
+  }
 
   // Cargar variables de entorno desde múltiples ubicaciones posibles
   bool envLoaded = false;
 
-  // Para web, cargar como asset usando rootBundle
+  // Para web y Android, cargar como asset usando rootBundle
   if (kIsWeb) {
     try {
-      // En web, cargar manualmente desde rootBundle y parsear
-      final String envString = await rootBundle.loadString('.env');
-      // Parsear manualmente el string
-      final lines = envString.split('\n');
-      for (final line in lines) {
-        final trimmed = line.trim();
-        if (trimmed.isNotEmpty && !trimmed.startsWith('#')) {
-          final parts = trimmed.split('=');
-          if (parts.length >= 2) {
-            final key = parts[0].trim();
-            final value = parts.sublist(1).join('=').trim();
-            // Limpiar comillas si existen
-            final cleanValue = value
-                .replaceAll(RegExp(r'^"'), '')
-                .replaceAll(RegExp(r'"$'), '')
-                .replaceAll(RegExp(r"^'"), '')
-                .replaceAll(RegExp(r"'$"), '');
-            dotenv.env[key] = cleanValue;
-          }
-        }
+      final loaded = await loadEnvFromAssets();
+      if (loaded) {
+        print(
+          '✅ Variables de entorno cargadas manualmente desde asset para web',
+        );
+        print('📋 Variables cargadas: ${globalEnvMap.keys.length}');
+        envLoaded = true;
+      } else {
+        print('⚠️ Error al cargar .env en web');
+        print(
+          '⚠️ La aplicación continuará pero puede no funcionar correctamente',
+        );
       }
-      print('✅ Variables de entorno cargadas manualmente desde asset para web');
-      print('📋 Variables cargadas: ${dotenv.env.keys.length}');
-      envLoaded = true;
     } catch (e) {
       print('⚠️ Error al cargar .env en web: $e');
       print(
         '⚠️ La aplicación continuará pero puede no funcionar correctamente',
       );
     }
+  } else if (Platform.isAndroid) {
+    // Para Android, cargar desde assets usando rootBundle
+    try {
+      print('🔍 Iniciando carga de .env para Android...');
+      final loaded = await loadEnvFromAssets();
+      if (loaded) {
+        print('✅ Variables de entorno cargadas desde assets para Android');
+        print('📋 Variables cargadas: ${globalEnvMap.keys.length}');
+        print('📋 Variables disponibles: ${dotenv.env.keys.toList()}');
+
+        // Verificar variables críticas específicas
+        final mongoUri = globalEnvMap['MONGO_URI'];
+        final mongoDb = globalEnvMap['MONGO_DB'];
+        print(
+          '📋 MONGO_URI: ${mongoUri?.isNotEmpty == true ? "✅ Configurada (${mongoUri!.length} chars)" : "❌ Vacía"}',
+        );
+        print(
+          '📋 MONGO_DB: ${mongoDb?.isNotEmpty == true ? "✅ Configurada: $mongoDb" : "❌ Vacía"}',
+        );
+
+        envLoaded = true;
+      } else {
+        print('⚠️ No se pudo cargar .env desde assets en Android');
+        print('⚠️ Intentando cargar desde rutas del sistema de archivos...');
+        // Continuar con la lógica de búsqueda en sistema de archivos como fallback
+      }
+    } catch (e) {
+      print('⚠️ Error al cargar .env desde assets en Android: $e');
+      print('⚠️ Stack trace: ${StackTrace.current}');
+      print('⚠️ Intentando cargar desde rutas del sistema de archivos...');
+      // Continuar con la lógica de búsqueda en sistema de archivos como fallback
+    }
   } else {
-    // Para macOS/iOS/Android/Desktop, buscar archivo físico
+    // Para macOS/iOS/Linux/Windows Desktop, buscar archivo físico
     // No intentar cargar desde assets en desktop - solo buscar en sistema de archivos
-    // Los assets solo funcionan bien en web
+    // Los assets solo funcionan bien en web y Android
 
     // Para Linux, buscar PRIMERO relativo al ejecutable o en el directorio de datos
     if (!envLoaded && Platform.isLinux) {
@@ -97,6 +123,7 @@ void main() async {
                           .replaceAll(RegExp(r"^'"), '')
                           .replaceAll(RegExp(r"'$"), '');
                       dotenv.env[key] = cleanValue;
+                      globalEnvMap[key] = cleanValue;
                     }
                   }
                 }
@@ -247,14 +274,23 @@ void main() async {
           searchDir = searchDir.parent;
         }
 
-        // También buscar desde la ruta absoluta del proyecto conocida
-        final projectRootPath =
-            '/Users/edefrutos/__Proyectos/EDFCatalogoMultiplatform';
-        final knownEnvPath = File('$projectRootPath/.env');
-        if (knownEnvPath.existsSync() &&
-            !possiblePaths.contains(knownEnvPath.path)) {
-          possiblePaths.insert(0, knownEnvPath.path);
-          print('✅ Encontrado .env en ruta conocida: ${knownEnvPath.path}');
+        // También buscar desde rutas absolutas conocidas del proyecto
+        final knownProjectPaths = <String>{};
+
+        final homeDir = Platform.environment['HOME'];
+        if (homeDir != null && homeDir.isNotEmpty) {
+           // Intenta buscar en carpetas de proyectos comunes si existen
+           knownProjectPaths.add('$homeDir/Proyectos/EDFCatalogoMultiplatform');
+           knownProjectPaths.add('$homeDir/Projects/EDFCatalogoMultiplatform');
+        }
+
+        for (final projectRootPath in knownProjectPaths) {
+          final knownEnvPath = File('$projectRootPath/.env');
+          if (knownEnvPath.existsSync() &&
+              !possiblePaths.contains(knownEnvPath.path)) {
+            possiblePaths.insert(0, knownEnvPath.path);
+            print('✅ Encontrado .env en ruta conocida: ${knownEnvPath.path}');
+          }
         }
       } catch (e) {
         print('⚠️ Error buscando .env en raíz: $e');
@@ -343,10 +379,10 @@ void main() async {
               print('✅ Variables de entorno cargadas desde: $path');
               print('📋 Verificando variables cargadas...');
               print(
-                '   MONGO_URI: ${dotenv.env['MONGO_URI']?.isNotEmpty == true ? "✅ Cargada" : "❌ Vacía"}',
+                '   MONGO_URI: ${globalEnvMap['MONGO_URI']?.isNotEmpty == true ? "✅ Cargada" : "❌ Vacía"}',
               );
               print(
-                '   MONGO_DB: ${dotenv.env['MONGO_DB']?.isNotEmpty == true ? "✅ Cargada" : "❌ Vacía"}',
+                '   MONGO_DB: ${globalEnvMap['MONGO_DB']?.isNotEmpty == true ? "✅ Cargada" : "❌ Vacía"}',
               );
               envLoaded = true;
               break;

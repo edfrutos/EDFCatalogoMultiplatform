@@ -6,12 +6,15 @@ import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:http/http.dart' as http;
-import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter/webview_flutter.dart' as fv;
 import 'package:file_picker/file_picker.dart' as file_picker;
 import 'dart:convert' show utf8, latin1;
 import 'dart:io';
 import 'package:path/path.dart' as path;
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
+import 'package:youtube_explode_dart/youtube_explode_dart.dart' as yt;
 import '../../../models/file_type.dart';
 
 /// Visualizador completo de archivos con soporte para PDF, video, audio e imágenes
@@ -31,15 +34,24 @@ class _FileViewerViewState extends State<FileViewerView> {
   bool _isLoadingVideo = false;
   String? _videoError;
 
+  // MediaKit para Linux
+  Player? _mediaKitPlayer;
+  VideoController? _mediaKitController;
+  bool _isLinuxMediaLoading = false;
+  String? _linuxMediaError;
+  String? _resolvedLinuxMediaUrl;
+  String? _lastLinuxOriginalUrl;
+
   // Para archivos de texto
   String? _textContent;
   bool _isLoadingText = false;
   String? _textError;
 
   // Para WebView de YouTube
-  WebViewController? _webViewController;
+  fv.WebViewController? _webViewController;
   bool _hasLoadedInitialContent = false;
   String? _currentVideoId;
+  bool _webViewFailed = false; // Flag para indicar si WebView falló
 
   FileType _getFileType(String url) {
     final lower = url.toLowerCase();
@@ -260,8 +272,12 @@ class _FileViewerViewState extends State<FileViewerView> {
     super.initState();
     final fileType = _getFileType(widget.url);
 
-    if (fileType == FileType.multimedia && !_isStreamingVideo(widget.url)) {
-      _initializeVideo();
+    if (fileType == FileType.multimedia) {
+      if (!kIsWeb && Platform.isLinux) {
+        _initializeLinuxMediaKit();
+      } else if (!_isStreamingVideo(widget.url)) {
+        _initializeVideo();
+      }
     } else if (fileType == FileType.text) {
       _loadTextFile();
     } else if (fileType == FileType.document) {
@@ -271,6 +287,20 @@ class _FileViewerViewState extends State<FileViewerView> {
       if (!lower.contains('.pdf') && !fileNameLower.endsWith('.pdf')) {
         _loadTextFile();
       }
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant FileViewerView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.url == oldWidget.url) return;
+
+    final fileType = _getFileType(widget.url);
+    if (!kIsWeb && Platform.isLinux && fileType == FileType.multimedia) {
+      _initializeLinuxMediaKit(force: true);
+    } else if (fileType == FileType.multimedia &&
+        !_isStreamingVideo(widget.url)) {
+      _initializeVideo();
     }
   }
 
@@ -350,6 +380,141 @@ class _FileViewerViewState extends State<FileViewerView> {
     }
   }
 
+  Future<String?> _extractYouTubeStreamUrl(String youtubeUrl) async {
+    // Primer intento: youtube_explode_dart (no requiere dependencias externas)
+    try {
+      final ytClient = yt.YoutubeExplode();
+      try {
+        final videoId = yt.VideoId(youtubeUrl);
+        final manifest =
+            await ytClient.videos.streamsClient.getManifest(videoId);
+        final muxed = manifest.muxed;
+
+        yt.MuxedStreamInfo? bestCandidate;
+        for (final stream in muxed) {
+          final height = stream.videoResolution.height;
+          if (height <= 0) continue;
+          if (height <= 720) {
+            if (bestCandidate == null ||
+                height > bestCandidate!.videoResolution.height) {
+              bestCandidate = stream;
+            }
+          }
+        }
+        bestCandidate ??=
+            muxed.isNotEmpty ? muxed.first : null; // fallback a la mejor disponible
+
+        if (bestCandidate != null) {
+          final streamUrl = bestCandidate.url.toString();
+          final preview = streamUrl.length > 100
+              ? '${streamUrl.substring(0, 100)}...'
+              : streamUrl;
+          print(
+            '✅ URL del stream extraída con youtube_explode_dart: $preview',
+          );
+          return streamUrl;
+        } else {
+          print('⚠️ youtube_explode_dart no encontró streams muxed.');
+        }
+      } finally {
+        ytClient.close();
+      }
+    } catch (e) {
+      print('⚠️ youtube_explode_dart falló: $e');
+    }
+
+    // Segundo intento: yt-dlp (requiere ejecutable disponible en el sistema)
+    try {
+      print('🔍 youtube_explode no funcionó; probando con yt-dlp...');
+      final result = await Process.run(
+        'yt-dlp',
+        ['-g', '-f', 'best[height<=720]', youtubeUrl],
+        runInShell: false,
+      );
+
+      if (result.exitCode == 0 && result.stdout.toString().trim().isNotEmpty) {
+        final streamUrl = result.stdout.toString().trim();
+        final urlPreview =
+            streamUrl.length > 100 ? '${streamUrl.substring(0, 100)}...' : streamUrl;
+        print('✅ URL del stream extraída con yt-dlp: $urlPreview');
+        return streamUrl;
+      } else {
+        print('⚠️ yt-dlp no pudo extraer la URL: ${result.stderr}');
+      }
+    } catch (e) {
+      print('❌ Error ejecutando yt-dlp: $e');
+    }
+
+    return null;
+  }
+
+  Future<void> _initializeLinuxMediaKit({bool force = false}) async {
+    if (kIsWeb || !Platform.isLinux) return;
+
+    final originalUrl = widget.url;
+
+    if (!force &&
+        _mediaKitPlayer != null &&
+        _lastLinuxOriginalUrl == originalUrl &&
+        _linuxMediaError == null) {
+      // Ya estamos reproduciendo este recurso.
+      return;
+    }
+
+    setState(() {
+      _isLinuxMediaLoading = true;
+      _linuxMediaError = null;
+    });
+
+    try {
+      String mediaUrl = originalUrl;
+      if (_isStreamingVideo(originalUrl)) {
+        final streamUrl = await _extractYouTubeStreamUrl(originalUrl);
+        if (streamUrl == null || streamUrl.isEmpty) {
+          throw Exception(
+            'No se pudo obtener un stream reproducible desde YouTube. '
+            'Verifica tu conexión o abre el video en el navegador. '
+            'Instalar la herramienta “yt-dlp” puede ayudar como método alternativo.',
+          );
+        }
+        mediaUrl = streamUrl;
+      }
+
+      if (_mediaKitPlayer == null || force) {
+        await _mediaKitPlayer?.dispose();
+        _mediaKitPlayer = Player();
+        _mediaKitController = VideoController(
+          _mediaKitPlayer!,
+          configuration: const VideoControllerConfiguration(
+            vo: 'libmpv',
+            hwdec: 'auto',
+            width: 1280,
+            height: 720,
+          ),
+        );
+      }
+
+      _lastLinuxOriginalUrl = originalUrl;
+      _resolvedLinuxMediaUrl = mediaUrl;
+
+      await _mediaKitPlayer!.open(Media(mediaUrl));
+      await _mediaKitPlayer!.play();
+
+      if (!mounted) return;
+      setState(() {
+        _isLinuxMediaLoading = false;
+      });
+    } catch (e) {
+      debugPrint('❌ Error inicializando MediaKit en Linux: $e');
+      await _mediaKitPlayer?.stop();
+      if (!mounted) return;
+      setState(() {
+        _linuxMediaError = e.toString();
+        _isLinuxMediaLoading = false;
+      });
+    }
+  }
+
   Future<void> _initializeVideo() async {
     setState(() {
       _isLoadingVideo = true;
@@ -392,6 +557,9 @@ class _FileViewerViewState extends State<FileViewerView> {
   void dispose() {
     _chewieController?.dispose();
     _videoPlayerController?.dispose();
+    _mediaKitPlayer?.dispose();
+    _mediaKitPlayer = null;
+    _mediaKitController = null;
     super.dispose();
   }
 
@@ -425,6 +593,7 @@ class _FileViewerViewState extends State<FileViewerView> {
   }
 
   Widget _buildContent(BuildContext context, FileType fileType) {
+    print('🔍 _buildContent: fileType=$fileType, url=${widget.url}, fileName=${widget.fileName}');
     switch (fileType) {
       case FileType.image:
         return _buildImageView();
@@ -459,13 +628,33 @@ class _FileViewerViewState extends State<FileViewerView> {
       case FileType.text:
         return _buildTextView();
       case FileType.multimedia:
+        print('🎬 FileType.multimedia detectado');
+        print('   - _isStreamingVideo: ${_isStreamingVideo(widget.url)}');
+        print('   - _isVideo: ${_isVideo(widget.url)}');
+        print('   - _isAudio: ${_isAudio(widget.url)}');
+        
+        // En Linux, usar MediaKit para TODOS los videos (streaming y MP4)
+        final isLinux = !kIsWeb && Platform.isLinux;
+        print('🐧 Es Linux: $isLinux');
+        
+        if (isLinux && (_isStreamingVideo(widget.url) || _isVideo(widget.url))) {
+          print('🎬 Usando MediaKit para video en Linux: ${widget.url}');
+          return _buildLinuxMediaKitView();
+        }
+        
+        // Para otras plataformas o si no es video
         if (_isStreamingVideo(widget.url)) {
+          print('🎥 Detectado como video de streaming: ${widget.url}');
           return _buildStreamingVideoView();
         } else if (_isVideo(widget.url)) {
+          print('🎬 Detectado como video MP4: ${widget.url}');
+          print('📺 Usando video_player (no Linux)');
           return _buildVideoView();
         } else if (_isAudio(widget.url)) {
+          print('🔊 Detectado como audio: ${widget.url}');
           return _buildAudioView();
         } else {
+          print('⚠️ Multimedia no reconocido, usando fallback');
           return _buildFallbackView(fileType);
         }
       case FileType.other:
@@ -841,6 +1030,133 @@ class _FileViewerViewState extends State<FileViewerView> {
     );
   }
 
+  Widget _buildLinuxVideoFallback(String message) {
+    return SafeArea(
+      child: Container(
+        color: Colors.black,
+        padding: const EdgeInsets.all(24.0),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.videocam_off, size: 72, color: Colors.white70),
+              const SizedBox(height: 16),
+              const Text(
+                'No se puede mostrar el video aquí',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                message,
+                style: const TextStyle(color: Colors.white70, fontSize: 14),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              _buildLinuxVideoActions(includeRetry: true),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLinuxVideoActions({bool includeRetry = false}) {
+    final List<Widget> buttons = [];
+
+    if (includeRetry) {
+      buttons.add(
+        ElevatedButton.icon(
+          onPressed: _isLinuxMediaLoading
+              ? null
+              : () async {
+                  await _initializeLinuxMediaKit(force: true);
+                },
+          icon: const Icon(Icons.refresh),
+          label: const Text('Reintentar'),
+        ),
+      );
+    }
+
+    buttons.addAll([
+      ElevatedButton.icon(
+        onPressed: () async {
+          try {
+            final uri = Uri.parse(widget.url);
+            if (await canLaunchUrl(uri)) {
+              await launchUrl(uri, mode: LaunchMode.externalApplication);
+            } else {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('No se pudo abrir el enlace'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            }
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Error al abrir el enlace: $e'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          }
+        },
+        icon: const Icon(Icons.open_in_browser),
+        label: const Text('Abrir en navegador'),
+      ),
+      ElevatedButton.icon(
+        onPressed: () async {
+          try {
+            final result = await Process.run(
+              'xdg-open',
+              [widget.url],
+              runInShell: false,
+            );
+            if (result.exitCode != 0) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content:
+                        Text('Error al abrir el video: ${result.stderr}'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            }
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Error al abrir el video: $e'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          }
+        },
+        icon: const Icon(Icons.open_in_new),
+        label: const Text('Abrir en reproductor externo'),
+      ),
+    ]);
+
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 12,
+      runSpacing: 12,
+      children: buttons,
+    );
+  }
+
   Widget _buildVideoView() {
     if (_isLoadingVideo) {
       return const Center(
@@ -906,9 +1222,23 @@ class _FileViewerViewState extends State<FileViewerView> {
         widget.url.toLowerCase().contains('youtu.be');
     final videoId = isYouTube ? _extractYouTubeVideoId(widget.url) : null;
 
-    // En Linux, WebView no está soportado, usar url_launcher para abrir en navegador externo
+    // Detectar si estamos en Linux
     final isLinux = !kIsWeb && Platform.isLinux;
-    if (isLinux && isYouTube) {
+    
+    // En Linux, si WebView falló o no está disponible, usar fallback directamente
+    // Esto evita intentar crear el WebViewController que falla en Linux
+    if (isLinux && isYouTube && (_webViewFailed || _webViewController == null)) {
+      // Si no hemos intentado crear el WebViewController aún, marcarlo como fallido
+      // para evitar intentos futuros
+      if (!_webViewFailed && _webViewController == null) {
+        Future.microtask(() {
+          if (mounted) {
+            setState(() {
+              _webViewFailed = true;
+            });
+          }
+        });
+      }
       return SafeArea(
         child: Center(
           child: Padding(
@@ -924,7 +1254,7 @@ class _FileViewerViewState extends State<FileViewerView> {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'En Linux, los videos de YouTube se abren en tu navegador predeterminado.',
+                  'El reproductor integrado no está disponible. El video se abrirá en tu navegador predeterminado.',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 14),
                 ),
@@ -964,7 +1294,8 @@ class _FileViewerViewState extends State<FileViewerView> {
     }
 
     // Si el videoId cambió o el WebViewController no está inicializado, reinicializar
-    if (isYouTube && videoId != null) {
+    // NO intentar en Linux si ya falló antes
+    if (isYouTube && videoId != null && !_webViewFailed && !isLinux) {
       if (_webViewController == null || _currentVideoId != videoId) {
         print(
           '🔄 Inicializando/reinicializando WebView para video: $videoId (anterior: $_currentVideoId)',
@@ -976,89 +1307,94 @@ class _FileViewerViewState extends State<FileViewerView> {
           _currentVideoId = videoId;
         }
 
-        try {
-          _webViewController = WebViewController()
-            ..setJavaScriptMode(JavaScriptMode.unrestricted)
-            ..setNavigationDelegate(
-              NavigationDelegate(
-                onNavigationRequest: (NavigationRequest request) {
-                  // Si es el main frame
-                  if (request.isMainFrame) {
-                    // Permitir solo la carga inicial del HTML local
-                    if (!_hasLoadedInitialContent) {
-                      // Permitir la primera navegación (puede ser cualquier cosa de la carga inicial)
-                      _hasLoadedInitialContent = true;
+        // Inicializar WebViewController de forma asíncrona para evitar errores durante el build
+        Future.microtask(() async {
+          if (!mounted || _webViewFailed) return;
+          
+          try {
+            final controller = fv.WebViewController()
+              ..setJavaScriptMode(fv.JavaScriptMode.unrestricted)
+              ..setNavigationDelegate(
+                fv.NavigationDelegate(
+                  onNavigationRequest: (fv.NavigationRequest request) {
+                    // Si es el main frame
+                    if (request.isMainFrame) {
+                      // Permitir solo la carga inicial del HTML local
+                      if (!_hasLoadedInitialContent) {
+                        // Permitir la primera navegación (puede ser cualquier cosa de la carga inicial)
+                        _hasLoadedInitialContent = true;
+                        print(
+                          '✅ Permitida navegación inicial del main frame: ${request.url}',
+                        );
+                        return fv.NavigationDecision.navigate;
+                      }
+
+                      // Después de la carga inicial, bloquear TODAS las navegaciones del main frame
+                      // IMPORTANTE: Esto previene que YouTube intente redirigir o abrir ventanas nuevas
                       print(
-                        '✅ Permitida navegación inicial del main frame: ${request.url}',
+                        '🚫 BLOQUEADA navegación principal (ya cargado): ${request.url}',
                       );
-                      return NavigationDecision.navigate;
+                      return fv.NavigationDecision.prevent;
                     }
 
-                    // Después de la carga inicial, bloquear TODAS las navegaciones del main frame
-                    // IMPORTANTE: Esto previene que YouTube intente redirigir o abrir ventanas nuevas
-                    print(
-                      '🚫 BLOQUEADA navegación principal (ya cargado): ${request.url}',
-                    );
-                    return NavigationDecision.prevent;
-                  }
-
-                  // Permitir TODAS las navegaciones dentro del iframe (subframes)
-                  // Esto incluye recursos de YouTube dentro del embed que necesita cargar
-                  print('✅ Permitida navegación de subframe: ${request.url}');
-                  return NavigationDecision.navigate;
-                },
-                onPageStarted: (String url) {
-                  print('🎥 Cargando YouTube WebView: $url');
-                },
-                onPageFinished: (String url) {
-                  print('✅ YouTube WebView cargado: $url');
-                  if (mounted) {
-                    setState(() {});
-                  }
-                },
-                onWebResourceError: (WebResourceError error) {
-                  print('❌ Error en WebView: ${error.description}');
-                  print('   Error code: ${error.errorCode}');
-                  print('   Error type: ${error.errorType}');
-                  print('   URL: ${error.url}');
-                },
-              ),
-            );
-
-          // Cargar HTML con iframe embebido
-          // IMPORTANTE: Usar el dominio de YouTube como baseUrl para que el iframe funcione
-          _webViewController!.loadHtmlString(
-            _getYouTubeEmbedHtml(videoId),
-            baseUrl: 'https://www.youtube-nocookie.com',
-          );
-          print('🎥 HTML con iframe cargado para video ID: $videoId');
-        } catch (e) {
-          // Si falla la creación del WebViewController (puede pasar en Linux),
-          // mostrar un mensaje y permitir abrir en navegador externo
-          print('❌ Error creando WebViewController: $e');
-          _webViewController = null;
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: const Text(
-                  'No se pudo cargar el video. Usa el botón para abrirlo en el navegador.',
-                ),
-                action: SnackBarAction(
-                  label: 'Abrir',
-                  onPressed: () async {
-                    final uri = Uri.parse(widget.url);
-                    if (await canLaunchUrl(uri)) {
-                      await launchUrl(
-                        uri,
-                        mode: LaunchMode.externalApplication,
-                      );
+                    // Permitir TODAS las navegaciones dentro del iframe (subframes)
+                    // Esto incluye recursos de YouTube dentro del embed que necesita cargar
+                    print('✅ Permitida navegación de subframe: ${request.url}');
+                    return fv.NavigationDecision.navigate;
+                  },
+                  onPageStarted: (String url) {
+                    print('🎥 Cargando YouTube WebView: $url');
+                  },
+                  onPageFinished: (String url) {
+                    print('✅ YouTube WebView cargado: $url');
+                    if (mounted) {
+                      setState(() {});
+                    }
+                  },
+                  onWebResourceError: (fv.WebResourceError error) {
+                    print('❌ Error en WebView: ${error.description}');
+                    print('   Error code: ${error.errorCode}');
+                    print('   Error type: ${error.errorType}');
+                    print('   URL: ${error.url}');
+                    // Si es un error crítico, marcar como fallido
+                    if (error.errorCode != 0 && error.errorType != fv.WebResourceErrorType.unknown) {
+                      if (mounted) {
+                        setState(() {
+                          _webViewFailed = true;
+                          _webViewController = null;
+                        });
+                      }
                     }
                   },
                 ),
-              ),
+              );
+
+            // Cargar HTML con iframe embebido
+            // IMPORTANTE: Usar el dominio de YouTube como baseUrl para que el iframe funcione
+            await controller.loadHtmlString(
+              _getYouTubeEmbedHtml(videoId),
+              baseUrl: 'https://www.youtube-nocookie.com',
             );
+            
+            if (mounted && !_webViewFailed) {
+              setState(() {
+                _webViewController = controller;
+              });
+              print('🎥 HTML con iframe cargado para video ID: $videoId');
+            }
+          } catch (e, stackTrace) {
+            // Si falla la creación del WebViewController (puede pasar en Linux sin WebKitGTK),
+            // marcar como fallido y mostrar opción de abrir en navegador externo
+            print('❌ Error creando WebViewController: $e');
+            print('   Stack trace: $stackTrace');
+            if (mounted) {
+              setState(() {
+                _webViewController = null;
+                _webViewFailed = true;
+              });
+            }
           }
-        }
+        });
       }
     }
 
@@ -1082,7 +1418,7 @@ class _FileViewerViewState extends State<FileViewerView> {
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: WebViewWidget(controller: _webViewController!),
+                  child: fv.WebViewWidget(controller: _webViewController!),
                 ),
               ),
             )
@@ -1177,8 +1513,10 @@ class _FileViewerViewState extends State<FileViewerView> {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 12,
+                    runSpacing: 12,
                     children: [
                       ElevatedButton.icon(
                         onPressed: () async {
@@ -1199,7 +1537,6 @@ class _FileViewerViewState extends State<FileViewerView> {
                           foregroundColor: Colors.white,
                         ),
                       ),
-                      const SizedBox(width: 12),
                       OutlinedButton.icon(
                         onPressed: () async {
                           final uri = Uri.parse(widget.url);
@@ -1415,5 +1752,117 @@ class _FileViewerViewState extends State<FileViewerView> {
     };
 
     return 'archivo_descargado$extension';
+  }
+
+  double _currentLinuxAspectRatio() {
+    final width = _mediaKitPlayer?.state.width;
+    final height = _mediaKitPlayer?.state.height;
+    if (width != null && height != null && width > 0 && height > 0) {
+      return width / height;
+    }
+    return 16 / 9;
+  }
+
+  Widget _buildLinuxMediaKitView() {
+    if (_linuxMediaError != null) {
+      return _buildLinuxVideoFallback(_linuxMediaError!);
+    }
+
+    if (_mediaKitPlayer == null || _mediaKitController == null) {
+      if (!_isLinuxMediaLoading) {
+        _initializeLinuxMediaKit();
+      }
+      return SafeArea(
+        child: Container(
+          color: Colors.black,
+          alignment: Alignment.center,
+          child: const Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text(
+                'Preparando reproductor...',
+                style: TextStyle(color: Colors.white70),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return SafeArea(
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8.0),
+            color: Colors.black87,
+            child: _buildLinuxVideoActions(),
+          ),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final aspect = _currentLinuxAspectRatio();
+                double width = constraints.maxWidth;
+                double height = width / aspect;
+                if (height > constraints.maxHeight) {
+                  height = constraints.maxHeight;
+                  width = height * aspect;
+                }
+
+                return Center(
+                  child: SizedBox(
+                    width: width,
+                    height: height,
+                    child: Stack(
+                      children: [
+                        Container(
+                          color: Colors.black,
+                          child: Video(
+                            controller: _mediaKitController!,
+                            controls: AdaptiveVideoControls,
+                          ),
+                        ),
+                        if (_isLinuxMediaLoading)
+                          Container(
+                            color: Colors.black.withOpacity(0.45),
+                            child: const _LinuxVideoLoadingOverlay(),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LinuxVideoLoadingOverlay extends StatelessWidget {
+  const _LinuxVideoLoadingOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: const [
+        CircularProgressIndicator(),
+        SizedBox(height: 16),
+        Text(
+          'Preparando el vídeo…',
+          style: TextStyle(color: Colors.white70),
+          textAlign: TextAlign.center,
+        ),
+        SizedBox(height: 8),
+        Text(
+          'Si tarda demasiado, prueba abrirlo en el navegador.',
+          style: TextStyle(color: Colors.white54, fontSize: 12),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
   }
 }

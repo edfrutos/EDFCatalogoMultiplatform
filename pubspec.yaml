@@ -58,6 +58,7 @@ dependencies:
 
   # File Handling
   file_picker: ^10.3.3
+  file_selector: ^1.0.2
   path_provider: ^2.1.1
   path: ^1.8.3
   
@@ -75,10 +76,17 @@ dependencies:
   # Video Player
   video_player: ^2.8.1
   chewie: ^1.7.5
+  # Media Kit para Linux (reproductor de video más robusto)
+  media_kit: ^1.1.10
+  media_kit_video: ^1.2.9
+  media_kit_libs_linux: ^1.0.5
   
   # WebView for embedded YouTube videos
   webview_flutter: ^4.9.0
   youtube_player_iframe: ^5.0.0
+  webview_flutter_wkwebview: ^3.9.0
+  webview_flutter_android: ^3.13.0
+  youtube_explode_dart: ^2.4.2
 
   # Utilities
   intl: ^0.20.2
@@ -110,6 +118,25 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.13.1
+
+flutter_launcher_icons:
+  image_path: assets/icons/edf_developer.png
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  web:
+    generate: true
+    image_path: assets/icons/edf_developer.png
+  macos:
+    generate: true
+    image_path: assets/icons/edf_developer.png
+  windows:
+    generate: true
+    image_path: assets/icons/edf_developer.png
+  linux:
+    generate: true
+    image_path: assets/icons/edf_developer.png
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

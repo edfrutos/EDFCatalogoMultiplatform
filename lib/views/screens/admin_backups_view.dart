@@ -1,9 +1,17 @@
+import 'dart:io';
+import 'dart:convert';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'dart:io';
 import 'package:file_picker/file_picker.dart' as file_picker;
+import 'package:file_selector/file_selector.dart' as fs;
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../viewmodels/backup_viewmodel.dart';
 import '../../models/backup_info.dart';
+import '../../utils/logger.dart';
 
 class AdminBackupsView extends StatefulWidget {
   const AdminBackupsView({super.key});
@@ -64,6 +72,113 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
         viewModel.loadBackups(type: BackupType.project);
         break;
     }
+  }
+
+  Future<String?> _pickSavePath(String suggestedName) async {
+    final normalizedName =
+        suggestedName.toLowerCase().endsWith('.zip') ? suggestedName : '$suggestedName.zip';
+
+    Logger.debug(
+      '[BACKUP] _pickSavePath -> sugerido="$suggestedName", normalizado="$normalizedName", '
+      'Platform.isLinux=${Platform.isLinux}, kIsWeb=$kIsWeb',
+    );
+
+    // En Linux, forzamos un path de guardado automático (los diálogos nativos no aparecen)
+    if (!kIsWeb && Platform.isLinux) {
+      final homeDir = Platform.environment['HOME'];
+      Directory? baseDir;
+      if (homeDir != null && homeDir.isNotEmpty) {
+        baseDir = Directory(p.join(homeDir, 'Downloads'));
+        if (!baseDir.existsSync()) {
+          baseDir.createSync(recursive: true);
+          Logger.info('[BACKUP] (Linux) Carpeta Downloads creada: ${baseDir.path}');
+        } else {
+          Logger.debug('[BACKUP] (Linux) Carpeta Downloads existente: ${baseDir.path}');
+        }
+      } else {
+        Logger.warning('[BACKUP] (Linux) HOME no definido, usaremos temporal');
+      }
+      baseDir ??= Directory.systemTemp;
+      final path = _ensureZipExtension(p.join(baseDir.path, normalizedName));
+      Logger.info('[BACKUP] (Linux) Guardando backup automáticamente en: $path');
+      return path;
+    }
+
+    try {
+      final result = await file_picker.FilePicker.platform.saveFile(
+        fileName: normalizedName,
+        type: file_picker.FileType.custom,
+        allowedExtensions: ['zip'],
+      );
+      if (result != null && result.isNotEmpty) {
+        return _ensureZipExtension(result);
+      }
+    } catch (e) {
+      Logger.warning('[BACKUP] file_picker.saveFile no disponible: $e');
+    }
+
+    try {
+      final location = await fs.getSaveLocation(
+        suggestedName: normalizedName,
+        acceptedTypeGroups: const [
+          fs.XTypeGroup(
+            label: 'Backups ZIP',
+            extensions: ['zip'],
+          ),
+        ],
+        confirmButtonText: 'Guardar',
+      );
+      if (location != null && location.path.isNotEmpty) {
+        return _ensureZipExtension(location.path);
+      }
+    } catch (e) {
+      Logger.warning('[BACKUP] file_selector.getSaveLocation falló: $e');
+    }
+
+    return await _resolveFallbackPath(normalizedName);
+  }
+
+  Future<String?> _resolveFallbackPath(String fileName) async {
+    final normalizedName =
+        fileName.toLowerCase().endsWith('.zip') ? fileName : '$fileName.zip';
+
+    try {
+      final downloadsDir = await getDownloadsDirectory();
+      if (downloadsDir != null) {
+        final fallbackPath = _ensureZipExtension(
+          p.join(downloadsDir.path, normalizedName),
+        );
+        Logger.info('[BACKUP] Guardando backup en carpeta de descargas: $fallbackPath');
+        return fallbackPath;
+      }
+    } catch (e) {
+      Logger.warning('[BACKUP] No se pudo obtener la carpeta de descargas: $e');
+    }
+
+    // Último recurso: HOME del usuario
+    final homeDir = Platform.environment['HOME'];
+    if (homeDir != null && homeDir.isNotEmpty) {
+      final fallbackPath = p.join(homeDir, 'Downloads', normalizedName);
+      Logger.info('[BACKUP] Guardando backup en $fallbackPath (fallback HOME)');
+      return _ensureZipExtension(fallbackPath);
+    }
+
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final fallbackPath = _ensureZipExtension(
+        p.join(tempDir.path, normalizedName),
+      );
+      Logger.info('[BACKUP] Guardando backup en temporal: $fallbackPath');
+      return fallbackPath;
+    } catch (e) {
+      Logger.warning('[BACKUP] No se pudo obtener directorio temporal: $e');
+    }
+
+    return null;
+  }
+
+  String _ensureZipExtension(String path) {
+    return path.toLowerCase().endsWith('.zip') ? path : '$path.zip';
   }
 
   @override
@@ -441,7 +556,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
       }
 
       if (context.mounted) {
-        Navigator.of(context).pop(); // Cerrar loading
+        Navigator.of(context, rootNavigator: true).pop(); // Cerrar loading
       }
     }
   }
@@ -580,7 +695,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
       }
 
       if (context.mounted) {
-        Navigator.of(context).pop(); // Cerrar loading
+        Navigator.of(context, rootNavigator: true).pop(); // Cerrar loading
 
         // Mostrar resultado
         if (viewModel.successMessage != null) {
@@ -609,6 +724,60 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
     }
   }
 
+  // Función para mostrar un diálogo con opciones para el archivo descargado
+  Future<void> _showFileOptionsDialog(
+    BuildContext context, 
+    String filePath, 
+    String fileName,
+    Uint8List? fileBytes,
+  ) async {
+    if (!context.mounted) return;
+    
+    // Mostrar diálogo con opciones
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Descarga completada'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Archivo guardado en:\n$filePath'),
+            const SizedBox(height: 16),
+            if (Platform.isIOS)
+              const Text(
+                'Puedes acceder a este archivo desde la aplicación Archivos en tu iPhone.',
+                style: TextStyle(fontStyle: FontStyle.italic, fontSize: 12),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'ok'),
+            child: const Text('Aceptar'),
+          ),
+          if (fileBytes != null) ...[
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'share'),
+              child: const Text('Compartir'),
+            ),
+          ],
+        ],
+      ),
+    );
+
+    if (result == 'share' && fileBytes != null && context.mounted) {
+      // Usar share_plus para compartir el archivo
+      final tempDir = await getTemporaryDirectory();
+      final tempFile = File('${tempDir.path}/$fileName');
+      await tempFile.writeAsBytes(fileBytes);
+      
+      if (context.mounted) {
+        await Share.shareXFiles([XFile(tempFile.path)], text: 'Compartir archivo: $fileName');
+      }
+    }
+  }
+
   Future<void> _downloadBackup(
     BuildContext context,
     BackupViewModel viewModel,
@@ -616,41 +785,133 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
     BackupType type,
   ) async {
     if (backup.driveFileId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Error: No se encontró el ID del archivo'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('❌ Error: No se encontró el ID del archivo'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
       return;
     }
 
-    showDialog(
+    // Para catálogos y usuarios, primero mostrar detalles sin descargar
+    if (type == BackupType.catalogs || type == BackupType.users) {
+      // Mostrar diálogo con detalles y opción de descargar
+      final shouldDownload = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(backup.fileName),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Fecha: ${backup.formattedDate}'),
+                Text('Tamaño: ${backup.formattedSize}'),
+                Text(
+                  'Tipo: ${type == BackupType.catalogs ? 'Catálogos' : 'Usuarios'}',
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Este backup contiene datos en formato JSON.',
+                  style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cerrar'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.of(context).pop(true),
+              icon: const Icon(Icons.download, size: 18),
+              label: const Text('Descargar'),
+            ),
+          ],
+        ),
+      );
+
+      // Si el usuario no quiere descargar, salir
+      if (shouldDownload != true) return;
+    }
+
+    // Mostrar diálogo de carga
+    showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
+      builder: (context) => const AlertDialog(
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 16),
-            const Text('Descargando backup...'),
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Descargando backup...'),
           ],
         ),
       ),
     );
 
-    final data = await viewModel.downloadBackup(backup.driveFileId!, type);
+    try {
+      // Llamar al ViewModel para descargar el backup
+      final data = await viewModel.downloadBackup(
+        backup.driveFileId!, 
+        type,
+        fileName: backup.fileName,
+      );
 
-    if (context.mounted) {
-      Navigator.of(context).pop(); // Cerrar loading
+      if (!context.mounted) return;
+      
+      // Cerrar diálogo de carga
+      Navigator.of(context).pop();
 
-      if (data != null) {
-        // Si es un proyecto (ZIP), guardarlo en lugar de mostrar detalles
-        if (type == BackupType.project && data['bytes'] != null) {
-          final zipBytes = data['bytes'] as List<int>;
+      if (data == null) {
+        // Mostrar mensaje de error del ViewModel si existe
+        if (viewModel.errorMessage != null && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ ${viewModel.errorMessage}'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+        return;
+      }
+
+      // Mostrar mensaje de éxito
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Backup descargado correctamente'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+
+      // Si es un proyecto (ZIP), gestionar el guardado del archivo
+      if (type == BackupType.project && data['bytes'] != null) {
+        final zipBytes = data['bytes'] as List<int>;
+        final savedPath = data['savedPath'] as String?;
+        final fileName = data['fileName'] as String? ?? 'backup.zip';
+        
+        // Si estamos en iOS, ya se guardó el archivo en el directorio de documentos
+        if (Platform.isIOS && savedPath != null) {
+          await _showFileOptionsDialog(
+            context, 
+            savedPath, 
+            fileName,
+            Uint8List.fromList(zipBytes),
+          );
+        } else {
+          // En otras plataformas, usar el selector de archivos
           final result = await file_picker.FilePicker.platform.saveFile(
-            fileName: backup.fileName,
+            dialogTitle: 'Guardar archivo de respaldo',
+            fileName: fileName,
             type: file_picker.FileType.custom,
             allowedExtensions: ['zip'],
           );
@@ -659,50 +920,59 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
             final file = File(result);
             await file.writeAsBytes(zipBytes);
             if (!context.mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('✅ Backup descargado: ${file.path}'),
-                backgroundColor: Colors.green,
+            
+            // Mostrar diálogo con opciones para el archivo guardado
+            await _showFileOptionsDialog(
+              context, 
+              result, 
+              fileName,
+              Uint8List.fromList(zipBytes),
+            );
+          }
+        }
+      }
+      
+      // Para catálogos/usuarios, el archivo ya se descargó, mostrar confirmación
+      if ((type == BackupType.catalogs || type == BackupType.users) && data.isNotEmpty) {
+        final savedPath = data['savedPath'] as String?;
+        final fileName = data['fileName'] as String? ?? 'backup.json';
+        
+        // Si estamos en iOS y el archivo se guardó, mostrar opciones
+        if (Platform.isIOS && savedPath != null) {
+          await _showFileOptionsDialog(
+            context, 
+            savedPath, 
+            fileName,
+            Uint8List.fromList(utf8.encode(jsonEncode(data))),
+          );
+        } else if (savedPath != null) {
+          // En otras plataformas, mostrar dónde se guardó
+          if (context.mounted) {
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('Descarga completada'),
+                content: Text('Archivo guardado en:\n$savedPath'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Aceptar'),
+                  ),
+                ],
               ),
             );
           }
-          return;
         }
-
-        // Para catálogos/usuarios, mostrar detalles del backup
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Text(backup.fileName),
-            content: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('Fecha: ${backup.formattedDate}'),
-                  Text('Tamaño: ${backup.formattedSize}'),
-                  Text(
-                    'Tipo: ${type == BackupType.catalogs
-                        ? 'Catálogos'
-                        : type == BackupType.users
-                        ? 'Usuarios'
-                        : 'Proyecto'}',
-                  ),
-                  if (data['count'] != null)
-                    Text('Elementos: ${data['count']}'),
-                  if (data['timestamp'] != null)
-                    Text('Timestamp: ${data['timestamp']}'),
-                  if (data['version'] != null)
-                    Text('Versión: ${data['version']}'),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cerrar'),
-              ),
-            ],
+      }
+    } catch (e) {
+      // Cerrar el diálogo de carga si hay un error
+      if (context.mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Error al descargar el backup: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
           ),
         );
       }
@@ -1150,48 +1420,106 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
     );
   }
 
-  /// Restaurar backup del proyecto (descargar y mostrar instrucciones)
-  Future<void> _restoreProjectBackup(
+  /// Descargar backup del proyecto
+  Future<void> _downloadProjectBackup(
     BuildContext context,
     BackupViewModel viewModel,
     BackupInfo backup,
   ) async {
     if (backup.driveFileId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Error: No se encontró el ID del archivo'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('❌ Error: No se encontró el ID del archivo'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
       return;
     }
 
-    final confirmed = await showDialog<bool>(
+    // Mostrar diálogo de carga
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Descargando backup del proyecto...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      // Llamar al ViewModel para descargar el backup
+      final data = await viewModel.downloadBackup(
+        backup.driveFileId!,
+        BackupType.project,
+        fileName: backup.fileName,
+      );
+
+      if (!context.mounted) return;
+      
+      // Cerrar diálogo de carga
+      Navigator.of(context).pop();
+
+      if (data == null) {
+        // Mostrar mensaje de error del ViewModel si existe
+        if (viewModel.errorMessage != null && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ ${viewModel.errorMessage}'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+        return;
+      }
+
+      // Mostrar mensaje de éxito si existe
+      if (viewModel.successMessage != null && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ ${viewModel.successMessage}'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } catch (e) {
+      // Cerrar el diálogo de carga si hay un error
+      if (context.mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Error al descargar el backup: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Restaurar backup del proyecto
+  Future<void> _restoreProjectBackup(
+    BuildContext context,
+    BackupViewModel viewModel,
+    BackupInfo backup,
+  ) async {
+    // Mostrar confirmación antes de restaurar
+    final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Restaurar backup del proyecto'),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '⚠️ Restaurar un backup del proyecto requiere descargarlo y extraerlo manualmente.',
-            ),
-            SizedBox(height: 16),
-            Text(
-              'Se descargará el archivo ZIP del backup. Después de descargarlo:',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 8),
-            Text('1. Extrae el contenido del ZIP'),
-            Text('2. Copia los archivos a la ubicación deseada'),
-            Text('3. Reemplaza los archivos existentes si es necesario'),
-            SizedBox(height: 16),
-            Text(
-              '¿Deseas descargar el backup ahora?',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ],
+        title: const Text('Restaurar Backup del Proyecto'),
+        content: const Text(
+          '¿Estás seguro de que deseas restaurar este backup? '
+          'Esta acción sobrescribirá los datos actuales del proyecto.',
         ),
         actions: [
           TextButton(
@@ -1200,99 +1528,107 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Descargar'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            child: const Text('Restaurar'),
           ),
         ],
       ),
     );
 
-    if (confirmed == true) {
-      if (!context.mounted) return;
-      await _downloadProjectBackup(context, viewModel, backup);
-    }
-  }
+    if (confirm != true) return;
 
-  /// Descargar backup del proyecto
-  Future<void> _downloadProjectBackup(
-    BuildContext context,
-    BackupViewModel viewModel,
-    BackupInfo backup,
-  ) async {
-    if (backup.driveFileId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Error: No se encontró el ID del archivo'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    showDialog(
+    // Mostrar diálogo de carga
+    showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
+      builder: (context) => const AlertDialog(
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 16),
-            const Text('Descargando backup del proyecto...'),
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Restaurando backup del proyecto...'),
           ],
         ),
       ),
     );
 
     try {
+      // Para backups de proyecto, primero descargar el archivo
       final data = await viewModel.downloadBackup(
         backup.driveFileId!,
         BackupType.project,
+        fileName: backup.fileName,
       );
 
-      if (context.mounted) {
-        Navigator.of(context).pop(); // Cerrar loading
+      if (!context.mounted) return;
+      
+      // Cerrar diálogo de carga
+      Navigator.of(context).pop();
 
-        if (data != null && data['bytes'] != null) {
-          // Guardar el ZIP usando file_picker
-          final zipBytes = data['bytes'] as List<int>;
-          final result = await file_picker.FilePicker.platform.saveFile(
-            fileName: backup.fileName,
-            type: file_picker.FileType.custom,
-            allowedExtensions: ['zip'],
-          );
-
-          if (result != null) {
-            final file = File(result);
-            await file.writeAsBytes(zipBytes);
-            if (!context.mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('✅ Backup descargado: ${file.path}'),
-                backgroundColor: Colors.green,
-              ),
-            );
-          }
-        } else {
-          if (!context.mounted) return;
+      if (data == null || data['bytes'] == null) {
+        if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Error: No se pudo descargar el backup'),
+              content: Text('❌ Error: No se pudo descargar el backup'),
               backgroundColor: Colors.red,
+              duration: Duration(seconds: 5),
             ),
           );
         }
+        return;
+      }
+
+      // Mostrar instrucciones de restauración manual
+      if (context.mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Backup descargado'),
+            content: const SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '✅ El backup se ha descargado correctamente.',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 16),
+                  Text('Para restaurar el proyecto:'),
+                  SizedBox(height: 8),
+                  Text('1. Extrae el contenido del archivo ZIP'),
+                  Text('2. Copia los archivos a la ubicación del proyecto'),
+                  Text('3. Reemplaza los archivos existentes si es necesario'),
+                  SizedBox(height: 16),
+                  Text(
+                    '⚠️ Asegúrate de hacer una copia de seguridad del proyecto actual antes de restaurar.',
+                    style: TextStyle(
+                      color: Colors.orange,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Entendido'),
+              ),
+            ],
+          ),
+        );
       }
     } catch (e) {
+      // Cerrar el diálogo de carga si hay un error
       if (context.mounted) {
-        Navigator.of(context).pop(); // Cerrar loading
+        Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al descargar backup: $e'),
+            content: Text('❌ Error al restaurar el backup: $e'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
           ),
         );
       }
@@ -1305,21 +1641,14 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
     BackupViewModel viewModel,
     BackupInfo backup,
   ) async {
-    if (backup.driveFileId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Error: No se encontró el ID del archivo'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-    final confirmed = await showDialog<bool>(
+    // Mostrar confirmación antes de eliminar
+    final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Eliminar backup del proyecto'),
+        title: const Text('Eliminar Backup del Proyecto'),
         content: Text(
-          '¿Estás seguro de que deseas eliminar el backup "${backup.fileName}"?',
+          '¿Estás seguro de que deseas eliminar el backup "${backup.fileName}"?\n\n'
+          'Esta acción no se puede deshacer.',
         ),
         actions: [
           TextButton(
@@ -1328,18 +1657,80 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Eliminar'),
           ),
         ],
       ),
     );
 
-    if (confirmed == true) {
-      await viewModel.deleteBackup(backup.driveFileId!, BackupType.project);
+    if (confirm != true) return;
+
+    // Mostrar diálogo de carga
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Eliminando backup del proyecto...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      // Llamar al ViewModel para eliminar el backup
+      await viewModel.deleteBackup(
+        backup.driveFileId!,
+        BackupType.project,
+      );
+
+      if (!context.mounted) return;
+      
+      // Cerrar diálogo de carga
+      Navigator.of(context).pop();
+
+      // Mostrar mensaje de éxito o error
+      if (viewModel.errorMessage != null) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ ${viewModel.errorMessage}'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      } else if (viewModel.successMessage != null) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ ${viewModel.successMessage}'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+        
+        // Recargar la lista de backups
+        viewModel.loadBackups(type: BackupType.project);
+      }
+    } catch (e) {
+      // Cerrar el diálogo de carga si hay un error
+      if (context.mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Error al eliminar el backup: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     }
   }
 }

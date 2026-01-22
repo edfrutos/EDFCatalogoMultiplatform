@@ -1,4 +1,5 @@
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'env_loader.dart';
 
 /// Clase para gestionar las variables de entorno
 class EnvConfig {
@@ -9,7 +10,7 @@ class EnvConfig {
   // MongoDB
   static String get mongoUri {
     try {
-      return dotenv.env['MONGO_URI'] ?? '';
+      return getEnvVariable('MONGO_URI');
     } catch (e) {
       print('⚠️ Error accediendo a MONGO_URI: $e');
       return '';
@@ -18,7 +19,7 @@ class EnvConfig {
 
   static String get mongoDb {
     try {
-      return dotenv.env['MONGO_DB'] ?? '';
+      return getEnvVariable('MONGO_DB');
     } catch (e) {
       print('⚠️ Error accediendo a MONGO_DB: $e');
       return '';
@@ -26,34 +27,41 @@ class EnvConfig {
   }
 
   // AWS S3
-  static String get awsAccessKeyId => dotenv.env['AWS_ACCESS_KEY_ID'] ?? '';
+  static String get awsAccessKeyId => getEnvVariable('AWS_ACCESS_KEY_ID');
   static String get awsSecretAccessKey =>
-      dotenv.env['AWS_SECRET_ACCESS_KEY'] ?? '';
-  static String get awsRegion => dotenv.env['AWS_REGION'] ?? 'eu-central-1';
+      getEnvVariable('AWS_SECRET_ACCESS_KEY');
+  static String get awsRegion =>
+      getEnvVariable('AWS_REGION', defaultValue: 'eu-central-1');
   // Intentar ambos nombres: S3_BUCKET_NAME y BUCKET_NAME
-  static String get bucketName =>
-      dotenv.env['S3_BUCKET_NAME'] ?? dotenv.env['BUCKET_NAME'] ?? '';
-  static bool get useS3 => dotenv.env['USE_S3']?.toLowerCase() == 'true';
+  static String get bucketName {
+    final s3Bucket = getEnvVariable('S3_BUCKET_NAME');
+    return s3Bucket.isNotEmpty ? s3Bucket : getEnvVariable('BUCKET_NAME');
+  }
+
+  static bool get useS3 => getEnvVariable('USE_S3').toLowerCase() == 'true';
 
   // Email Service (Brevo)
-  static String get brevoApiKey => dotenv.env['BREVO_API_KEY'] ?? '';
+  static String get brevoApiKey => getEnvVariable('BREVO_API_KEY');
   static String get brevoSmtpServer =>
-      dotenv.env['BREVO_SMTP_SERVER'] ?? 'smtp-relay.brevo.com';
+      getEnvVariable('BREVO_SMTP_SERVER', defaultValue: 'smtp-relay.brevo.com');
   static int get brevoSmtpPort =>
-      int.tryParse(dotenv.env['BREVO_SMTP_PORT'] ?? '587') ?? 587;
+      int.tryParse(getEnvVariable('BREVO_SMTP_PORT', defaultValue: '587')) ??
+      587;
 
   // Google OAuth (opcional)
-  static String get googleClientId => dotenv.env['GOOGLE_CLIENT_ID'] ?? '';
+  static String get googleClientId => getEnvVariable('GOOGLE_CLIENT_ID');
   static String get googleClientSecret =>
-      dotenv.env['GOOGLE_CLIENT_SECRET'] ?? '';
+      getEnvVariable('GOOGLE_CLIENT_SECRET');
 
   // Google Drive (para backups)
-  static String get googleDriveFolder =>
-      dotenv.env['GOOGLE_DRIVE_FOLDER'] ?? 'Backups_CatalogoTablas';
-  static String get googleProjectId => dotenv.env['GOOGLE_PROJECT_ID'] ?? '';
+  static String get googleDriveFolder => getEnvVariable(
+    'GOOGLE_DRIVE_FOLDER',
+    defaultValue: 'Backups_CatalogoTablas',
+  );
+  static String get googleProjectId => getEnvVariable('GOOGLE_PROJECT_ID');
   static bool get useGoogleDrive {
-    final useDriveEnv = dotenv.env['USE_GOOGLE_DRIVE']?.toLowerCase();
-    if (useDriveEnv != null) {
+    final useDriveEnv = getEnvVariable('USE_GOOGLE_DRIVE').toLowerCase();
+    if (useDriveEnv.isNotEmpty) {
       return useDriveEnv == 'true';
     }
     // Si hay client ID y secret, asumir que se quiere usar Drive
@@ -61,7 +69,7 @@ class EnvConfig {
   }
 
   // Backend API (para Flutter Web)
-  static String get apiBaseUrl => dotenv.env['API_BASE_URL'] ?? '';
+  static String get apiBaseUrl => getEnvVariable('API_BASE_URL');
   static bool get useApiBackend => apiBaseUrl.isNotEmpty;
 
   /// Validar que las variables críticas estén configuradas

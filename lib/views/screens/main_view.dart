@@ -234,13 +234,16 @@ class _MainViewState extends State<MainView> {
                   : Theme.of(context).colorScheme.onSurface,
             ),
             const SizedBox(width: 12),
-            Text(
-              label,
-              style: TextStyle(
-                color: isSelected
-                    ? Theme.of(context).colorScheme.onPrimaryContainer
-                    : Theme.of(context).colorScheme.onSurface,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: isSelected
+                      ? Theme.of(context).colorScheme.onPrimaryContainer
+                      : Theme.of(context).colorScheme.onSurface,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],

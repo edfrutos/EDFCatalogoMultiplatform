@@ -1,6 +1,9 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:mongo_dart/mongo_dart.dart' as mongo;
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
 import '../services/google_drive_backup_service.dart';
 import '../services/project_backup_service.dart';
 import '../services/mongo_service.dart';
@@ -477,11 +480,13 @@ class BackupViewModel extends ChangeNotifier {
   /// Para proyectos: retorna bytes del ZIP (en el campo 'bytes')
   Future<Map<String, dynamic>?> downloadBackup(
     String fileId,
-    BackupType type,
-  ) async {
+    BackupType type, {
+    String? fileName,
+  }) async {
     if (_isDisposed) return null;
     _isLoading = true;
     _errorMessage = null;
+    _successMessage = null;
     if (!_isDisposed) notifyListeners();
 
     try {
@@ -491,13 +496,56 @@ class BackupViewModel extends ChangeNotifier {
 
       if (type == BackupType.project) {
         // Para proyectos, descargar como ZIP
-        final zipBytes = await _googleDriveService.downloadProjectBackup(
-          fileId,
-        );
+        final zipBytes = await _googleDriveService.downloadProjectBackup(fileId);
+        
+        // En iOS, guardar el archivo en el directorio de documentos
+        if (Platform.isIOS) {
+          try {
+            final directory = await getApplicationDocumentsDirectory();
+            final savePath = '${directory.path}/${fileName ?? 'backup_${DateTime.now().millisecondsSinceEpoch}.zip'}';
+            final file = File(savePath);
+            await file.writeAsBytes(zipBytes);
+            
+            _successMessage = '✅ Backup descargado en: $savePath\n\nPuedes acceder a este archivo desde la aplicación Archivos en tu iPhone.';
+            
+            // Devolver información adicional sobre el archivo guardado
+            return {
+              'bytes': zipBytes,
+              'type': 'zip',
+              'savedPath': savePath,
+              'fileName': path.basename(savePath),
+            };
+          } catch (e) {
+            Logger.error('Error al guardar archivo en iOS', e);
+            _errorMessage = 'Error al guardar el archivo: $e';
+            return null;
+          }
+        }
+        
         return {'bytes': zipBytes, 'type': 'zip'};
       } else {
         // Para catálogos/usuarios, descargar como JSON
         final data = await _googleDriveService.downloadBackup(fileId);
+        
+        // En iOS, guardar el archivo JSON en el directorio de documentos
+        if (Platform.isIOS && data != null) {
+          try {
+            final directory = await getApplicationDocumentsDirectory();
+            final savePath = '${directory.path}/${fileName ?? 'backup_${DateTime.now().millisecondsSinceEpoch}.json'}';
+            final file = File(savePath);
+            await file.writeAsString(jsonEncode(data));
+            
+            _successMessage = '✅ Backup descargado en: $savePath\n\nPuedes acceder a este archivo desde la aplicación Archivos en tu iPhone.';
+            
+            // Actualizar el mapa de datos con la ruta guardada
+            data['savedPath'] = savePath;
+            data['fileName'] = path.basename(savePath);
+          } catch (e) {
+            Logger.error('Error al guardar archivo JSON en iOS', e);
+            _errorMessage = 'Error al guardar el archivo: $e';
+          }
+        }
+        
         return data;
       }
     } catch (e) {

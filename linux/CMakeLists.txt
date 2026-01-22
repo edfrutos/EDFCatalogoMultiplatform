@@ -90,6 +90,7 @@ install(CODE "
 
 set(INSTALL_BUNDLE_DATA_DIR "${CMAKE_INSTALL_PREFIX}/data")
 set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}/lib")
+set(INSTALL_BUNDLE_SHARE_DIR "${CMAKE_INSTALL_PREFIX}/share")
 
 install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)
@@ -120,6 +121,19 @@ install(CODE "
   " COMPONENT Runtime)
 install(DIRECTORY "${PROJECT_BUILD_DIR}/${FLUTTER_ASSET_DIR_NAME}"
   DESTINATION "${INSTALL_BUNDLE_DATA_DIR}" COMPONENT Runtime)
+
+# Install desktop file so the app shows up in launchers.
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/com.edfcatalogo.edfcatalogomultiplatform.desktop"
+  DESTINATION "${INSTALL_BUNDLE_SHARE_DIR}/applications"
+  COMPONENT Runtime)
+
+# Install hicolor icons used by the desktop file.
+set(LINUX_ICON_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/icons")
+if(EXISTS "${LINUX_ICON_SOURCE_DIR}")
+  install(DIRECTORY "${LINUX_ICON_SOURCE_DIR}/"
+    DESTINATION "${INSTALL_BUNDLE_SHARE_DIR}/icons"
+    COMPONENT Runtime)
+endif()
 
 # Install the AOT library on non-Debug builds only.
 if(NOT CMAKE_BUILD_TYPE MATCHES "Debug")

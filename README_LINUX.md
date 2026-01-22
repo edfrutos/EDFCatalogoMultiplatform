@@ -1,6 +1,20 @@
-# 🐧 Ejecutar Flutter en Linux desde macOS
+# 🐧 Ejecutar Flutter en Linux
 
-## Opción 1: Usar el wrapper que incluye Linux (Recomendado)
+## Opción 0: Ejecutar directamente en Linux (entorno nativo)
+
+Si ya estás trabajando **desde un equipo Linux**, no necesitas Docker ni scripts adicionales:
+
+```bash
+flutter pub get
+flutter run -d linux        # Desarrollo interactivo
+flutter build linux --release   # Build de producción
+```
+
+La aplicación se ejecutará usando los binarios nativos de Flutter y guardará los backups en `~/Downloads` automáticamente.
+
+---
+
+## Opción 1: Usar el wrapper que incluye Linux (Recomendado desde macOS)
 
 ```bash
 ./scripts/flutter_run_with_linux.sh

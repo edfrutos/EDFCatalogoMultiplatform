@@ -31,6 +31,7 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 /build/
+/bundle/
 /coverage/
 
 # Symbolication related
@@ -43,6 +44,12 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+/android/build/
+/android/.gradle/
+/android/local.properties
+/android/key.properties
+**/android/build/
+**/android/gradle/
 
 # Environment variables (contiene credenciales sensibles)
 .env
@@ -98,3 +105,6 @@ logs/
 tmp/
 temp/
 *.tmp
+
+# Auxly - AI Task Management (internal data)
+.auxly/

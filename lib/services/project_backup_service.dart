@@ -1,6 +1,11 @@
 import 'dart:io';
-import 'package:path/path.dart' as path;
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:archive/archive.dart';
+import 'package:path/path.dart' as path;
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
+import 'package:path_provider/path_provider.dart' as path_provider;
 
 /// Información de un backup del proyecto
 class ProjectBackupInfo {
@@ -36,8 +41,7 @@ class ProjectBackupService {
   factory ProjectBackupService() => _instance;
   ProjectBackupService._internal();
 
-  static const String _backupBasePath =
-      '/Users/edefrutos/__Proyectos/backups/EDFCatalogoMultiplatform';
+  static final String _backupBasePath = _resolveBackupBasePath();
   static const String _projectBackupsFolder = 'project_backups';
 
   // Directorios y archivos a excluir del backup
@@ -97,6 +101,31 @@ class ProjectBackupService {
       }
     } catch (e) {
       print('❌ Error creando directorio de backups: $e');
+      rethrow;
+    }
+  }
+
+  /// Descargar un archivo de backup
+  Future<String> downloadBackup(String filePath, String fileName) async {
+    try {
+      final file = File(filePath);
+      if (!await file.exists()) {
+        throw Exception('El archivo no existe: $filePath');
+      }
+
+      // En iOS, usar el directorio de documentos de la aplicación
+      final directory = await getApplicationDocumentsDirectory();
+      final savePath = '${directory.path}/$fileName';
+      
+      // Copiar el archivo al directorio de documentos
+      await file.copy(savePath);
+      
+      print('✅ Archivo descargado a: $savePath');
+      
+      // Devolver la ruta donde se guardó el archivo
+      return savePath;
+    } catch (e) {
+      print('❌ Error al descargar el archivo: $e');
       rethrow;
     }
   }
@@ -200,9 +229,7 @@ class ProjectBackupService {
   }) async {
     try {
       // Determinar la ruta del proyecto
-      final actualProjectPath =
-          projectPath ??
-          '/Users/edefrutos/__Proyectos/EDFCatalogoMultiplatform';
+      final actualProjectPath = projectPath ?? _resolveDefaultProjectPath();
       final projectDir = Directory(actualProjectPath);
 
       if (!await projectDir.exists()) {
@@ -538,33 +565,25 @@ class ProjectBackupService {
     String? projectPath,
   }) async {
     try {
-      // Determinar la ruta del proyecto
-      final actualProjectPath =
-          projectPath ??
-          '/Users/edefrutos/__Proyectos/EDFCatalogoMultiplatform';
+      // En iOS, usar el directorio de documentos de la aplicación
+      final bool isIOS = Platform.isIOS;
+
+      // Obtener el directorio del proyecto o usar el directorio de documentos en iOS
+      String actualProjectPath;
+      if (isIOS) {
+        final appDocDir = await getApplicationDocumentsDirectory();
+        actualProjectPath = appDocDir.path;
+        print('📱 Modo iOS: Usando directorio de documentos: $actualProjectPath');
+      } else {
+        actualProjectPath = projectPath ?? _resolveDefaultProjectPath();
+      }
+
       final projectDir = Directory(actualProjectPath);
 
       if (!await projectDir.exists()) {
         throw Exception(
-          'El directorio del proyecto no existe: $actualProjectPath',
+          'El directorio no existe: $actualProjectPath',
         );
-      }
-
-      // Verificar permisos para leer el directorio del proyecto ANTES de intentar hacer backup
-      try {
-        await projectDir.list().take(1).toList();
-      } catch (e) {
-        // Si no hay permisos para leer el directorio del proyecto, lanzar excepción clara
-        if (e.toString().contains('Operation not permitted') ||
-            e.toString().contains('permission') ||
-            e.toString().contains('PathAccessException')) {
-          throw Exception(
-            'No se puede acceder al directorio del proyecto por falta de permisos.\n'
-            'Por favor, selecciona el directorio del proyecto para otorgar permisos de lectura.\n'
-            'Error: $e',
-          );
-        }
-        rethrow;
       }
 
       print('📦 Creando ZIP del proyecto en memoria...');
@@ -574,15 +593,56 @@ class ProjectBackupService {
       int filesAdded = 0;
       int totalSize = 0;
 
-      // Añadir todos los archivos del proyecto al ZIP
-      // Usar list recursivo pero manejar errores de permisos en subdirectorios
-      final result = await _addFilesToArchiveRecursive(
-        projectDir,
-        actualProjectPath,
-        archive,
-      );
-      filesAdded = result['filesAdded'] as int;
-      totalSize = result['totalSize'] as int;
+      // En iOS, solo incluir archivos de la base de datos y configuraciones
+      if (isIOS) {
+        print('📱 Modo iOS: Incluyendo solo archivos de la aplicación...');
+        try {
+          final appDocDir = await getApplicationDocumentsDirectory();
+          print('📁 Directorio de documentos de la app: ${appDocDir.path}');
+          
+          // Añadir archivos de la base de datos
+          final dbFiles = await _findDatabaseFiles(appDocDir);
+          print('🔍 Encontrados ${dbFiles.length} archivos de base de datos');
+          
+          for (final file in dbFiles) {
+            try {
+              final fileBytes = await file.readAsBytes();
+              final relativePath = path.relative(file.path, from: appDocDir.path);
+              final archiveFile = ArchiveFile(
+                relativePath,
+                fileBytes.length,
+                fileBytes,
+              );
+              archive.addFile(archiveFile);
+              totalSize = (totalSize as int) + fileBytes.length;
+              filesAdded++;
+              print('   ✅ Añadido: $relativePath (${fileBytes.length} bytes)');
+            } catch (e) {
+              print('   ⚠️  Error añadiendo ${file.path}: $e');
+            }
+          }
+          
+          if (dbFiles.isEmpty) {
+            print('ℹ️  No se encontraron archivos de base de datos para respaldar');
+          }
+        } catch (e) {
+          print('❌ Error accediendo al directorio de documentos: $e');
+          rethrow;
+        }
+      } else {
+        // Para otras plataformas, usar la lógica normal
+        final result = await _addFilesToArchiveRecursive(
+          projectDir,
+          actualProjectPath,
+          archive,
+        );
+        filesAdded = result['filesAdded'] as int;
+        totalSize = result['totalSize'] as int;
+      }
+
+      if (filesAdded == 0) {
+        throw Exception('No se encontraron archivos para respaldar');
+      }
 
       print('   ✅ Archivos añadidos al ZIP: $filesAdded');
       print(
@@ -599,7 +659,7 @@ class ProjectBackupService {
 
       // Generar nombre del archivo
       final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-      final fileName = 'project_backup_$timestamp.zip';
+      final fileName = 'catalogo_backup_$timestamp.zip';
 
       print('✅ ZIP creado en memoria: $fileName');
       print(
@@ -746,4 +806,124 @@ class ProjectBackupService {
 
   /// Obtener la ruta base de backups
   String get backupBasePath => _backupBasePath;
+
+  // ==== Helpers de rutas ====
+
+  static String _resolveBackupBasePath() {
+    final override = _readEnvOverrides(
+      keys: const ['EDF_BACKUP_DIR', 'EDF_BACKUPS_DIR'],
+    );
+    if (override != null) {
+      return path.normalize(override);
+    }
+
+    final homeDir = Platform.environment['HOME'];
+    if (homeDir != null && homeDir.isNotEmpty) {
+      return path.normalize(path.join(homeDir, 'EDFCatalogoBackups'));
+    }
+
+    return path.normalize(path.join(Directory.current.path, 'EDFCatalogoBackups'));
+  }
+
+  // Función para encontrar archivos de base de datos en un directorio
+  Future<List<File>> _findDatabaseFiles(Directory directory) async {
+    final List<File> dbFiles = [];
+    try {
+      if (await directory.exists()) {
+        final contents = directory.listSync(recursive: true);
+        for (var entity in contents) {
+          if (entity is File) {
+            final ext = path.extension(entity.path).toLowerCase();
+            // Incluir archivos de base de datos comunes
+            if (ext == '.db' || 
+                ext == '.sqlite' || 
+                ext == '.sqlite3' || 
+                entity.path.toLowerCase().contains('catalogo') || 
+                entity.path.toLowerCase().contains('backup')) {
+              dbFiles.add(entity);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('⚠️  Error buscando archivos de base de datos: $e');
+    }
+    return dbFiles;
+  }
+
+  static String _resolveDefaultProjectPath() {
+    // Primero intentar con el directorio actual del proyecto
+    final currentDir = Directory.current.path;
+    if (Directory(currentDir).existsSync()) {
+      return path.normalize(currentDir);
+    }
+
+    // Luego intentar con variables de entorno
+    final override = _readEnvOverrides(
+      keys: const ['EDF_PROJECT_DIR', 'PROJECT_DIR'],
+    );
+    if (override != null && override.isNotEmpty) {
+      final normalized = path.normalize(override);
+      if (Directory(normalized).existsSync()) {
+        return normalized;
+      }
+    }
+
+    // Intentar detectar la raíz del proyecto
+    final detectedRoot = _discoverProjectRoot();
+    if (detectedRoot != null) {
+      return detectedRoot;
+    }
+
+    // Último recurso: rutas comunes
+    final homeDir = Platform.environment['HOME'];
+    if (homeDir != null && homeDir.isNotEmpty) {
+      final candidates = [
+        path.join(homeDir, 'EDFCatalogoMultiplatform'),
+        path.join(homeDir, 'proyectos', 'EDFCatalogoMultiplatform'),
+        path.join(homeDir, '__Proyectos', 'EDFCatalogoMultiplatform'),
+      ];
+
+      for (final candidate in candidates) {
+        if (Directory(candidate).existsSync()) {
+          return path.normalize(candidate);
+        }
+      }
+    }
+
+    // Si todo falla, lanzar excepción en lugar de devolver '/'
+    throw Exception(
+      'No se pudo determinar la ruta del proyecto. Por favor, selecciona manualmente el directorio del proyecto.'
+    );
+  }
+
+  static String? _discoverProjectRoot() {
+    try {
+      var currentDir = Directory(Directory.current.path);
+      for (var i = 0; i < 20; i++) {
+        final pubspec = File(path.join(currentDir.path, 'pubspec.yaml'));
+        if (pubspec.existsSync()) {
+          return path.normalize(currentDir.path);
+        }
+        final parent = currentDir.parent;
+        if (parent.path == currentDir.path) {
+          break;
+        }
+        currentDir = parent;
+      }
+    } catch (_) {
+      // Ignorar errores y continuar con otros métodos de detección.
+    }
+    return null;
+  }
+
+  static String? _readEnvOverrides({required List<String> keys}) {
+    for (final key in keys) {
+      final value = Platform.environment[key];
+      if (value != null && value.trim().isNotEmpty) {
+        return value.trim();
+      }
+    }
+    return null;
+  }
 }

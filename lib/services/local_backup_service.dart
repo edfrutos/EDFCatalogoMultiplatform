@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:path/path.dart' as path;
 import '../services/mongo_service.dart';
 // ignore: unused_import
 import '../models/catalog.dart';
@@ -40,8 +41,7 @@ class LocalBackupService {
   factory LocalBackupService() => _instance;
   LocalBackupService._internal();
 
-  static const String _backupBasePath =
-      '/Users/edefrutos/__Proyectos/backups/EDFCatalogoMultiplatform';
+  static final String _backupBasePath = _resolveBackupBasePath();
   static const String _catalogsFolder = 'catalogs';
   static const String _usersFolder = 'users';
 
@@ -281,4 +281,30 @@ class LocalBackupService {
 
   /// Obtener la ruta base de backups
   String get backupBasePath => _backupBasePath;
+
+  static String _resolveBackupBasePath() {
+    final override = _readEnvOverrides(
+      keys: const ['EDF_BACKUP_DIR', 'EDF_BACKUPS_DIR'],
+    );
+    if (override != null) {
+      return path.normalize(override);
+    }
+
+    final homeDir = Platform.environment['HOME'];
+    if (homeDir != null && homeDir.isNotEmpty) {
+      return path.normalize(path.join(homeDir, 'EDFCatalogoBackups'));
+    }
+
+    return path.normalize(path.join(Directory.current.path, 'EDFCatalogoBackups'));
+  }
+
+  static String? _readEnvOverrides({required List<String> keys}) {
+    for (final key in keys) {
+      final value = Platform.environment[key];
+      if (value != null && value.trim().isNotEmpty) {
+        return value.trim();
+      }
+    }
+    return null;
+  }
 }

@@ -11,9 +11,48 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-# Configuración
-PROJECT_PATH="/Users/edefrutos/__Proyectos/EDFCatalogoMultiplatform"
-BACKUP_BASE_PATH="/Users/edefrutos/__Proyectos/backups/EDFCatalogoMultiplatform"
+# Rutas genéricas (multiplataforma)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Permitir sobrescritura mediante variables de entorno
+PROJECT_PATH="${EDF_PROJECT_DIR:-${PROJECT_DIR:-}}"
+if [ -z "$PROJECT_PATH" ]; then
+    PROJECT_PATH="$SCRIPT_DIR"
+    SEARCH_DIR="$SCRIPT_DIR"
+    for _ in $(seq 1 10); do
+        if [ -f "${SEARCH_DIR}/pubspec.yaml" ]; then
+            PROJECT_PATH="$SEARCH_DIR"
+            break
+        fi
+        PARENT_DIR="$(dirname "$SEARCH_DIR")"
+        if [ "$PARENT_DIR" = "$SEARCH_DIR" ]; then
+            break
+        fi
+        SEARCH_DIR="$PARENT_DIR"
+    done
+fi
+
+if [ ! -d "$PROJECT_PATH" ] && [ -n "$HOME" ]; then
+    for candidate in \
+        "$HOME/EDFCatalogoMultiplatform" \
+        "$HOME/proyectos/EDFCatalogoMultiplatform" \
+        "$HOME/__Proyectos/EDFCatalogoMultiplatform"; do
+        if [ -d "$candidate" ]; then
+            PROJECT_PATH="$candidate"
+            break
+        fi
+    done
+fi
+
+BACKUP_BASE_PATH="${EDF_BACKUP_DIR:-${EDF_BACKUPS_DIR:-}}"
+if [ -z "$BACKUP_BASE_PATH" ]; then
+    if [ -n "$HOME" ]; then
+        BACKUP_BASE_PATH="$HOME/EDFCatalogoBackups"
+    else
+        BACKUP_BASE_PATH="${SCRIPT_DIR}/EDFCatalogoBackups"
+    fi
+fi
+
 BACKUP_FOLDER="project_backups"
 TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
 BACKUP_NAME="project_backup_${TIMESTAMP}"
