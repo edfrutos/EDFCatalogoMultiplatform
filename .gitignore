@@ -108,3 +108,41 @@ temp/
 
 # Auxly - AI Task Management (internal data)
 .auxly/
+
+# Flutter build artifacts
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# Dart generated files
+*.g.dart
+*.freezed.dart
+
+# iOS/macOS
+ios/Pods/
+ios/.symlinks/
+macos/Pods/
+*.xcworkspace/xcuserdata/
+xcuserdata/
+*.xcuserstate
+
+# Android
+android/.gradle/
+android/local.properties
+android/app/google-services.json
+
+# VS Code / Cursor
+.vscode/
+.cursor/
+
+# Credenciales locales
+.env
+.env.local
+appsettings.local.json
+
+# macOS
+.DS_Store
+
+# Logs
+*.log

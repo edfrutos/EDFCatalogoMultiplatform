@@ -1,140 +1,73 @@
-# EDFCatalogoMultiplatform
+# EDF Catálogo Multiplatform
 
-Aplicación multiplataforma de catálogo desarrollada con Flutter para Windows, Linux (Ubuntu), iOS y Android.
+Aplicación Flutter para gestión de catálogos de tablas con soporte multiplataforma: **macOS · iOS · Android · Web · Windows · Linux**.
 
-## 🚀 Plataformas Soportadas
+Backend: MongoDB Atlas · AWS S3 · Gmail SMTP.
 
-- **Windows** (Desktop)
-- **Linux Ubuntu** (Desktop)
-- **iOS** (Mobile)
-- **Android** (Mobile)
+---
 
-## 📋 Requisitos Previos
+## Plataformas
 
-### Flutter SDK
-- Flutter SDK instalado y configurado
-- Verificar instalación: `flutter doctor`
+| Plataforma | Estado |
+|---|---|
+| macOS | ✅ Nativo |
+| iOS | ✅ Nativo |
+| Android | ✅ Nativo |
+| Web | ✅ Flutter Web |
+| Linux | 🐳 Docker (ver `docs/linux/`) |
+| Windows | 🔄 Experimental |
 
-### Plataformas Específicas
+---
 
-#### Windows
-- Windows 10 o superior
-- Visual Studio 2019 o superior con las herramientas de desarrollo de C++
-- Windows 10 SDK
+## Requisitos
 
-#### Linux (Ubuntu)
-- Ubuntu 18.04 o superior
-- Clang
-- CMake
-- GTK development libraries
+- Flutter ≥ 3.x (`flutter doctor`)
+- Dart ≥ 3.x
+- MongoDB Atlas (URI en `.env`)
+- AWS S3 (credenciales en `.env`)
+- Gmail App Password (para notificaciones)
 
-#### iOS
-- macOS
-- Xcode 14.0 o superior
-- CocoaPods
-- Un dispositivo iOS o simulador
+Copia `.env.example` → `.env` y rellena las variables. Ver [`docs/setup/SETUP_ENV.md`](docs/setup/SETUP_ENV.md).
 
-#### Android
-- Android Studio
-- Android SDK
-- Android SDK Platform-Tools
-- Un dispositivo Android o emulador
+---
 
-## 🛠️ Instalación y Configuración
+## Arranque rápido
 
-### 1. Clonar el repositorio
-```bash
-git clone <repository-url>
-cd EDFCatalogoMultiplatform
-```
-
-### 2. Instalar dependencias
 ```bash
 flutter pub get
+flutter run -d macos      # macOS
+flutter run -d chrome     # Web
+flutter run               # dispositivo conectado
 ```
 
-### 3. Verificar configuración
-```bash
-flutter doctor
-```
+---
 
-### 4. Ejecutar la aplicación
+## Documentación
 
-**Windows:**
-```bash
-flutter run -d windows
-```
+| Tema | Carpeta |
+|---|---|
+| Configuración inicial | [`docs/setup/`](docs/setup/) |
+| iOS / Xcode | [`docs/ios/`](docs/ios/) |
+| Android / Android Studio | [`docs/android/`](docs/android/) |
+| Linux / Docker | [`docs/linux/`](docs/linux/) |
+| Testing | [`docs/testing/`](docs/testing/) |
+| Misc / comandos | [`docs/misc/`](docs/misc/) |
 
-**Linux:**
-```bash
-flutter run -d linux
-```
+---
 
-**iOS:**
-```bash
-flutter run -d ios
-```
+## Seguridad
 
-**Android:**
-```bash
-flutter run -d android
-```
+Ver [`SECURITY_INCIDENT.md`](SECURITY_INCIDENT.md) — incidente de abril 2025 resuelto. Nunca commitear `.env`.
 
-## 📦 Estructura del Proyecto
+---
+
+## Estructura del proyecto
 
 ```
-EDFCatalogoMultiplatform/
-├── lib/                    # Código fuente Dart
-│   └── main.dart          # Punto de entrada
-├── android/                # Configuración Android
-├── ios/                    # Configuración iOS
-├── linux/                  # Configuración Linux
-├── windows/                # Configuración Windows
-├── test/                   # Tests
-└── pubspec.yaml           # Dependencias y configuración
+lib/
+├── models/          # Catalog, User, FileType, ColumnDefinition
+├── services/        # Mongo, S3, Email, Keychain, Backup, Export
+├── viewmodels/      # Auth, Catalog, Admin, Backup
+├── views/screens/   # Todas las pantallas
+└── utils/           # env_loader, logger, validators
 ```
-
-## 🔧 Desarrollo
-
-### Hot Reload
-Flutter soporta hot reload para desarrollo rápido:
-- Presiona `r` en la consola para hot reload
-- Presiona `R` para hot restart
-- Presiona `q` para salir
-
-### Builds de Producción
-
-**Windows:**
-```bash
-flutter build windows
-```
-
-**Linux:**
-```bash
-flutter build linux
-```
-
-**iOS:**
-```bash
-flutter build ios
-```
-
-**Android:**
-```bash
-flutter build apk          # APK
-flutter build appbundle    # App Bundle (Google Play)
-```
-
-## 📚 Recursos
-
-- [Documentación Flutter](https://docs.flutter.dev/)
-- [Cookbook Flutter](https://docs.flutter.dev/cookbook)
-- [API Reference](https://api.flutter.dev/)
-
-## 📝 Notas
-
-Este proyecto es la versión multiplataforma de EDFCatalogoSwift (aplicación macOS nativa), manteniendo la misma funcionalidad y arquitectura en todas las plataformas soportadas.
-
-## 📄 Licencia
-
-[Especificar licencia si es necesario]
