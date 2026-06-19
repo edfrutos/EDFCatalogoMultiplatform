@@ -1,248 +1,160 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:io' show Platform;
 
-/// Servicio para gestionar el almacenamiento seguro de credenciales
-/// Utiliza Keychain en iOS/macOS y Keystore en Android
-/// Fallback a SharedPreferences si Keychain falla (especialmente en macOS sin certificado)
+/// Servicio de almacenamiento seguro de credenciales.
+///
+/// Plataformas:
+///   iOS/macOS → Keychain del sistema (Security.framework)
+///   Android   → EncryptedSharedPreferences (AES-256)
+///   Linux     → Secret Service API (libsecret)
+///   Windows   → DPAPI
+///   Web       → localStorage con cifrado AES de flutter_secure_storage
+///               ⚠️ Web no ofrece aislamiento real a nivel SO; usar solo como
+///               último recurso y nunca almacenar tokens de larga duración.
+///
+/// SEGURIDAD: este servicio NO hace fallback a SharedPreferences (texto plano).
+/// Si el almacenamiento seguro no está disponible, las operaciones devuelven
+/// false/null y el usuario deberá iniciar sesión de nuevo en el siguiente arranque.
+/// Esto es correcto: es mejor perder la sesión que exponer credenciales.
 class KeychainService {
   static final KeychainService _instance = KeychainService._internal();
   factory KeychainService() => _instance;
   KeychainService._internal();
 
   static const _storage = FlutterSecureStorage(
-    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    aOptions: AndroidOptions(
+      encryptedSharedPreferences: true, // AES-256 vía Jetpack Security
+    ),
     iOptions: IOSOptions(
       accessibility: KeychainAccessibility.first_unlock_this_device,
-      // Para desarrollo sin certificado, no especificamos groupId
-      // Esto permite usar Keychain sin necesidad de signing
+    ),
+    mOptions: MacOsOptions(
+      // useDataProtectionKeychain: false → permite usar el Keychain sin
+      // el entitlement "Keychain Sharing", lo que facilita el desarrollo
+      // sin certificado de distribución. En producción con signing completo
+      // cambiar a true para mayor aislamiento.
+      useDataProtectionKeychain: false,
     ),
     lOptions: LinuxOptions(),
     wOptions: WindowsOptions(useBackwardCompatibility: false),
   );
-
-  // Flag para usar fallback cuando Keychain falla
-  bool _useFallback = false;
 
   static const String _serviceKey = 'EDFCatalogoMultiplatform';
   static const String _tokenKey = 'authToken';
   static const String _userIdKey = 'userId';
   static const String _emailKey = 'email';
 
-  /// Guardar un valor de forma segura (con fallback a SharedPreferences)
+  // ---------------------------------------------------------------------------
+  // Primitivas seguras (sin fallback a texto plano)
+  // ---------------------------------------------------------------------------
+
+  /// Guarda [value] bajo [key] en el almacenamiento seguro de la plataforma.
+  /// Devuelve false si el almacenamiento no está disponible (p.ej. macOS sin
+  /// signing en desarrollo). La app debe tolerar este caso sin crashear.
   Future<bool> set(String key, String value) async {
     final fullKey = '$_serviceKey.$key';
-
-    // Intentar con Keychain primero (a menos que ya estemos en fallback)
-    if (!_useFallback) {
-      try {
-        await _storage.write(key: fullKey, value: value);
-        print('✅ Valor guardado en Keychain');
-        return true;
-      } catch (e) {
-        // Solo loguear una vez para evitar spam
-        if (!_useFallback) {
-          print('⚠️ Keychain no disponible, intentando SharedPreferences...');
-        }
-        _useFallback = true;
-      }
-    }
-
-    // Fallback a SharedPreferences
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final success = await prefs.setString(fullKey, value);
-      if (success) {
-        print('✅ Valor guardado en SharedPreferences (fallback)');
-      }
-      return success;
+      await _storage.write(key: fullKey, value: value);
+      return true;
     } catch (e) {
-      // En desarrollo sin certificado, ambos pueden fallar
-      // No es crítico - simplemente no se guardará la sesión
-      if (Platform.isMacOS) {
-        // En macOS, si ambos fallan, simplemente no guardar
-        // El usuario tendrá que iniciar sesión cada vez en desarrollo
-        print(
-          '⚠️ No se pudo guardar (Keychain y SharedPreferences no disponibles en desarrollo)',
-        );
-        return false;
-      }
-      print('❌ Error guardando en SharedPreferences: $e');
+      _logStorageError('set', key, e);
       return false;
     }
   }
 
-  /// Obtener un valor de forma segura (con fallback a SharedPreferences)
+  /// Lee [key] del almacenamiento seguro. Devuelve null si no existe o falla.
   Future<String?> get(String key) async {
     final fullKey = '$_serviceKey.$key';
-
-    // Intentar con Keychain primero (a menos que ya estemos en fallback)
-    if (!_useFallback) {
-      try {
-        final value = await _storage.read(key: fullKey);
-        if (value != null) return value;
-        // Si Keychain no tiene valor, verificar SharedPreferences también
-        // (puede que se haya guardado allí en un fallback anterior)
-        try {
-          final prefs = await SharedPreferences.getInstance();
-          final fallbackValue = prefs.getString(fullKey);
-          if (fallbackValue != null) {
-            print('📋 Valor encontrado en SharedPreferences (fallback)');
-            return fallbackValue;
-          }
-        } catch (_) {
-          // Ignorar errores silenciosamente en este punto
-        }
-        return null;
-      } catch (e) {
-        // Solo loguear una vez para evitar spam
-        if (!_useFallback) {
-          print('⚠️ Keychain no disponible, intentando SharedPreferences...');
-        }
-        _useFallback = true;
-      }
-    }
-
-    // Fallback a SharedPreferences
     try {
-      final prefs = await SharedPreferences.getInstance();
-      return prefs.getString(fullKey);
+      return await _storage.read(key: fullKey);
     } catch (e) {
-      // En desarrollo sin certificado, ambos pueden fallar
-      // No es crítico - simplemente el usuario tendrá que iniciar sesión cada vez
-      if (Platform.isMacOS) {
-        // Silencioso en macOS para evitar spam de logs
-        return null;
-      }
-      print('⚠️ Error leyendo de SharedPreferences: $e');
+      _logStorageError('get', key, e);
       return null;
     }
   }
 
-  /// Eliminar un valor de forma segura (con fallback a SharedPreferences)
+  /// Elimina [key] del almacenamiento seguro. Devuelve false si falla.
   Future<bool> remove(String key) async {
     final fullKey = '$_serviceKey.$key';
-
-    // Intentar con Keychain primero
-    if (!_useFallback) {
-      try {
-        await _storage.delete(key: fullKey);
-        // También eliminar de SharedPreferences por si acaso
-        try {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.remove(fullKey);
-        } catch (_) {}
-        return true;
-      } catch (e) {
-        print('⚠️ Error eliminando de Keychain, usando fallback: $e');
-        _useFallback = true;
-      }
-    }
-
-    // Fallback a SharedPreferences
     try {
-      final prefs = await SharedPreferences.getInstance();
-      return await prefs.remove(fullKey);
+      await _storage.delete(key: fullKey);
+      return true;
     } catch (e) {
-      print('❌ Error eliminando de SharedPreferences: $e');
+      _logStorageError('remove', key, e);
       return false;
     }
   }
 
-  /// Limpiar todo el almacenamiento seguro (con fallback a SharedPreferences)
+  /// Elimina todas las claves con prefijo del servicio.
   Future<bool> clearAll() async {
-    // Limpiar Keychain
-    if (!_useFallback) {
-      try {
-        await _storage.deleteAll();
-      } catch (e) {
-        print('⚠️ Error limpiando Keychain: $e');
-        _useFallback = true;
-      }
-    }
-
-    // Limpiar SharedPreferences
     try {
-      final prefs = await SharedPreferences.getInstance();
-      // Eliminar solo las claves que empiezan con nuestro servicio
-      final keys = prefs.getKeys();
-      final keysToRemove = keys.where((k) => k.startsWith(_serviceKey));
-      for (final key in keysToRemove) {
-        await prefs.remove(key);
+      final all = await _storage.readAll();
+      for (final key in all.keys) {
+        if (key.startsWith(_serviceKey)) {
+          await _storage.delete(key: key);
+        }
       }
       return true;
     } catch (e) {
-      print('❌ Error limpiando SharedPreferences: $e');
+      _logStorageError('clearAll', '*', e);
       return false;
     }
   }
 
-  // MARK: - Token Management
+  // ---------------------------------------------------------------------------
+  // Token de autenticación
+  // ---------------------------------------------------------------------------
 
-  /// Guardar el token de autenticación
   Future<bool> saveToken(String token) async {
     print('🔑 Guardando token en almacenamiento seguro');
-    final success = await set(_tokenKey, token);
-    if (success) {
-      print('✅ Token guardado exitosamente');
-    } else {
-      print('❌ Error al guardar token');
-    }
-    return success;
+    final ok = await set(_tokenKey, token);
+    print(ok ? '✅ Token guardado' : '❌ No se pudo guardar el token');
+    return ok;
   }
 
-  /// Obtener el token de autenticación
   Future<String?> getToken() async {
-    print('🔑 Obteniendo token del almacenamiento seguro');
     final token = await get(_tokenKey);
-    if (token != null) {
-      print('✅ Token encontrado');
-    } else {
-      // No loguear como error si simplemente no hay token guardado
-      // (es normal en la primera ejecución o si el almacenamiento no está disponible)
-      print('⚠️ No hay token guardado');
-    }
+    print(token != null ? '✅ Token recuperado' : '⚠️ No hay token guardado');
     return token;
   }
 
-  /// Eliminar el token de autenticación
   Future<bool> deleteToken() async {
-    print('🔑 Eliminando token del almacenamiento seguro');
-    final success = await remove(_tokenKey);
-    if (success) {
-      print('✅ Token eliminado exitosamente');
-    } else {
-      print('⚠️ No se pudo eliminar el token (puede que no existiera)');
-    }
-    return success;
+    print('🔑 Eliminando token');
+    final ok = await remove(_tokenKey);
+    print(ok ? '✅ Token eliminado' : '⚠️ No se pudo eliminar el token (puede que no existiera)');
+    return ok;
   }
 
-  // MARK: - User Info Management
+  // ---------------------------------------------------------------------------
+  // Datos de usuario
+  // ---------------------------------------------------------------------------
 
-  /// Guardar ID de usuario
-  Future<bool> saveUserId(String userId) async {
-    return await set(_userIdKey, userId);
-  }
+  Future<bool> saveUserId(String userId) => set(_userIdKey, userId);
+  Future<String?> getUserId() => get(_userIdKey);
 
-  /// Obtener ID de usuario
-  Future<String?> getUserId() async {
-    return await get(_userIdKey);
-  }
+  Future<bool> saveEmail(String email) => set(_emailKey, email);
+  Future<String?> getEmail() => get(_emailKey);
 
-  /// Guardar email de usuario
-  Future<bool> saveEmail(String email) async {
-    return await set(_emailKey, email);
-  }
-
-  /// Obtener email de usuario
-  Future<String?> getEmail() async {
-    return await get(_emailKey);
-  }
-
-  /// Limpiar toda la información de autenticación
+  /// Elimina token + userId + email en una sola operación (logout completo).
   Future<void> clearAuthData() async {
-    await deleteToken();
-    await remove(_userIdKey);
-    await remove(_emailKey);
+    await Future.wait([
+      remove(_tokenKey),
+      remove(_userIdKey),
+      remove(_emailKey),
+    ]);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
+
+  void _logStorageError(String op, String key, Object e) {
+    if (kIsWeb) {
+      print('⚠️ KeychainService[$op/$key] Web: $e');
+    } else {
+      print('⚠️ KeychainService[$op/$key]: $e');
+      print('   En macOS/desarrollo sin certificado es normal que el Keychain '
+          'no esté disponible. La sesión no se persistirá.');
+    }
   }
 }
