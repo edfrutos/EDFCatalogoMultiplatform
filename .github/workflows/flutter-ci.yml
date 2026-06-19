@@ -19,6 +19,9 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Create .env placeholder (asset requerido por web/android)
+        run: echo "# CI placeholder — variables reales se inyectan en runtime" > .env
+
       - name: Install dependencies
         run: flutter pub get
 
@@ -40,6 +43,9 @@ jobs:
         with:
           channel: stable
           cache: true
+
+      - name: Create .env placeholder
+        run: echo "# CI placeholder" > .env
 
       - name: Install dependencies
         run: flutter pub get

@@ -74,6 +74,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
     }
   }
 
+  // ignore: unused_element
   Future<String?> _pickSavePath(String suggestedName) async {
     final normalizedName =
         suggestedName.toLowerCase().endsWith('.zip') ? suggestedName : '$suggestedName.zip';

@@ -1,11 +1,7 @@
 import 'dart:io';
-import 'dart:convert';
-import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:path/path.dart' as path;
-import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
-import 'package:path_provider/path_provider.dart' as path_provider;
 
 /// Información de un backup del proyecto
 class ProjectBackupInfo {
@@ -614,7 +610,7 @@ class ProjectBackupService {
                 fileBytes,
               );
               archive.addFile(archiveFile);
-              totalSize = (totalSize as int) + fileBytes.length;
+              totalSize = totalSize + fileBytes.length;
               filesAdded++;
               print('   ✅ Añadido: $relativePath (${fileBytes.length} bytes)');
             } catch (e) {

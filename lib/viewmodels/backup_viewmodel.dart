@@ -528,7 +528,7 @@ class BackupViewModel extends ChangeNotifier {
         final data = await _googleDriveService.downloadBackup(fileId);
         
         // En iOS, guardar el archivo JSON en el directorio de documentos
-        if (Platform.isIOS && data != null) {
+        if (Platform.isIOS) {
           try {
             final directory = await getApplicationDocumentsDirectory();
             final savePath = '${directory.path}/${fileName ?? 'backup_${DateTime.now().millisecondsSinceEpoch}.json'}';

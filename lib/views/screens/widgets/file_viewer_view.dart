@@ -39,7 +39,6 @@ class _FileViewerViewState extends State<FileViewerView> {
   VideoController? _mediaKitController;
   bool _isLinuxMediaLoading = false;
   String? _linuxMediaError;
-  String? _resolvedLinuxMediaUrl;
   String? _lastLinuxOriginalUrl;
 
   // Para archivos de texto
@@ -396,7 +395,7 @@ class _FileViewerViewState extends State<FileViewerView> {
           if (height <= 0) continue;
           if (height <= 720) {
             if (bestCandidate == null ||
-                height > bestCandidate!.videoResolution.height) {
+                height > bestCandidate.videoResolution.height) {
               bestCandidate = stream;
             }
           }
@@ -495,7 +494,6 @@ class _FileViewerViewState extends State<FileViewerView> {
       }
 
       _lastLinuxOriginalUrl = originalUrl;
-      _resolvedLinuxMediaUrl = mediaUrl;
 
       await _mediaKitPlayer!.open(Media(mediaUrl));
       await _mediaKitPlayer!.play();

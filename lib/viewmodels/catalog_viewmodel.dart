@@ -66,7 +66,7 @@ class CatalogViewModel extends ChangeNotifier {
           cancelOnError: false, // No cancelar la suscripción si hay error
         );
         print('✅ Listener de conectividad inicializado');
-      } catch (e, stackTrace) {
+      } catch (e) {
         // En Docker/Linux, DBus puede no estar disponible
         // Esto no es crítico, la app puede funcionar sin el listener
         print(
