@@ -8,6 +8,7 @@ import '../../models/user.dart';
 import '../../viewmodels/admin_viewmodel.dart';
 import '../../services/s3_service.dart';
 import '../../models/file_type.dart';
+import 'admin_user_catalogs_view.dart';
 
 class AdminUserDetailView extends StatefulWidget {
   final User user;
@@ -516,6 +517,22 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
               enabled: _isEditing,
               optional: true,
               maxLines: 3,
+            ),
+            const SizedBox(height: 24),
+            // ── Sección catálogos ──────────────────────────────────────────
+            OutlinedButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      AdminUserCatalogsView(user: widget.user),
+                ),
+              ),
+              icon: const Icon(Icons.table_chart_outlined),
+              label: const Text('Ver catálogos del usuario'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 48),
+              ),
             ),
           ],
         ),
