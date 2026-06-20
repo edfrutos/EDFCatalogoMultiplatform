@@ -1011,21 +1011,7 @@ class _FileViewerViewState extends State<FileViewerView> {
   }
 
   Widget _buildPdfView() {
-    return SfPdfViewer.network(
-      widget.url,
-      onDocumentLoadFailed: (details) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al cargar PDF: ${details.error}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      },
-      enableDoubleTapZooming: true,
-      canShowScrollHead: true,
-      canShowScrollStatus: true,
-      enableTextSelection: true,
-    );
+    return _EmbeddedPdfViewer(url: widget.url, fileName: widget.fileName);
   }
 
   Widget _buildLinuxVideoFallback(String message) {
@@ -1861,6 +1847,175 @@ class _LinuxVideoLoadingOverlay extends StatelessWidget {
           textAlign: TextAlign.center,
         ),
       ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Visor de PDF embebido con navegación y zoom
+// Usa PdfViewerView como pantalla completa al abrir desde otros contextos;
+// aquí proporciona los controles dentro del contenedor padre (FileViewerView).
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _EmbeddedPdfViewer extends StatefulWidget {
+  final String url;
+  final String fileName;
+
+  const _EmbeddedPdfViewer({required this.url, required this.fileName});
+
+  @override
+  State<_EmbeddedPdfViewer> createState() => _EmbeddedPdfViewerState();
+}
+
+class _EmbeddedPdfViewerState extends State<_EmbeddedPdfViewer> {
+  final PdfViewerController _controller = PdfViewerController();
+  int _currentPage = 1;
+  int _totalPages = 0;
+  double _zoomLevel = 1.0;
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  static const double _zoomStep = 0.25;
+  static const double _zoomMin = 0.5;
+  static const double _zoomMax = 3.0;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      children: [
+        Expanded(
+          child: _errorMessage != null
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.picture_as_pdf_outlined,
+                          size: 64, color: Colors.red),
+                      const SizedBox(height: 12),
+                      Text('Error al cargar PDF',
+                          style: theme.textTheme.titleMedium),
+                      const SizedBox(height: 8),
+                      Text(_errorMessage!,
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodySmall),
+                    ],
+                  ),
+                )
+              : Stack(
+                  children: [
+                    SfPdfViewer.network(
+                      widget.url,
+                      controller: _controller,
+                      enableDoubleTapZooming: true,
+                      enableTextSelection: true,
+                      canShowScrollHead: true,
+                      canShowScrollStatus: true,
+                      onDocumentLoaded: (d) => setState(() {
+                        _totalPages = d.document.pages.count;
+                        _isLoading = false;
+                      }),
+                      onDocumentLoadFailed: (d) => setState(() {
+                        _errorMessage = d.description;
+                        _isLoading = false;
+                      }),
+                      onPageChanged: (d) =>
+                          setState(() => _currentPage = d.newPageNumber),
+                      onZoomLevelChanged: (d) =>
+                          setState(() => _zoomLevel = d.newZoomLevel),
+                    ),
+                    if (_isLoading)
+                      const Center(child: CircularProgressIndicator()),
+                  ],
+                ),
+        ),
+        if (!_isLoading && _errorMessage == null)
+          _buildControls(theme),
+      ],
+    );
+  }
+
+  Widget _buildControls(ThemeData theme) {
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border(top: BorderSide(color: theme.dividerColor)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.chevron_left, size: 20),
+            tooltip: 'Página anterior',
+            onPressed: _currentPage > 1
+                ? () => _controller.previousPage()
+                : null,
+          ),
+          Text(
+            _totalPages > 0
+                ? '$_currentPage / $_totalPages'
+                : '…',
+            style: theme.textTheme.bodySmall,
+          ),
+          IconButton(
+            icon: const Icon(Icons.chevron_right, size: 20),
+            tooltip: 'Siguiente',
+            onPressed: _currentPage < _totalPages
+                ? () => _controller.nextPage()
+                : null,
+          ),
+          const VerticalDivider(width: 20, indent: 8, endIndent: 8),
+          IconButton(
+            icon: const Icon(Icons.remove, size: 20),
+            tooltip: 'Reducir zoom',
+            onPressed: _zoomLevel > _zoomMin
+                ? () {
+                    final z =
+                        (_zoomLevel - _zoomStep).clamp(_zoomMin, _zoomMax);
+                    setState(() => _zoomLevel = z);
+                    _controller.zoomLevel = z;
+                  }
+                : null,
+          ),
+          SizedBox(
+            width: 46,
+            child: Text(
+              '${(_zoomLevel * 100).round()}%',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.add, size: 20),
+            tooltip: 'Aumentar zoom',
+            onPressed: _zoomLevel < _zoomMax
+                ? () {
+                    final z =
+                        (_zoomLevel + _zoomStep).clamp(_zoomMin, _zoomMax);
+                    setState(() => _zoomLevel = z);
+                    _controller.zoomLevel = z;
+                  }
+                : null,
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh, size: 18),
+            tooltip: 'Restablecer zoom',
+            onPressed: _zoomLevel != 1.0
+                ? () {
+                    setState(() => _zoomLevel = 1.0);
+                    _controller.zoomLevel = 1.0;
+                  }
+                : null,
+          ),
+        ],
+      ),
     );
   }
 }
