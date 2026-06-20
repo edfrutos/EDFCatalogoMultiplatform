@@ -1,0 +1,47 @@
+# docker-compose.web.yml — Despliegue de producción Flutter Web
+#
+# Uso rápido (HTTP local en puerto 8080):
+#   docker compose -f docker/docker-compose.web.yml up -d
+#
+# Con dominio propio y HTTPS automático:
+#   CADDY_HOST=catalogo.example.com \
+#   docker compose -f docker/docker-compose.web.yml up -d
+#
+# Prerequisito: tener el archivo .env en la raíz del proyecto.
+# El build lo inyecta como secreto BuildKit; las credenciales NO
+# quedan grabadas en las capas de la imagen.
+
+services:
+  web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.web
+      # Secreto BuildKit: inyecta .env sin grabarlo en la imagen
+      secrets:
+        - env_file
+    image: edfcatalogo-web:latest
+    container_name: edfcatalogo-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    environment:
+      # Si se usa dominio real con HTTPS, cambiar a "catalogo.example.com"
+      CADDY_HOST: "${CADDY_HOST::80}"
+    volumes:
+      # Volumen persistente para certificados TLS de Caddy (necesario con HTTPS)
+      - caddy_data:/data
+      - caddy_config:/config
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+secrets:
+  env_file:
+    file: ../.env
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,41 @@
+# Caddyfile — servidor estático para Flutter Web (SPA)
+#
+# Variables de entorno disponibles:
+#   CADDY_HOST  — dominio o ":puerto" (por defecto :80)
+#
+# Ejemplos:
+#   CADDY_HOST=":80"              → HTTP local sin TLS
+#   CADDY_HOST="catalogo.example.com" → HTTPS automático (Let's Encrypt)
+
+{$CADDY_HOST::80} {
+
+    # Raíz de archivos estáticos (montada en /srv por la imagen)
+    root * /srv
+
+    # Cabeceras de seguridad básicas
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+        -Server
+    }
+
+    # Caché agresiva para assets con hash (Flutter los genera con hash en el nombre)
+    @hashed {
+        path_regexp \.[0-9a-f]{8,}\.(js|css|wasm|png|jpg|svg|ttf|woff2)$
+    }
+    header @hashed Cache-Control "public, max-age=31536000, immutable"
+
+    # Sin caché para el HTML (siempre la versión más reciente)
+    @html {
+        path *.html
+        path /
+    }
+    header @html Cache-Control "no-cache, no-store, must-revalidate"
+
+    # SPA: cualquier ruta que no sea un archivo sirve index.html
+    # (permite que Flutter Router gestione el enrutado en cliente)
+    try_files {path} /index.html
+
+    file_server
+}

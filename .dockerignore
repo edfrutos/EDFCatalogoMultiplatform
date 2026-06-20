@@ -1,0 +1,44 @@
+# ── Carpetas de build y dependencias ─────────────────────────────────────────
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# ── Control de versiones ───────────────────────────────────────────────────────
+.git/
+.github/
+
+# ── Plataformas desktop (no necesarias para web) ──────────────────────────────
+linux/
+macos/
+windows/
+ios/
+android/
+
+# ── Entorno local (el .env real se pasa como secreto BuildKit) ─────────────────
+# .env  ← NO ignorar aquí: BuildKit lo monta vía --secret; si lo ignoras
+#          el fallback de la app no podrá leerlo en local sin secreto.
+#          Dejamos que BuildKit gestione la exclusión.
+.env.local
+.env.*.local
+*.env.backup
+
+# ── Archivos de IDE y OS ───────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# ── Scripts de utilidad local ─────────────────────────────────────────────────
+*.sh
+backup_project*.sh
+recompilar_*.sh
+check_android_sdk.sh
+wait_for_android_sdk.sh
+INSTALAR_APK_ANDROID.sh
+
+# ── Docs y configuración no necesaria en imagen ───────────────────────────────
+docs/
+Kuberconfig
+SECURITY_INCIDENT.md

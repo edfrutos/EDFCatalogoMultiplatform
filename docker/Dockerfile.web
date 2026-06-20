@@ -1,0 +1,47 @@
+# syntax=docker/dockerfile:1
+# ─────────────────────────────────────────────────────────────────────────────
+# Dockerfile.web — Flutter Web → Caddy (producción)
+#
+# Build con secreto BuildKit para no exponer .env en capas de imagen:
+#
+#   docker build \
+#     --secret id=env_file,src=.env \
+#     -f docker/Dockerfile.web \
+#     -t edfcatalogo-web \
+#     .
+#
+# O con docker-compose:
+#
+#   docker compose -f docker/docker-compose.web.yml build
+#   docker compose -f docker/docker-compose.web.yml up -d
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Stage 1: compilar Flutter Web ────────────────────────────────────────────
+FROM ghcr.io/cirruslabs/flutter:stable AS builder
+
+WORKDIR /app
+
+# Copiar el proyecto (sin .env — viene del secreto BuildKit)
+COPY . .
+
+# Inyectar .env como secreto BuildKit.
+# El archivo queda disponible SOLO durante este RUN; no se graba en ninguna capa.
+# flutter_dotenv lo empaqueta como asset al compilar.
+RUN --mount=type=secret,id=env_file,target=/app/.env \
+    flutter config --enable-web && \
+    flutter pub get && \
+    flutter build web --release --no-tree-shake-icons
+
+# ── Stage 2: servir con Caddy ─────────────────────────────────────────────────
+FROM caddy:2-alpine AS runtime
+
+# Copiar los archivos estáticos compilados
+COPY --from=builder /app/build/web /srv
+
+# Configuración de Caddy para SPA Flutter
+COPY docker/Caddyfile /etc/caddy/Caddyfile
+
+# Puerto HTTP (Caddy gestiona HTTPS automáticamente si se configura dominio)
+EXPOSE 80
+
+# Caddy arranca con su CMD por defecto
