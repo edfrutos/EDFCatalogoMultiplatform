@@ -2,12 +2,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart' as file_picker;
-import 'package:path/path.dart' as path;
 import '../../../models/catalog.dart';
 import '../../../models/file_type.dart' as app_file_type;
 import '../../../viewmodels/auth_viewmodel.dart';
 import '../../../services/s3_service.dart';
 import '../../../utils/validators.dart';
+import 'multiple_files_section.dart';
 
 class AddEditRowDialog extends StatefulWidget {
   final Catalog catalog;
@@ -556,45 +556,6 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
     return '';
   }
 
-  Future<void> _showAddUrlDialog(app_file_type.FileType fileType) async {
-    final urlController = TextEditingController();
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Agregar URL'),
-        content: TextField(
-          controller: urlController,
-          decoration: const InputDecoration(
-            labelText: 'URL del archivo',
-            hintText: 'https://ejemplo.com/archivo.jpg',
-            border: OutlineInputBorder(),
-          ),
-          autofocus: true,
-          keyboardType: TextInputType.url,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (urlController.text.trim().isNotEmpty) {
-                Navigator.of(context).pop(true);
-              }
-            },
-            child: const Text('Agregar'),
-          ),
-        ],
-      ),
-    );
-
-    if (result == true && urlController.text.trim().isNotEmpty) {
-      await _addUrl(urlController.text.trim(), fileType);
-    }
-    urlController.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.row != null;
@@ -693,21 +654,21 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
                           ),
                         ),
                       // Imagen
-                      _MultiFileSelectionRow(
+                      MultipleFilesSection(
                         title: 'Imagen',
+                        fileType: app_file_type.FileType.image,
                         selectedFiles: _selectedImageFiles,
                         existingUrls: _imageUrls,
                         isUploading: _isUploadingImage,
-                        fileType: app_file_type.FileType.image,
                         fileTitles: _fileTitles,
-                        onSelect: () =>
+                        onSelectFile: () =>
                             _selectFile(app_file_type.FileType.image),
-                        onSelectMultiple: () => _selectFile(
+                        onSelectMultipleFiles: () => _selectFile(
                           app_file_type.FileType.image,
                           allowMultiple: true,
                         ),
-                        onAddUrl: () =>
-                            _showAddUrlDialog(app_file_type.FileType.image),
+                        onAddUrl: (url) =>
+                            _addUrl(url, app_file_type.FileType.image),
                         onRemove: (index) => _removeFileOrUrl(
                           index,
                           app_file_type.FileType.image,
@@ -723,21 +684,21 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
                       const Divider(),
                       const SizedBox(height: 12),
                       // Documento
-                      _MultiFileSelectionRow(
+                      MultipleFilesSection(
                         title: 'Documento',
+                        fileType: app_file_type.FileType.document,
                         selectedFiles: _selectedDocumentFiles,
                         existingUrls: _documentUrls,
                         isUploading: _isUploadingDocument,
-                        fileType: app_file_type.FileType.document,
                         fileTitles: _fileTitles,
-                        onSelect: () =>
+                        onSelectFile: () =>
                             _selectFile(app_file_type.FileType.document),
-                        onSelectMultiple: () => _selectFile(
+                        onSelectMultipleFiles: () => _selectFile(
                           app_file_type.FileType.document,
                           allowMultiple: true,
                         ),
-                        onAddUrl: () =>
-                            _showAddUrlDialog(app_file_type.FileType.document),
+                        onAddUrl: (url) =>
+                            _addUrl(url, app_file_type.FileType.document),
                         onRemove: (index) => _removeFileOrUrl(
                           index,
                           app_file_type.FileType.document,
@@ -753,22 +714,21 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
                       const Divider(),
                       const SizedBox(height: 12),
                       // Multimedia
-                      _MultiFileSelectionRow(
+                      MultipleFilesSection(
                         title: 'Multimedia',
+                        fileType: app_file_type.FileType.multimedia,
                         selectedFiles: _selectedMultimediaFiles,
                         existingUrls: _multimediaUrls,
                         isUploading: _isUploadingMultimedia,
-                        fileType: app_file_type.FileType.multimedia,
                         fileTitles: _fileTitles,
-                        onSelect: () =>
+                        onSelectFile: () =>
                             _selectFile(app_file_type.FileType.multimedia),
-                        onSelectMultiple: () => _selectFile(
+                        onSelectMultipleFiles: () => _selectFile(
                           app_file_type.FileType.multimedia,
                           allowMultiple: true,
                         ),
-                        onAddUrl: () => _showAddUrlDialog(
-                          app_file_type.FileType.multimedia,
-                        ),
+                        onAddUrl: (url) =>
+                            _addUrl(url, app_file_type.FileType.multimedia),
                         onRemove: (index) => _removeFileOrUrl(
                           index,
                           app_file_type.FileType.multimedia,
@@ -816,207 +776,6 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _MultiFileSelectionRow extends StatelessWidget {
-  final String title;
-  final List<File> selectedFiles;
-  final List<String> existingUrls;
-  final bool isUploading;
-  final app_file_type.FileType fileType;
-  final Map<String, String> fileTitles;
-  final VoidCallback onSelect;
-  final VoidCallback onSelectMultiple;
-  final VoidCallback onAddUrl;
-  final Function(int) onRemove;
-  final Function(String, String) onUpdateTitle;
-  final String Function(int) getFileUrl;
-  final TextEditingController Function(String) getTitleController;
-
-  const _MultiFileSelectionRow({
-    required this.title,
-    required this.selectedFiles,
-    required this.existingUrls,
-    required this.isUploading,
-    required this.fileType,
-    required this.fileTitles,
-    required this.onSelect,
-    required this.onSelectMultiple,
-    required this.onAddUrl,
-    required this.onRemove,
-    required this.onUpdateTitle,
-    required this.getFileUrl,
-    required this.getTitleController,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final totalItems = selectedFiles.length + existingUrls.length;
-
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade300),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
-              ),
-              const Spacer(),
-              if (isUploading)
-                const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          // Lista de archivos y URLs existentes
-          if (totalItems > 0)
-            ...List.generate(totalItems, (index) {
-              final isFile = index < selectedFiles.length;
-              final item = isFile
-                  ? path.basename(selectedFiles[index].path)
-                  : existingUrls[index - selectedFiles.length];
-              final fileUrl = getFileUrl(index);
-
-              return Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: isFile ? Colors.blue.shade50 : Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          isFile ? Icons.insert_drive_file : Icons.link,
-                          size: 20,
-                          color: isFile ? Colors.blue : Colors.grey,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            item,
-                            style: const TextStyle(fontSize: 12),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close, size: 18),
-                          color: Colors.red,
-                          onPressed: isUploading ? null : () => onRemove(index),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Builder(
-                      builder: (context) {
-                        // Obtener o crear el controlador para esta URL
-                        final controller = getTitleController(fileUrl);
-                        return TextField(
-                          key: ValueKey('title_$fileUrl'),
-                          controller: controller,
-                          decoration: InputDecoration(
-                            hintText: 'Título del archivo (opcional)',
-                            isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 8,
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(4),
-                              borderSide: BorderSide(
-                                color: Colors.grey.shade300,
-                                width: 1,
-                              ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(4),
-                              borderSide: BorderSide(
-                                color: Colors.grey.shade300,
-                                width: 1,
-                              ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(4),
-                              borderSide: BorderSide(
-                                color: Colors.blue.shade400,
-                                width: 1.5,
-                              ),
-                            ),
-                          ),
-                          style: const TextStyle(fontSize: 12),
-                          textInputAction: TextInputAction.done,
-                          keyboardType: TextInputType.text,
-                          maxLines: 1,
-                          onChanged: (value) {
-                            if (fileUrl.isNotEmpty) {
-                              onUpdateTitle(fileUrl, value);
-                            }
-                          },
-                          enabled: !isUploading && fileUrl.isNotEmpty,
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              );
-            }),
-          // Botones de acción
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: isUploading ? null : onSelect,
-                  icon: const Icon(Icons.add_circle, size: 18),
-                  label: const Text('Seleccionar archivo'),
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(0, 40),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              // Botón "Más" para seleccionar múltiples archivos
-              OutlinedButton(
-                onPressed: isUploading ? null : onSelectMultiple,
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(50, 40),
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                ),
-                child: const Text('Más'),
-              ),
-              const SizedBox(width: 8),
-              // Botón para agregar URL
-              OutlinedButton(
-                onPressed: isUploading ? null : onAddUrl,
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(50, 40),
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                ),
-                child: const Icon(Icons.link, size: 18),
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }
