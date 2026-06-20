@@ -28,13 +28,9 @@ class KeychainService {
     iOptions: IOSOptions(
       accessibility: KeychainAccessibility.first_unlock_this_device,
     ),
-    mOptions: MacOsOptions(
-      // useDataProtectionKeychain: false → permite usar el Keychain sin
-      // el entitlement "Keychain Sharing", lo que facilita el desarrollo
-      // sin certificado de distribución. En producción con signing completo
-      // cambiar a true para mayor aislamiento.
-      useDataProtectionKeychain: false,
-    ),
+    // macOS: opciones por defecto — usa el Keychain del usuario sin requerir
+    // el entitlement "Keychain Sharing". Funciona en desarrollo sin certificado.
+    mOptions: MacOsOptions(),
     lOptions: LinuxOptions(),
     wOptions: WindowsOptions(useBackwardCompatibility: false),
   );
