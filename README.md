@@ -57,7 +57,7 @@ flutter run               # dispositivo conectado
 
 ## Seguridad
 
-Ver [`SECURITY_INCIDENT.md`](SECURITY_INCIDENT.md) — incidente de abril 2025 resuelto. Nunca commitear `.env`.
+Ver [`docs/misc/SECURITY_INCIDENT.md`](docs/misc/SECURITY_INCIDENT.md) — incidente de abril 2025 resuelto. Nunca commitear `.env`.
 
 ---
 
