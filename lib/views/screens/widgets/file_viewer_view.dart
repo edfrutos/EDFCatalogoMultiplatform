@@ -1545,37 +1545,7 @@ class _FileViewerViewState extends State<FileViewerView> {
   }
 
   Widget _buildAudioView() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.music_note, size: 80, color: Colors.blue),
-          const SizedBox(height: 24),
-          Text(
-            widget.fileName,
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'Reproductor de audio pendiente de implementar',
-            style: TextStyle(color: Colors.grey),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 32),
-          ElevatedButton.icon(
-            onPressed: () async {
-              final uri = Uri.parse(widget.url);
-              if (await canLaunchUrl(uri)) {
-                await launchUrl(uri, mode: LaunchMode.externalApplication);
-              }
-            },
-            icon: const Icon(Icons.play_circle_outline),
-            label: const Text('Reproducir en reproductor externo'),
-          ),
-        ],
-      ),
-    );
+    return _AudioPlayerWidget(url: widget.url, fileName: widget.fileName);
   }
 
   Widget _buildFallbackView(FileType fileType) {
@@ -2015,6 +1985,265 @@ class _EmbeddedPdfViewerState extends State<_EmbeddedPdfViewer> {
                 : null,
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reproductor de audio inline usando media_kit
+// Soporta: MP3, WAV, OGG, M4A, FLAC y cualquier formato soportado por libmpv.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _AudioPlayerWidget extends StatefulWidget {
+  final String url;
+  final String fileName;
+
+  const _AudioPlayerWidget({required this.url, required this.fileName});
+
+  @override
+  State<_AudioPlayerWidget> createState() => _AudioPlayerWidgetState();
+}
+
+class _AudioPlayerWidgetState extends State<_AudioPlayerWidget> {
+  late final Player _player;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _player = Player();
+    _initAudio();
+  }
+
+  Future<void> _initAudio() async {
+    try {
+      await _player.open(Media(widget.url), play: false);
+      if (!mounted) return;
+      setState(() => _loading = false);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = e.toString();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _player.dispose();
+    super.dispose();
+  }
+
+  String _formatDuration(Duration d) {
+    final h = d.inHours;
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return h > 0 ? '$h:$m:$s' : '$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 64, color: Colors.red),
+            const SizedBox(height: 16),
+            Text('No se pudo cargar el audio', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Text(_error!, style: theme.textTheme.bodySmall, textAlign: TextAlign.center),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () async {
+                final uri = Uri.parse(widget.url);
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                }
+              },
+              icon: const Icon(Icons.open_in_new),
+              label: const Text('Abrir externamente'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: Card(
+          margin: const EdgeInsets.all(24),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // ── Icono ──────────────────────────────────────────────────
+                Container(
+                  width: 96,
+                  height: 96,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primaryContainer,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.music_note,
+                    size: 52,
+                    color: theme.colorScheme.onPrimaryContainer,
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // ── Nombre del archivo ─────────────────────────────────────
+                Text(
+                  widget.fileName,
+                  style: theme.textTheme.titleMedium,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 24),
+
+                // ── Barra de progreso ──────────────────────────────────────
+                StreamBuilder<Duration>(
+                  stream: _player.stream.position,
+                  builder: (context, posSnap) {
+                    return StreamBuilder<Duration?>(
+                      stream: _player.stream.duration,
+                      builder: (context, durSnap) {
+                        final position = posSnap.data ?? Duration.zero;
+                        final duration = durSnap.data ?? Duration.zero;
+                        final total = duration.inMilliseconds > 0
+                            ? duration.inMilliseconds.toDouble()
+                            : 1.0;
+                        final current = position.inMilliseconds
+                            .clamp(0, total.toInt())
+                            .toDouble();
+                        return Column(
+                          children: [
+                            Slider(
+                              value: current,
+                              min: 0,
+                              max: total,
+                              onChanged: (v) => _player.seek(
+                                Duration(milliseconds: v.toInt()),
+                              ),
+                            ),
+                            Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 4),
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(_formatDuration(position),
+                                      style: theme.textTheme.bodySmall),
+                                  Text(_formatDuration(duration),
+                                      style: theme.textTheme.bodySmall),
+                                ],
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // ── Controles ──────────────────────────────────────────────
+                StreamBuilder<bool>(
+                  stream: _player.stream.playing,
+                  builder: (context, snap) {
+                    final playing = snap.data ?? false;
+                    return Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        IconButton(
+                          iconSize: 32,
+                          icon: const Icon(Icons.replay_10),
+                          tooltip: 'Retroceder 10 s',
+                          onPressed: () {
+                            final pos = _player.state.position;
+                            _player.seek(Duration(
+                              milliseconds:
+                                  (pos.inMilliseconds - 10000).clamp(0, pos.inMilliseconds),
+                            ));
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton(
+                          style: FilledButton.styleFrom(
+                            shape: const CircleBorder(),
+                            padding: const EdgeInsets.all(16),
+                          ),
+                          onPressed: () =>
+                              playing ? _player.pause() : _player.play(),
+                          child: Icon(
+                            playing ? Icons.pause : Icons.play_arrow,
+                            size: 32,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          iconSize: 32,
+                          icon: const Icon(Icons.forward_10),
+                          tooltip: 'Avanzar 10 s',
+                          onPressed: () {
+                            final pos = _player.state.position;
+                            final dur = _player.state.duration;
+                            _player.seek(Duration(
+                              milliseconds: (pos.inMilliseconds + 10000)
+                                  .clamp(0, dur.inMilliseconds),
+                            ));
+                          },
+                        ),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // ── Volumen ────────────────────────────────────────────────
+                StreamBuilder<double>(
+                  stream: _player.stream.volume,
+                  builder: (context, snap) {
+                    final volume = snap.data ?? 100.0;
+                    return Row(
+                      children: [
+                        Icon(
+                          volume == 0 ? Icons.volume_off : Icons.volume_up,
+                          size: 20,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                        Expanded(
+                          child: Slider(
+                            value: volume,
+                            min: 0,
+                            max: 100,
+                            onChanged: (v) => _player.setVolume(v),
+                          ),
+                        ),
+                        Text('${volume.round()}%',
+                            style: theme.textTheme.bodySmall),
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
