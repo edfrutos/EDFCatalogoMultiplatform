@@ -1809,7 +1809,7 @@ class _FileViewerViewState extends State<FileViewerView> {
                         ),
                         if (_isLinuxMediaLoading)
                           Container(
-                            color: Colors.black.withOpacity(0.45),
+                            color: Colors.black.withValues(alpha: 0.45),
                             child: const _LinuxVideoLoadingOverlay(),
                           ),
                       ],

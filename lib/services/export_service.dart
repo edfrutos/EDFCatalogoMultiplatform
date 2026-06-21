@@ -160,10 +160,12 @@ class ExportService {
   /// Comparte un archivo exportado
   Future<void> shareFile(String filePath, String fileName) async {
     final file = XFile(filePath);
-    await Share.shareXFiles(
-      [file],
-      text: 'Exportación: $fileName',
-      subject: fileName,
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [file],
+        text: 'Exportación: $fileName',
+        subject: fileName,
+      ),
     );
   }
 

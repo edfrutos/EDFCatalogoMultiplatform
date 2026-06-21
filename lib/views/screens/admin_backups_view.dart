@@ -774,7 +774,9 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
       await tempFile.writeAsBytes(fileBytes);
       
       if (context.mounted) {
-        await Share.shareXFiles([XFile(tempFile.path)], text: 'Compartir archivo: $fileName');
+        await SharePlus.instance.share(
+          ShareParams(files: [XFile(tempFile.path)], text: 'Compartir archivo: $fileName'),
+        );
       }
     }
   }
@@ -840,6 +842,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
       if (shouldDownload != true) return;
     }
 
+    if (!context.mounted) return;
     // Mostrar diálogo de carga
     showDialog<void>(
       context: context,
@@ -939,10 +942,11 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
         final fileName = data['fileName'] as String? ?? 'backup.json';
         
         // Si estamos en iOS y el archivo se guardó, mostrar opciones
+        if (!context.mounted) return;
         if (Platform.isIOS && savedPath != null) {
           await _showFileOptionsDialog(
-            context, 
-            savedPath, 
+            context,
+            savedPath,
             fileName,
             Uint8List.fromList(utf8.encode(jsonEncode(data))),
           );
@@ -1537,6 +1541,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
     );
 
     if (confirm != true) return;
+    if (!context.mounted) return;
 
     // Mostrar diálogo de carga
     showDialog<void>(
@@ -1666,6 +1671,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
     );
 
     if (confirm != true) return;
+    if (!context.mounted) return;
 
     // Mostrar diálogo de carga
     showDialog<void>(
