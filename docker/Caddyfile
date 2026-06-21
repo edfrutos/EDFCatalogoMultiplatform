@@ -7,7 +7,7 @@
 #   CADDY_HOST=":80"              → HTTP local sin TLS
 #   CADDY_HOST="catalogo.example.com" → HTTPS automático (Let's Encrypt)
 
-{$CADDY_HOST::80} {
+{$CADDY_HOST:80} {
 
     # Raíz de archivos estáticos (montada en /srv por la imagen)
     root * /srv
