@@ -72,9 +72,9 @@ void main() {
         ),
       ).thenAnswer((_) async => _testUser);
 
-      when(() => keychain.saveToken(any())).thenAnswer((_) async {});
-      when(() => keychain.saveEmail(any())).thenAnswer((_) async {});
-      when(() => keychain.saveUserId(any())).thenAnswer((_) async {});
+      when(() => keychain.saveToken(any())).thenAnswer((_) async => true);
+      when(() => keychain.saveEmail(any())).thenAnswer((_) async => true);
+      when(() => keychain.saveUserId(any())).thenAnswer((_) async => true);
 
       final future = vm.signIn(emailOrUsername: 'test@example.com', password: 'pass');
       // Durante la espera, isLoading debería ser true
@@ -91,9 +91,9 @@ void main() {
         ),
       ).thenAnswer((_) async => _testUser);
 
-      when(() => keychain.saveToken(any())).thenAnswer((_) async {});
-      when(() => keychain.saveEmail(any())).thenAnswer((_) async {});
-      when(() => keychain.saveUserId(any())).thenAnswer((_) async {});
+      when(() => keychain.saveToken(any())).thenAnswer((_) async => true);
+      when(() => keychain.saveEmail(any())).thenAnswer((_) async => true);
+      when(() => keychain.saveUserId(any())).thenAnswer((_) async => true);
 
       await vm.signIn(
           emailOrUsername: 'test@example.com', password: 'correctpass');
@@ -165,9 +165,9 @@ void main() {
           password: any(named: 'password'),
         ),
       ).thenAnswer((_) async => _testUser);
-      when(() => keychain.saveToken(any())).thenAnswer((_) async {});
-      when(() => keychain.saveEmail(any())).thenAnswer((_) async {});
-      when(() => keychain.saveUserId(any())).thenAnswer((_) async {});
+      when(() => keychain.saveToken(any())).thenAnswer((_) async => true);
+      when(() => keychain.saveEmail(any())).thenAnswer((_) async => true);
+      when(() => keychain.saveUserId(any())).thenAnswer((_) async => true);
 
       await vm.signIn(emailOrUsername: 'test@example.com', password: 'pass');
     });

@@ -233,7 +233,7 @@ class _AdminUserCatalogsViewState extends State<AdminUserCatalogsView> {
       child: ListView.separated(
         padding: const EdgeInsets.all(16),
         itemCount: items.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        separatorBuilder: (_, _) => const SizedBox(height: 8),
         itemBuilder: (_, i) => _CatalogCard(
           catalog: items[i],
           onViewDetails: () => _openDetail(items[i]),
