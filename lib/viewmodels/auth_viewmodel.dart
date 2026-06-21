@@ -7,8 +7,16 @@ import '../services/email_service.dart';
 
 /// ViewModel para gestionar la autenticación de usuarios
 class AuthViewModel extends ChangeNotifier {
-  final MongoService _mongoService = MongoService();
-  final KeychainService _keychainService = KeychainService();
+  final MongoService _mongoService;
+  final KeychainService _keychainService;
+
+  /// Los parámetros son opcionales para facilitar los tests con mocks.
+  /// En producción se usan las implementaciones reales por defecto.
+  AuthViewModel({
+    MongoService? mongoService,
+    KeychainService? keychainService,
+  })  : _mongoService = mongoService ?? MongoService(),
+        _keychainService = keychainService ?? KeychainService();
 
   User? _currentUser;
   bool _isAuthenticated = false;
