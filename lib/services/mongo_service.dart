@@ -691,6 +691,49 @@ class MongoService {
     }
   }
 
+  /// Estadísticas de usuarios para el panel de administración.
+  /// Devuelve: total, activos, inactivos, admins, usuarios normales.
+  Future<Map<String, int>> getUserStats() async {
+    try {
+      final collection = await getUsersCollection();
+      final all = await collection.find().toList();
+
+      int total = all.length;
+      int active = 0;
+      int inactive = 0;
+      int admins = 0;
+      int regularUsers = 0;
+
+      for (final doc in all) {
+        final isActive = doc['IsActive'] as bool? ?? doc['isActive'] as bool? ?? true;
+        final role = (doc['Role'] as String? ?? doc['role'] as String? ?? 'user').toLowerCase();
+
+        if (isActive) {
+          active++;
+        } else {
+          inactive++;
+        }
+
+        if (role == 'admin') {
+          admins++;
+        } else {
+          regularUsers++;
+        }
+      }
+
+      return {
+        'total': total,
+        'active': active,
+        'inactive': inactive,
+        'admins': admins,
+        'users': regularUsers,
+      };
+    } catch (e) {
+      print('❌ Error obteniendo estadísticas de usuarios: $e');
+      rethrow;
+    }
+  }
+
   // MARK: - Catalog Operations
 
   /// Obtener catálogos de un usuario
