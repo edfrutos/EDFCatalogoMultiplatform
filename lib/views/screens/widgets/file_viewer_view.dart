@@ -16,6 +16,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart' as yt;
 import '../../../models/file_type.dart';
+import '../../../services/s3_service.dart';
 
 /// Visualizador completo de archivos con soporte para PDF, video, audio e imágenes
 class FileViewerView extends StatefulWidget {
@@ -51,6 +52,13 @@ class _FileViewerViewState extends State<FileViewerView> {
   bool _hasLoadedInitialContent = false;
   String? _currentVideoId;
   bool _webViewFailed = false; // Flag para indicar si WebView falló
+
+  // URL pre-firmada para archivos privados de S3
+  String? _presignedUrl;
+  bool _isPresigning = false;
+
+  /// Devuelve la URL efectiva: pre-firmada si disponible, original si no.
+  String get _effectiveUrl => _presignedUrl ?? widget.url;
 
   FileType _getFileType(String url) {
     final lower = url.toLowerCase();
@@ -240,10 +248,10 @@ class _FileViewerViewState extends State<FileViewerView> {
 </head>
 <body>
   <div class="wrapper">
-    <iframe 
+    <iframe
       id="youtube-player"
-      src="$embedUrl" 
-      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+      src="$embedUrl"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
       allowfullscreen
       webkitallowfullscreen
       mozallowfullscreen
@@ -269,19 +277,44 @@ class _FileViewerViewState extends State<FileViewerView> {
   @override
   void initState() {
     super.initState();
-    final fileType = _getFileType(widget.url);
+    _presignAndInit();
+  }
+
+  /// Pre-firma la URL de S3 si es necesario y luego inicializa el contenido.
+  Future<void> _presignAndInit() async {
+    final originalUrl = widget.url;
+
+    // Pre-firmar si es URL de S3 y no es video de streaming externo (YouTube, etc.)
+    if (originalUrl.contains('amazonaws.com') && !_isStreamingVideo(originalUrl)) {
+      if (mounted) setState(() => _isPresigning = true);
+      try {
+        final signed = await S3Service().getPresignedUrl(key: originalUrl);
+        if (!mounted) return;
+        setState(() {
+          _presignedUrl = signed.toString();
+          _isPresigning = false;
+        });
+      } catch (e) {
+        print('❌ Error pre-firmando URL en FileViewer: $e');
+        if (mounted) setState(() => _isPresigning = false);
+      }
+    }
+
+    if (!mounted) return;
+
+    final fileType = _getFileType(originalUrl);
 
     if (fileType == FileType.multimedia) {
       if (!kIsWeb && Platform.isLinux) {
         _initializeLinuxMediaKit();
-      } else if (!_isStreamingVideo(widget.url)) {
+      } else if (!_isStreamingVideo(originalUrl)) {
         _initializeVideo();
       }
     } else if (fileType == FileType.text) {
       _loadTextFile();
     } else if (fileType == FileType.document) {
       // Cargar como texto si no es PDF (para .txt, .rtf, etc. que fueron seleccionados como documentos)
-      final lower = widget.url.toLowerCase();
+      final lower = originalUrl.toLowerCase();
       final fileNameLower = widget.fileName.toLowerCase();
       if (!lower.contains('.pdf') && !fileNameLower.endsWith('.pdf')) {
         _loadTextFile();
@@ -294,13 +327,12 @@ class _FileViewerViewState extends State<FileViewerView> {
     super.didUpdateWidget(oldWidget);
     if (widget.url == oldWidget.url) return;
 
-    final fileType = _getFileType(widget.url);
-    if (!kIsWeb && Platform.isLinux && fileType == FileType.multimedia) {
-      _initializeLinuxMediaKit(force: true);
-    } else if (fileType == FileType.multimedia &&
-        !_isStreamingVideo(widget.url)) {
-      _initializeVideo();
-    }
+    // Resetear URL pre-firmada para la nueva URL y reinicializar
+    setState(() {
+      _presignedUrl = null;
+      _isPresigning = false;
+    });
+    _presignAndInit();
   }
 
   Future<void> _loadTextFile() async {
@@ -310,7 +342,7 @@ class _FileViewerViewState extends State<FileViewerView> {
     });
 
     try {
-      final response = await http.get(Uri.parse(widget.url));
+      final response = await http.get(Uri.parse(_effectiveUrl));
       if (response.statusCode == 200) {
         // Decodificar explícitamente con UTF-8 para evitar problemas de codificación (mojibake)
         // El paquete http por defecto puede no usar UTF-8 correctamente para caracteres especiales
@@ -466,14 +498,15 @@ class _FileViewerViewState extends State<FileViewerView> {
     });
 
     try {
-      String mediaUrl = originalUrl;
+      // Usar la URL efectiva (pre-firmada si es S3, original si es streaming)
+      String mediaUrl = _effectiveUrl;
       if (_isStreamingVideo(originalUrl)) {
         final streamUrl = await _extractYouTubeStreamUrl(originalUrl);
         if (streamUrl == null || streamUrl.isEmpty) {
           throw Exception(
             'No se pudo obtener un stream reproducible desde YouTube. '
             'Verifica tu conexión o abre el video en el navegador. '
-            'Instalar la herramienta “yt-dlp” puede ayudar como método alternativo.',
+            'Instalar la herramienta "yt-dlp" puede ayudar como método alternativo.',
           );
         }
         mediaUrl = streamUrl;
@@ -521,7 +554,7 @@ class _FileViewerViewState extends State<FileViewerView> {
 
     try {
       _videoPlayerController = VideoPlayerController.networkUrl(
-        Uri.parse(widget.url),
+        Uri.parse(_effectiveUrl),
       );
 
       await _videoPlayerController!.initialize();
@@ -572,7 +605,7 @@ class _FileViewerViewState extends State<FileViewerView> {
           IconButton(
             icon: const Icon(Icons.open_in_browser),
             onPressed: () async {
-              final uri = Uri.parse(widget.url);
+              final uri = Uri.parse(_effectiveUrl);
               if (await canLaunchUrl(uri)) {
                 await launchUrl(uri, mode: LaunchMode.externalApplication);
               }
@@ -586,7 +619,18 @@ class _FileViewerViewState extends State<FileViewerView> {
           ),
         ],
       ),
-      body: _buildContent(context, fileType),
+      body: _isPresigning
+          ? const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 12),
+                  Text('Preparando archivo...'),
+                ],
+              ),
+            )
+          : _buildContent(context, fileType),
     );
   }
 
@@ -630,16 +674,16 @@ class _FileViewerViewState extends State<FileViewerView> {
         print('   - _isStreamingVideo: ${_isStreamingVideo(widget.url)}');
         print('   - _isVideo: ${_isVideo(widget.url)}');
         print('   - _isAudio: ${_isAudio(widget.url)}');
-        
+
         // En Linux, usar MediaKit para TODOS los videos (streaming y MP4)
         final isLinux = !kIsWeb && Platform.isLinux;
         print('🐧 Es Linux: $isLinux');
-        
+
         if (isLinux && (_isStreamingVideo(widget.url) || _isVideo(widget.url))) {
           print('🎬 Usando MediaKit para video en Linux: ${widget.url}');
           return _buildLinuxMediaKitView();
         }
-        
+
         // Para otras plataformas o si no es video
         if (_isStreamingVideo(widget.url)) {
           print('🎥 Detectado como video de streaming: ${widget.url}');
@@ -694,7 +738,7 @@ class _FileViewerViewState extends State<FileViewerView> {
             const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: () async {
-                final uri = Uri.parse(widget.url);
+                final uri = Uri.parse(_effectiveUrl);
                 if (await canLaunchUrl(uri)) {
                   await launchUrl(uri, mode: LaunchMode.externalApplication);
                 }
@@ -764,7 +808,7 @@ class _FileViewerViewState extends State<FileViewerView> {
                         const SizedBox(width: 16),
                         ElevatedButton.icon(
                           onPressed: () async {
-                            final uri = Uri.parse(widget.url);
+                            final uri = Uri.parse(_effectiveUrl);
                             if (await canLaunchUrl(uri)) {
                               await launchUrl(
                                 uri,
@@ -917,7 +961,7 @@ class _FileViewerViewState extends State<FileViewerView> {
                     const SizedBox(width: 16),
                     ElevatedButton.icon(
                       onPressed: () async {
-                        final uri = Uri.parse(widget.url);
+                        final uri = Uri.parse(_effectiveUrl);
                         if (await canLaunchUrl(uri)) {
                           await launchUrl(
                             uri,
@@ -968,7 +1012,7 @@ class _FileViewerViewState extends State<FileViewerView> {
         minScale: 0.5,
         maxScale: 4.0,
         child: CachedNetworkImage(
-          imageUrl: widget.url,
+          imageUrl: _effectiveUrl,
           placeholder: (context, url) =>
               const Center(child: CircularProgressIndicator()),
           errorWidget: (context, url, error) => Center(
@@ -990,7 +1034,7 @@ class _FileViewerViewState extends State<FileViewerView> {
                 const SizedBox(height: 24),
                 ElevatedButton.icon(
                   onPressed: () async {
-                    final uri = Uri.parse(widget.url);
+                    final uri = Uri.parse(_effectiveUrl);
                     if (await canLaunchUrl(uri)) {
                       await launchUrl(
                         uri,
@@ -1011,7 +1055,7 @@ class _FileViewerViewState extends State<FileViewerView> {
   }
 
   Widget _buildPdfView() {
-    return _EmbeddedPdfViewer(url: widget.url, fileName: widget.fileName);
+    return _EmbeddedPdfViewer(url: _effectiveUrl, fileName: widget.fileName);
   }
 
   Widget _buildLinuxVideoFallback(String message) {
@@ -1071,7 +1115,7 @@ class _FileViewerViewState extends State<FileViewerView> {
       ElevatedButton.icon(
         onPressed: () async {
           try {
-            final uri = Uri.parse(widget.url);
+            final uri = Uri.parse(_effectiveUrl);
             if (await canLaunchUrl(uri)) {
               await launchUrl(uri, mode: LaunchMode.externalApplication);
             } else {
@@ -1103,7 +1147,7 @@ class _FileViewerViewState extends State<FileViewerView> {
           try {
             final result = await Process.run(
               'xdg-open',
-              [widget.url],
+              [_effectiveUrl],
               runInShell: false,
             );
             if (result.exitCode != 0) {
@@ -1175,7 +1219,7 @@ class _FileViewerViewState extends State<FileViewerView> {
             const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: () async {
-                final uri = Uri.parse(widget.url);
+                final uri = Uri.parse(_effectiveUrl);
                 if (await canLaunchUrl(uri)) {
                   await launchUrl(uri, mode: LaunchMode.externalApplication);
                 }
@@ -1208,7 +1252,7 @@ class _FileViewerViewState extends State<FileViewerView> {
 
     // Detectar si estamos en Linux
     final isLinux = !kIsWeb && Platform.isLinux;
-    
+
     // En Linux, si WebView falló o no está disponible, usar fallback directamente
     // Esto evita intentar crear el WebViewController que falla en Linux
     if (isLinux && isYouTube && (_webViewFailed || _webViewController == null)) {
@@ -1294,7 +1338,7 @@ class _FileViewerViewState extends State<FileViewerView> {
         // Inicializar WebViewController de forma asíncrona para evitar errores durante el build
         Future.microtask(() async {
           if (!mounted || _webViewFailed) return;
-          
+
           try {
             final controller = fv.WebViewController()
               ..setJavaScriptMode(fv.JavaScriptMode.unrestricted)
@@ -1359,7 +1403,7 @@ class _FileViewerViewState extends State<FileViewerView> {
               _getYouTubeEmbedHtml(videoId),
               baseUrl: 'https://www.youtube-nocookie.com',
             );
-            
+
             if (mounted && !_webViewFailed) {
               setState(() {
                 _webViewController = controller;
@@ -1545,7 +1589,7 @@ class _FileViewerViewState extends State<FileViewerView> {
   }
 
   Widget _buildAudioView() {
-    return _AudioPlayerWidget(url: widget.url, fileName: widget.fileName);
+    return _AudioPlayerWidget(url: _effectiveUrl, fileName: widget.fileName);
   }
 
   Widget _buildFallbackView(FileType fileType) {
@@ -1569,7 +1613,7 @@ class _FileViewerViewState extends State<FileViewerView> {
           const SizedBox(height: 24),
           ElevatedButton.icon(
             onPressed: () async {
-              final uri = Uri.parse(widget.url);
+              final uri = Uri.parse(_effectiveUrl);
               if (await canLaunchUrl(uri)) {
                 await launchUrl(uri, mode: LaunchMode.externalApplication);
               }
@@ -1649,8 +1693,8 @@ class _FileViewerViewState extends State<FileViewerView> {
         );
       }
 
-      // Descargar el archivo
-      final response = await http.get(Uri.parse(widget.url));
+      // Descargar el archivo usando la URL pre-firmada
+      final response = await http.get(Uri.parse(_effectiveUrl));
 
       if (response.statusCode != 200) {
         throw Exception('Error al descargar: ${response.statusCode}');

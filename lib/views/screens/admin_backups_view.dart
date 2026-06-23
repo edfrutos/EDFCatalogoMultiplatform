@@ -912,23 +912,45 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
             Uint8List.fromList(zipBytes),
           );
         } else {
-          // En otras plataformas, usar el selector de archivos
-          final result = await file_picker.FilePicker.platform.saveFile(
-            dialogTitle: 'Guardar archivo de respaldo',
-            fileName: fileName,
-            type: file_picker.FileType.custom,
-            allowedExtensions: ['zip'],
-          );
+          // En otras plataformas, intentar el selector de archivos
+          String? savedFilePath;
+          try {
+            final result = await file_picker.FilePicker.platform.saveFile(
+              dialogTitle: 'Guardar archivo de respaldo',
+              fileName: fileName,
+              type: file_picker.FileType.custom,
+              allowedExtensions: ['zip'],
+            );
+            if (result != null) {
+              await File(result).writeAsBytes(zipBytes);
+              savedFilePath = result;
+            }
+          } catch (e) {
+            print('⚠️ saveFile falló: $e — usando fallback a Downloads');
+          }
 
-          if (result != null) {
-            final file = File(result);
-            await file.writeAsBytes(zipBytes);
-            if (!context.mounted) return;
-            
-            // Mostrar diálogo con opciones para el archivo guardado
+          // Fallback: guardar en ~/Downloads si el diálogo no funcionó
+          if (savedFilePath == null) {
+            try {
+              final home = Platform.environment['HOME'] ?? '';
+              final downloadsDir = Directory('$home/Downloads');
+              if (await downloadsDir.exists()) {
+                savedFilePath = '${downloadsDir.path}/$fileName';
+              } else {
+                final docsDir = await getApplicationDocumentsDirectory();
+                savedFilePath = '${docsDir.path}/$fileName';
+              }
+              await File(savedFilePath!).writeAsBytes(zipBytes);
+              print('✅ Backup guardado en fallback: $savedFilePath');
+            } catch (e) {
+              print('❌ Error guardando backup en fallback: $e');
+            }
+          }
+
+          if (savedFilePath != null && context.mounted) {
             await _showFileOptionsDialog(
-              context, 
-              result, 
+              context,
+              savedFilePath,
               fileName,
               Uint8List.fromList(zipBytes),
             );
@@ -936,34 +958,54 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
         }
       }
       
-      // Para catálogos/usuarios, el archivo ya se descargó, mostrar confirmación
+      // Para catálogos/usuarios, el archivo ya se descargó, guardar en disco
       if ((type == BackupType.catalogs || type == BackupType.users) && data.isNotEmpty) {
-        final savedPath = data['savedPath'] as String?;
-        final fileName = data['fileName'] as String? ?? 'backup.json';
-        
-        // Si estamos en iOS y el archivo se guardó, mostrar opciones
+        String? savedPath = data['savedPath'] as String?; // iOS ya lo guardó
+        final fileName = data['fileName'] as String? ?? backup.fileName;
+        final jsonBytes = Uint8List.fromList(utf8.encode(jsonEncode(data)));
+
         if (!context.mounted) return;
+
         if (Platform.isIOS && savedPath != null) {
-          await _showFileOptionsDialog(
-            context,
-            savedPath,
-            fileName,
-            Uint8List.fromList(utf8.encode(jsonEncode(data))),
-          );
-        } else if (savedPath != null) {
-          // En otras plataformas, mostrar dónde se guardó
-          if (context.mounted) {
-            showDialog(
-              context: context,
-              builder: (context) => AlertDialog(
-                title: const Text('Descarga completada'),
-                content: Text('Archivo guardado en:\n$savedPath'),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Aceptar'),
-                  ),
-                ],
+          // iOS: ya guardado por el ViewModel
+          await _showFileOptionsDialog(context, savedPath, fileName, jsonBytes);
+        } else {
+          // macOS / otras plataformas: guardar en ~/Downloads
+          String? saveError;
+          try {
+            final home = Platform.environment['HOME'] ?? '';
+            final downloadsDir = Directory('$home/Downloads');
+            final targetDir = await downloadsDir.exists()
+                ? downloadsDir
+                : await getApplicationDocumentsDirectory();
+            savedPath = '${targetDir.path}/$fileName';
+            print('💾 Guardando backup JSON en: $savedPath');
+            await File(savedPath).writeAsBytes(jsonBytes);
+            print('✅ Backup JSON guardado correctamente');
+          } catch (e) {
+            saveError = e.toString();
+            print('❌ Error guardando JSON en Downloads: $e');
+            try {
+              final docsDir = await getApplicationDocumentsDirectory();
+              savedPath = '${docsDir.path}/$fileName';
+              await File(savedPath).writeAsBytes(jsonBytes);
+              print('✅ Backup JSON guardado en Documents: $savedPath');
+              saveError = null;
+            } catch (e2) {
+              print('❌ Error guardando JSON en Documents: $e2');
+              savedPath = null;
+            }
+          }
+
+          if (!context.mounted) return;
+          if (savedPath != null) {
+            await _showFileOptionsDialog(context, savedPath, fileName, jsonBytes);
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('❌ No se pudo guardar el archivo${saveError != null ? ': $saveError' : ''}'),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 8),
               ),
             );
           }
@@ -1381,10 +1423,14 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
     BackupViewModel viewModel,
     BackupInfo backup,
   ) async {
-    // Mostrar detalles del backup sin descargar
+    // IMPORTANTE: guardamos el contexto externo (del widget principal) ANTES de
+    // abrir el diálogo, para no pasarle el contexto del builder (que queda
+    // desmontado en cuanto se hace pop del diálogo).
+    final outerContext = context;
+
     showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
+      context: outerContext,
+      builder: (dialogContext) => AlertDialog(
         title: Text(backup.fileName),
         content: SingleChildScrollView(
           child: Column(
@@ -1409,13 +1455,15 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('Cerrar'),
           ),
           ElevatedButton.icon(
             onPressed: () {
-              Navigator.of(context).pop();
-              _downloadProjectBackup(context, viewModel, backup);
+              Navigator.of(dialogContext).pop();
+              // Usar outerContext (no dialogContext) para que context.mounted
+              // siga siendo válido después de cerrar este diálogo.
+              _downloadProjectBackup(outerContext, viewModel, backup);
             },
             icon: const Icon(Icons.download, size: 18),
             label: const Text('Descargar'),
@@ -1468,12 +1516,11 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
       );
 
       if (!context.mounted) return;
-      
+
       // Cerrar diálogo de carga
       Navigator.of(context).pop();
 
       if (data == null) {
-        // Mostrar mensaje de error del ViewModel si existe
         if (viewModel.errorMessage != null && context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -1486,18 +1533,83 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
         return;
       }
 
-      // Mostrar mensaje de éxito si existe
-      if (viewModel.successMessage != null && context.mounted) {
+      // Guardar el ZIP en disco
+      final zipBytes = data['bytes'] as List<int>?;
+      final savedPath = data['savedPath'] as String?; // iOS ya lo guardó
+      final fileName = data['fileName'] as String? ?? backup.fileName;
+
+      if (zipBytes == null || zipBytes.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('❌ El archivo descargado está vacío'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      // iOS: archivo ya guardado por el ViewModel
+      if (Platform.isIOS && savedPath != null) {
+        if (context.mounted) {
+          await _showFileOptionsDialog(
+            context,
+            savedPath,
+            fileName,
+            Uint8List.fromList(zipBytes),
+          );
+        }
+        return;
+      }
+
+      // macOS / otras plataformas: guardar en ~/Downloads directamente
+      String? finalPath;
+      String? saveError;
+
+      try {
+        final home = Platform.environment['HOME'] ?? '';
+        final downloadsDir = Directory('$home/Downloads');
+        final targetDir = await downloadsDir.exists() ? downloadsDir : await getApplicationDocumentsDirectory();
+        finalPath = '${targetDir.path}/$fileName';
+        print('💾 Guardando backup en: $finalPath (${zipBytes.length} bytes)');
+        await File(finalPath).writeAsBytes(zipBytes);
+        print('✅ Backup guardado correctamente');
+      } catch (e) {
+        saveError = e.toString();
+        print('❌ Error guardando en Downloads: $e');
+        // Segundo intento: Documents de la app
+        try {
+          final docsDir = await getApplicationDocumentsDirectory();
+          finalPath = '${docsDir.path}/$fileName';
+          await File(finalPath).writeAsBytes(zipBytes);
+          print('✅ Backup guardado en Documents: $finalPath');
+          saveError = null;
+        } catch (e2) {
+          print('❌ Error guardando en Documents: $e2');
+          finalPath = null;
+        }
+      }
+
+      if (!context.mounted) return;
+
+      if (finalPath != null) {
+        await _showFileOptionsDialog(
+          context,
+          finalPath!,
+          fileName,
+          Uint8List.fromList(zipBytes),
+        );
+      } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ ${viewModel.successMessage}'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 5),
+            content: Text('❌ No se pudo guardar el archivo en disco${saveError != null ? ': $saveError' : ''}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 8),
           ),
         );
       }
     } catch (e) {
-      // Cerrar el diálogo de carga si hay un error
       if (context.mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(

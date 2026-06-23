@@ -40,6 +40,10 @@ class _EditCatalogDialogState extends State<EditCatalogDialog> {
   bool _isUploadingImage = false;
   bool _shouldRemoveImage = false;
 
+  // URLs pre-firmadas para mostrar imágenes S3
+  String? _presignedThumbnailUrl;
+  String? _presignedFirstRowImageUrl;
+
   @override
   void initState() {
     super.initState();
@@ -50,6 +54,30 @@ class _EditCatalogDialogState extends State<EditCatalogDialog> {
     _columnsController = TextEditingController(
       text: widget.catalog.columns.join(', '),
     );
+    _loadPresignedUrls();
+  }
+
+  Future<void> _loadPresignedUrls() async {
+    final s3 = S3Service();
+
+    if (widget.catalog.thumbnailUrl != null) {
+      try {
+        final uri = await s3.getPresignedUrl(key: widget.catalog.thumbnailUrl!);
+        if (mounted) setState(() => _presignedThumbnailUrl = uri.toString());
+      } catch (e) {
+        print('❌ Error pre-firmando thumbnailUrl: $e');
+      }
+    }
+
+    final firstRowImage = widget.catalog.getFirstImageFromRows();
+    if (firstRowImage != null) {
+      try {
+        final uri = await s3.getPresignedUrl(key: firstRowImage);
+        if (mounted) setState(() => _presignedFirstRowImageUrl = uri.toString());
+      } catch (e) {
+        print('❌ Error pre-firmando firstRowImage: $e');
+      }
+    }
   }
 
   @override
@@ -129,13 +157,17 @@ class _EditCatalogDialogState extends State<EditCatalogDialog> {
   }
 
   /// Seleccionar imagen usando file_picker
+  /// NOTA: Usar FileType.custom con extensiones explícitas en lugar de
+  /// FileType.image para evitar el bug de macOS sandbox donde los directorios
+  /// aparecen inaccesibles con el filtro de tipo imagen.
   Future<void> _selectImage() async {
     try {
       file_picker.FilePickerResult? result = await file_picker
           .FilePicker
           .platform
           .pickFiles(
-            type: file_picker.FileType.image,
+            type: file_picker.FileType.custom,
+            allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'],
             allowMultiple: false,
             withData: false,
             withReadStream: false,
@@ -148,6 +180,8 @@ class _EditCatalogDialogState extends State<EditCatalogDialog> {
           _shouldRemoveImage = false;
         });
         print('✅ Imagen seleccionada: $filePath');
+      } else {
+        print('⚠️ No se seleccionó ninguna imagen');
       }
     } catch (e) {
       print('❌ Error al seleccionar imagen: $e');
@@ -212,9 +246,10 @@ class _EditCatalogDialogState extends State<EditCatalogDialog> {
                                       _selectedImageFile!,
                                       fit: BoxFit.cover,
                                     )
-                                  : widget.catalog.thumbnailUrl != null
+                                  : _presignedThumbnailUrl != null &&
+                                        !_shouldRemoveImage
                                   ? CachedNetworkImage(
-                                      imageUrl: widget.catalog.thumbnailUrl!,
+                                      imageUrl: _presignedThumbnailUrl!,
                                       fit: BoxFit.cover,
                                       placeholder: (context, url) =>
                                           const Center(
@@ -226,11 +261,9 @@ class _EditCatalogDialogState extends State<EditCatalogDialog> {
                                             size: 48,
                                           ),
                                     )
-                                  : widget.catalog.getFirstImageFromRows() !=
-                                        null
+                                  : _presignedFirstRowImageUrl != null
                                   ? CachedNetworkImage(
-                                      imageUrl: widget.catalog
-                                          .getFirstImageFromRows()!,
+                                      imageUrl: _presignedFirstRowImageUrl!,
                                       fit: BoxFit.cover,
                                       placeholder: (context, url) =>
                                           const Center(

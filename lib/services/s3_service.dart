@@ -7,6 +7,15 @@ import 'package:uuid/uuid.dart';
 import '../utils/env_config.dart';
 import '../models/file_type.dart';
 
+/// Entrada interna de caché para URLs pre-firmadas de S3.
+/// Las URLs expiran en 3600s por defecto; cacheamos con 300s de margen.
+class _CachedPresignedUrl {
+  final String url;
+  final DateTime expiresAt;
+  _CachedPresignedUrl(this.url, this.expiresAt);
+  bool get isValid => DateTime.now().isBefore(expiresAt);
+}
+
 /// Servicio para gestionar la subida y descarga de archivos en AWS S3
 class S3Service {
   static final S3Service _instance = S3Service._internal();
@@ -24,6 +33,11 @@ class S3Service {
   static const int maxDocumentSize = 50 * 1024 * 1024; // 50 MB
   static const int maxMultimediaSize = 300 * 1024 * 1024; // 300 MB
 
+  /// Caché en memoria de URLs pre-firmadas.
+  /// Evita regenerarlas en cada rebuild — las imágenes/archivos se reutilizan
+  /// de la caché de disco de CachedNetworkImage porque la URL no cambia.
+  static final Map<String, _CachedPresignedUrl> _presignedUrlCache = {};
+
   S3Service._internal()
     : _accessKey = EnvConfig.awsAccessKeyId,
       _secretKey = EnvConfig.awsSecretAccessKey,
@@ -35,6 +49,16 @@ class S3Service {
     print('  - Region: $_region');
     print('  - USE_S3: $_useS3');
   }
+
+  // MARK: - Caché
+
+  /// Invalida la URL cacheada para una clave de S3 específica.
+  /// Llamar después de borrar o reemplazar un archivo.
+  static void invalidatePresignedUrl(String key) =>
+      _presignedUrlCache.remove(key);
+
+  /// Limpia toda la caché de URLs pre-firmadas (útil al cerrar sesión).
+  static void clearPresignedUrlCache() => _presignedUrlCache.clear();
 
   // MARK: - File Upload
 
@@ -190,29 +214,85 @@ class S3Service {
 
   // MARK: - URL Generation
 
-  /// Genera una URL pre-firmada para descargar un archivo
+  /// Genera una URL pre-firmada para descargar un archivo.
+  ///
+  /// Las URLs se cachean en memoria durante (expirationInSeconds - 300) segundos
+  /// para evitar regenerar la firma en cada rebuild de widget y permitir que
+  /// CachedNetworkImage reutilice su caché de disco.
   Future<Uri> getPresignedUrl({
     required String key,
     int expirationInSeconds = 3600,
   }) async {
     final normalizedKey = _normalizeKey(key);
-    print('🔗 Generando URL pre-firmada: $normalizedKey');
+
+    // ── Revisar caché en memoria ──────────────────────────────────────────────
+    final cached = _presignedUrlCache[normalizedKey];
+    if (cached != null && cached.isValid) {
+      return Uri.parse(cached.url);
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     if (!_useS3) {
-      print('⚠️ USE_S3=false - Devolviendo URL directa');
       return Uri.https('$_bucketName.s3.$_region.amazonaws.com', normalizedKey);
     }
 
-    // Para simplificar, devolvemos URL directa si el bucket es público
-    // En producción, implementar firma AWS Signature V4 para URLs pre-firmadas
-    final url = Uri.https(
-      '$_bucketName.s3.$_region.amazonaws.com',
-      normalizedKey,
+    final now = DateTime.now().toUtc();
+    final dateStamp = _formatDate(now);
+    final amzDate = _formatAmzDate(now);
+    final host = '$_bucketName.s3.$_region.amazonaws.com';
+    final credentialScope = '$dateStamp/$_region/s3/aws4_request';
+    final credential = '$_accessKey/$credentialScope';
+
+    final queryParams = {
+      'X-Amz-Algorithm': 'AWS4-HMAC-SHA256',
+      'X-Amz-Credential': credential,
+      'X-Amz-Date': amzDate,
+      'X-Amz-Expires': '$expirationInSeconds',
+      'X-Amz-SignedHeaders': 'host',
+    };
+
+    final sortedQuery = queryParams.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    final canonicalQueryString = sortedQuery
+        .map(
+          (e) =>
+              '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}',
+        )
+        .join('&');
+
+    final canonicalRequest =
+        'GET\n/${normalizedKey}\n$canonicalQueryString\nhost:$host\n\nhost\nUNSIGNED-PAYLOAD';
+
+    final stringToSign =
+        'AWS4-HMAC-SHA256\n$amzDate\n$credentialScope\n'
+        '${sha256.convert(utf8.encode(canonicalRequest)).toString()}';
+
+    final kDate = _hmacSha256(utf8.encode('AWS4$_secretKey'), dateStamp);
+    final kRegion = _hmacSha256(kDate, _region);
+    final kService = _hmacSha256(kRegion, 's3');
+    final kSigning = _hmacSha256(kService, 'aws4_request');
+    final signature = _hmacSha256(
+      kSigning,
+      stringToSign,
+    ).map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+
+    final signedUrl = Uri.https(host, normalizedKey, {
+      ...queryParams,
+      'X-Amz-Signature': signature,
+    });
+
+    // ── Guardar en caché con TTL conservador (300s de margen antes de expirar) ─
+    final cacheTtl = Duration(
+      seconds: (expirationInSeconds - 300).clamp(60, expirationInSeconds),
     );
-    print(
-      '✅ URL generada: ${url.toString().substring(0, url.toString().length > 80 ? 80 : url.toString().length)}...',
+    _presignedUrlCache[normalizedKey] = _CachedPresignedUrl(
+      signedUrl.toString(),
+      DateTime.now().add(cacheTtl),
     );
-    return url;
+    // ─────────────────────────────────────────────────────────────────────────
+
+    print('✅ URL pre-firmada generada (expira en ${expirationInSeconds}s)');
+    return signedUrl;
   }
 
   // MARK: - File Deletion
@@ -221,6 +301,9 @@ class S3Service {
   Future<void> deleteFile(String key) async {
     final normalizedKey = _normalizeKey(key);
     print('🗑️ Eliminando archivo: $normalizedKey');
+
+    // Invalidar caché al eliminar
+    _presignedUrlCache.remove(normalizedKey);
 
     if (!_useS3) {
       print('⚠️ USE_S3=false - Simulando eliminación');
@@ -301,7 +384,12 @@ class S3Service {
 
   /// Normaliza una key de S3
   String _normalizeKey(String key) {
-    // Remover prefijo del bucket si existe
+    // Strip full HTTPS URL prefix
+    final httpsPrefix = 'https://$_bucketName.s3.$_region.amazonaws.com/';
+    if (key.startsWith(httpsPrefix)) {
+      return key.substring(httpsPrefix.length);
+    }
+    // Strip S3 URI prefix
     return key
         .replaceFirst('s3://$_bucketName/', '')
         .replaceFirst('/$_bucketName/', '');

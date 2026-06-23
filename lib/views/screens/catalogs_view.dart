@@ -10,6 +10,8 @@ import 'profile_view.dart';
 import 'widgets/create_catalog_dialog.dart';
 import 'widgets/edit_catalog_dialog.dart';
 import 'widgets/advanced_search_view.dart';
+import 'widgets/lazy_image_widget.dart';
+import 'widgets/s3_presigned_widget.dart';
 
 class CatalogsView extends StatefulWidget {
   const CatalogsView({super.key});
@@ -293,13 +295,46 @@ class _CatalogsViewState extends State<CatalogsView> {
                                   ),
                                 );
                               },
+                              // FIX: pre-firma la URL S3 antes de cargar la imagen de perfil
                               icon: currentUser.profileImageUrl != null
-                                  ? CircleAvatar(
-                                      radius: 12,
-                                      backgroundColor: Colors.transparent,
-                                      backgroundImage:
-                                          CachedNetworkImageProvider(
-                                            currentUser.profileImageUrl!,
+                                  ? S3PresignedBuilder(
+                                      rawUrl: currentUser.profileImageUrl!,
+                                      loadingWidget: CircleAvatar(
+                                        radius: 12,
+                                        backgroundColor: Colors.blue,
+                                        child: Text(
+                                          currentUser.name.isNotEmpty
+                                              ? currentUser.name[0]
+                                                  .toUpperCase()
+                                              : 'U',
+                                          style: const TextStyle(
+                                            fontSize: 14,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                      errorWidget: CircleAvatar(
+                                        radius: 12,
+                                        backgroundColor: Colors.blue,
+                                        child: Text(
+                                          currentUser.name.isNotEmpty
+                                              ? currentUser.name[0]
+                                                  .toUpperCase()
+                                              : 'U',
+                                          style: const TextStyle(
+                                            fontSize: 14,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                      builder: (context, signedUrl) =>
+                                          CircleAvatar(
+                                            radius: 12,
+                                            backgroundColor: Colors.transparent,
+                                            backgroundImage:
+                                                CachedNetworkImageProvider(
+                                                  signedUrl,
+                                                ),
                                           ),
                                     )
                                   : CircleAvatar(
@@ -647,50 +682,40 @@ class _CatalogsViewState extends State<CatalogsView> {
                                           bottom: 8,
                                         ),
                                         child: ListTile(
+                                          // FIX: usa LazyImageWidget que pre-firma automáticamente
+                                          // URLs de S3 privado y admite todos los formatos de imagen
                                           leading: displayImageUrl != null
                                               ? ClipRRect(
                                                   borderRadius:
                                                       BorderRadius.circular(8),
-                                                  child: CachedNetworkImage(
+                                                  child: LazyImageWidget(
                                                     imageUrl: displayImageUrl,
                                                     width: 60,
                                                     height: 60,
                                                     fit: BoxFit.cover,
-                                                    placeholder:
-                                                        (
-                                                          context,
-                                                          url,
-                                                        ) => Container(
-                                                          width: 60,
-                                                          height: 60,
-                                                          color: Colors
-                                                              .grey
-                                                              .shade200,
-                                                          child: const Center(
-                                                            child:
-                                                                CircularProgressIndicator(
-                                                                  strokeWidth:
-                                                                      2,
-                                                                ),
-                                                          ),
-                                                        ),
-                                                    errorWidget:
-                                                        (
-                                                          context,
-                                                          url,
-                                                          error,
-                                                        ) => Container(
-                                                          width: 60,
-                                                          height: 60,
-                                                          color: Colors
-                                                              .grey
-                                                              .shade200,
-                                                          child: const Icon(
-                                                            Icons
-                                                                .image_not_supported,
-                                                            size: 30,
-                                                          ),
-                                                        ),
+                                                    placeholder: Container(
+                                                      width: 60,
+                                                      height: 60,
+                                                      color: Colors
+                                                          .grey.shade200,
+                                                      child: const Center(
+                                                        child:
+                                                            CircularProgressIndicator(
+                                                              strokeWidth: 2,
+                                                            ),
+                                                      ),
+                                                    ),
+                                                    errorWidget: Container(
+                                                      width: 60,
+                                                      height: 60,
+                                                      color: Colors
+                                                          .grey.shade200,
+                                                      child: const Icon(
+                                                        Icons
+                                                            .image_not_supported,
+                                                        size: 30,
+                                                      ),
+                                                    ),
                                                   ),
                                                 )
                                               : Container(

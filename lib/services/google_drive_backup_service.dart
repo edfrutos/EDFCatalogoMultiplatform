@@ -150,7 +150,9 @@ class GoogleDriveBackupService {
       DateTime? expiry;
       if (expiryStr != null) {
         try {
-          expiry = DateTime.parse(expiryStr);
+          // FIX: AccessToken requiere DateTime en UTC.
+          // DateTime.parse devuelve hora local para strings sin zona → llamar .toUtc()
+          expiry = DateTime.parse(expiryStr).toUtc();
         } catch (e) {
           print('⚠️ Error parseando fecha de expiración: $e');
         }
@@ -160,7 +162,7 @@ class GoogleDriveBackupService {
       auth.AccessCredentials credentials;
       if (accessToken != null &&
           expiry != null &&
-          expiry.isAfter(DateTime.now())) {
+          expiry.isAfter(DateTime.now().toUtc())) {
         // Usar access token existente si aún no ha expirado
         credentials = auth.AccessCredentials(
           auth.AccessToken('Bearer', accessToken, expiry),
@@ -168,12 +170,13 @@ class GoogleDriveBackupService {
           scopes,
         );
       } else {
-        // Crear credenciales con solo refresh token (el cliente las refrescará)
+        // Crear credenciales con solo refresh token (el cliente las refrescará).
+        // FIX: DateTime debe ser UTC para AccessToken.
         credentials = auth.AccessCredentials(
           auth.AccessToken(
             'Bearer',
             'dummy',
-            DateTime.now().subtract(Duration(days: 1)),
+            DateTime.now().toUtc().subtract(const Duration(days: 1)),
           ),
           refreshToken,
           scopes,
@@ -198,20 +201,23 @@ class GoogleDriveBackupService {
   Future<void> _saveCredentials(auth.AccessCredentials credentials) async {
     try {
       if (credentials.refreshToken != null) {
+        // Siempre guardar el expiry en UTC para evitar el error al cargar
+        final expiryUtcString =
+            credentials.accessToken.expiry.toUtc().toIso8601String();
+
         // Intentar guardar en secure storage primero
         try {
           await _secureStorage.write(
             key: _refreshTokenKey,
             value: credentials.refreshToken!,
           );
-          // Guardar también access token y expiry
           await _secureStorage.write(
             key: _accessTokenKey,
             value: credentials.accessToken.data,
           );
           await _secureStorage.write(
             key: _tokenExpiryKey,
-            value: credentials.accessToken.expiry.toIso8601String(),
+            value: expiryUtcString,
           );
           print('💾 Credenciales de Google Drive guardadas en secure storage');
         } catch (e) {
@@ -225,10 +231,7 @@ class GoogleDriveBackupService {
             _accessTokenKey,
             credentials.accessToken.data,
           );
-          await _prefs!.setString(
-            _tokenExpiryKey,
-            credentials.accessToken.expiry.toIso8601String(),
-          );
+          await _prefs!.setString(_tokenExpiryKey, expiryUtcString);
           print(
             '💾 Credenciales de Google Drive guardadas en SharedPreferences (fallback)',
           );
@@ -422,7 +425,7 @@ class GoogleDriveBackupService {
       final refreshToken = tokenData['refresh_token'] as String?;
       final expiresIn = tokenData['expires_in'] as int? ?? 3600;
 
-      // Crear credenciales
+      // Crear credenciales (siempre en UTC)
       final credentials = auth.AccessCredentials(
         auth.AccessToken(
           'Bearer',
@@ -869,11 +872,12 @@ class GoogleDriveBackupService {
 
     try {
       final query =
-          "'$_backupFolderId' in parents and name contains 'project_backup' and mimeType='application/zip' and trashed=false";
+          "'$_backupFolderId' in parents and (name contains 'project_backup' or name contains 'catalogo_backup') and mimeType='application/zip' and trashed=false";
       final response = await _driveApi!.files.list(
         q: query,
         orderBy: 'createdTime desc',
         spaces: 'drive',
+        $fields: 'files(id,name,size,createdTime,mimeType)',
       );
 
       final backups = <BackupInfo>[];

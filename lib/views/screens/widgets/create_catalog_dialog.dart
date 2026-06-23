@@ -37,6 +37,11 @@ class _CreateCatalogDialogState extends State<CreateCatalogDialog> {
         .where((e) => e.isNotEmpty)
         .toList();
 
+    // Añadir 'Fecha' como primera columna por defecto si no está ya incluida
+    if (!columns.any((c) => c.toLowerCase() == 'fecha')) {
+      columns.insert(0, 'Fecha');
+    }
+
     widget.onCreate(
       _nameController.text.trim(),
       _descriptionController.text.trim(),

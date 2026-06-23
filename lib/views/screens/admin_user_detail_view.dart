@@ -38,10 +38,14 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
   bool _isUploadingImage = false;
   bool _shouldRemoveImage = false;
 
+  // URL pre-firmada para mostrar la imagen desde S3
+  String? _presignedImageUrl;
+
   @override
   void initState() {
     super.initState();
     _initializeControllers();
+    _loadPresignedUrl(widget.user.profileImageUrl);
   }
 
   void _initializeControllers() {
@@ -59,6 +63,22 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
     );
     _isAdmin = widget.user.isAdmin;
     _isActive = widget.user.isActive ?? true;
+  }
+
+  /// Genera una URL pre-firmada para mostrar la imagen desde S3
+  Future<void> _loadPresignedUrl(String? rawUrl) async {
+    if (rawUrl == null) {
+      if (mounted) setState(() => _presignedImageUrl = null);
+      return;
+    }
+    try {
+      final uri = await S3Service().getPresignedUrl(key: rawUrl);
+      if (mounted) {
+        setState(() => _presignedImageUrl = uri.toString());
+      }
+    } catch (e) {
+      print('❌ Error generando URL pre-firmada: $e');
+    }
   }
 
   @override
@@ -116,8 +136,7 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
         profileImageUrl = await s3Service.uploadFile(
           filePath: _selectedImageFile!.path,
           userId: widget.user.id,
-          catalogId:
-              'profile', // Usar 'profile' como catalogId para fotos de perfil
+          catalogId: 'profile',
           fileType: FileType.image,
         );
 
@@ -171,6 +190,9 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
 
     await viewModel.updateUser(updatedUser);
 
+    // Recargar URL pre-firmada con la nueva imagen
+    await _loadPresignedUrl(profileImageUrl);
+
     // Limpiar archivo seleccionado y flags después de guardar
     setState(() {
       _selectedImageFile = null;
@@ -186,7 +208,8 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
           .FilePicker
           .platform
           .pickFiles(
-            type: file_picker.FileType.image,
+            type: file_picker.FileType.custom,
+            allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'],
             allowMultiple: false,
             withData: false,
             withReadStream: false,
@@ -196,7 +219,7 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
         final filePath = result.files.single.path!;
         setState(() {
           _selectedImageFile = File(filePath);
-          _shouldRemoveImage = false; // Si selecciona nueva, no eliminar
+          _shouldRemoveImage = false;
         });
         print('✅ Imagen seleccionada: $filePath');
       } else {
@@ -225,7 +248,8 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
   void _removeProfileImage() {
     setState(() {
       _selectedImageFile = null;
-      _shouldRemoveImage = true; // Marcar que se debe eliminar la imagen actual
+      _shouldRemoveImage = true;
+      _presignedImageUrl = null;
     });
   }
 
@@ -286,15 +310,12 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
                         radius: 50,
                         backgroundColor: Colors.blue.shade100,
                         backgroundImage: _selectedImageFile != null
-                            ? FileImage(_selectedImageFile!)
-                            : widget.user.profileImageUrl != null
-                            ? CachedNetworkImageProvider(
-                                widget.user.profileImageUrl!,
-                              )
+                            ? FileImage(_selectedImageFile!) as ImageProvider
+                            : (_presignedImageUrl != null && !_shouldRemoveImage)
+                            ? CachedNetworkImageProvider(_presignedImageUrl!)
                             : null,
-                        child:
-                            _selectedImageFile == null &&
-                                widget.user.profileImageUrl == null
+                        child: _selectedImageFile == null &&
+                                (_presignedImageUrl == null || _shouldRemoveImage)
                             ? Text(
                                 widget.user.name.isNotEmpty
                                     ? widget.user.name[0].toUpperCase()
@@ -318,7 +339,7 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
                               border: Border.all(color: Colors.white, width: 3),
                             ),
                             child: IconButton(
-                              icon: Icon(
+                              icon: const Icon(
                                 Icons.camera_alt,
                                 color: Colors.white,
                                 size: 20,
@@ -342,10 +363,10 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
                           onPressed: _isUploadingImage
                               ? null
                               : _selectProfileImage,
-                          icon: Icon(Icons.photo_library, size: 18),
-                          label: Text('Seleccionar Foto'),
+                          icon: const Icon(Icons.photo_library, size: 18),
+                          label: const Text('Seleccionar Foto'),
                           style: ElevatedButton.styleFrom(
-                            padding: EdgeInsets.symmetric(
+                            padding: const EdgeInsets.symmetric(
                               horizontal: 16,
                               vertical: 8,
                             ),
@@ -357,11 +378,11 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
                           const SizedBox(width: 12),
                           OutlinedButton.icon(
                             onPressed: _removeProfileImage,
-                            icon: Icon(Icons.delete, size: 18),
-                            label: Text('Eliminar'),
+                            icon: const Icon(Icons.delete, size: 18),
+                            label: const Text('Eliminar'),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: Colors.red,
-                              padding: EdgeInsets.symmetric(
+                              padding: const EdgeInsets.symmetric(
                                 horizontal: 16,
                                 vertical: 8,
                               ),
@@ -372,8 +393,8 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
                     ),
                     // Indicador de carga de imagen
                     if (_isUploadingImage) ...[
-                      SizedBox(height: 12),
-                      Row(
+                      const SizedBox(height: 12),
+                      const Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           SizedBox(
@@ -396,7 +417,7 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
             const SizedBox(height: 24),
             // Edit/View Toggle
             SegmentedButton<bool>(
-              segments: [
+              segments: const [
                 ButtonSegment(value: false, label: Text('Ver')),
                 ButtonSegment(value: true, label: Text('Editar')),
               ],
@@ -412,7 +433,7 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
             if (_isEditing) ...[
               _buildEditableSection('Rol', Icons.admin_panel_settings, [
                 SegmentedButton<bool>(
-                  segments: [
+                  segments: const [
                     ButtonSegment(value: false, label: Text('Usuario Normal')),
                     ButtonSegment(value: true, label: Text('Administrador')),
                   ],
@@ -524,8 +545,7 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
               onPressed: () => Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) =>
-                      AdminUserCatalogsView(user: widget.user),
+                  builder: (_) => AdminUserCatalogsView(user: widget.user),
                 ),
               ),
               icon: const Icon(Icons.table_chart_outlined),
@@ -557,7 +577,7 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
       decoration: InputDecoration(
         labelText: '$label${optional ? ' (Opcional)' : ''}',
         prefixIcon: Icon(icon),
-        border: OutlineInputBorder(),
+        border: const OutlineInputBorder(),
       ),
     );
   }

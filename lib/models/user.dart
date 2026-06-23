@@ -69,7 +69,11 @@ class User extends Equatable {
       email: json['Email']?.toString() ?? json['email']?.toString() ?? '',
       username:
           json['Username']?.toString() ?? json['username']?.toString() ?? '',
-      name: json['Name']?.toString() ?? json['name']?.toString() ?? '',
+      name:
+          json['Name']?.toString() ??
+          json['name']?.toString() ??
+          json['nombre']?.toString() ??
+          '',
       isAdmin: isAdminValue,
       fullName: json['FullName']?.toString() ?? json['fullName']?.toString(),
       phone: json['Phone']?.toString() ?? json['phone']?.toString(),
@@ -80,7 +84,8 @@ class User extends Equatable {
       profileImageUrl:
           json['ProfileImageUrl']?.toString() ??
           json['profileImageUrl']?.toString(),
-      isActive: json['IsActive'] ?? json['isActive'] ?? true,
+      isActive:
+          json['IsActive'] ?? json['isActive'] ?? json['is_active'] ?? true,
       createdAt:
           _parseDateTime(json['CreatedAt']) ??
           _parseDateTime(json['createdAt']),

@@ -63,6 +63,18 @@ class ProjectBackupService {
     'linux/flutter/ephemeral',
     // Excluir directorio de backups para evitar recursión
     'backups',
+    // ── macOS sandbox: directorios de caché y sistema ────────────────────────
+    // Estos directorios pueden contener GBs de datos de caché (imágenes,
+    // WebKit, HTTP, etc.) que no son parte de los datos de la app.
+    'Caches',
+    'HTTPStorages',
+    'WebKit',
+    'Logs',
+    'TemporaryItems',
+    'CachedData',
+    'CloudDocs',
+    'com.apple.nsurlsessiond',
+    // ─────────────────────────────────────────────────────────────────────────
   ];
 
   static const List<String> _excludedFiles = [
@@ -112,12 +124,12 @@ class ProjectBackupService {
       // En iOS, usar el directorio de documentos de la aplicación
       final directory = await getApplicationDocumentsDirectory();
       final savePath = '${directory.path}/$fileName';
-      
+
       // Copiar el archivo al directorio de documentos
       await file.copy(savePath);
-      
+
       print('✅ Archivo descargado a: $savePath');
-      
+
       // Devolver la ruta donde se guardó el archivo
       return savePath;
     } catch (e) {
@@ -553,80 +565,93 @@ class ProjectBackupService {
     }
   }
 
-  /// Crear ZIP del proyecto directamente en memoria (sin guardar localmente)
-  /// [projectPath] - Ruta del proyecto (si es null, intenta usar la ruta predeterminada)
-  /// Si la ruta predeterminada falla por permisos, lanza excepción para que el usuario seleccione el directorio
-  /// Retorna los bytes del ZIP y el nombre del archivo
+  /// Crear ZIP de los datos de la app directamente en memoria (sin guardar localmente).
+  ///
+  /// En macOS el sandbox container puede contener GBs de caché de imágenes
+  /// (CachedNetworkImage → Library/Caches/). Este método evita ese problema
+  /// haciendo backup SOLO de los directorios de datos relevantes de la app:
+  ///   • getApplicationSupportDirectory() — datos persistentes de la app
+  ///   • getApplicationDocumentsDirectory() — archivos del usuario (JSON exports, etc.)
+  ///
+  /// Si se pasa [projectPath] explícitamente, se usa ese directorio con los
+  /// filtros habituales de exclusión (Caches, WebKit, HTTPStorages, etc.).
   Future<Map<String, dynamic>> createProjectZipInMemory({
     String? projectPath,
   }) async {
     try {
-      // En iOS, usar el directorio de documentos de la aplicación
       final bool isIOS = Platform.isIOS;
-
-      // Obtener el directorio del proyecto o usar el directorio de documentos en iOS
-      String actualProjectPath;
-      if (isIOS) {
-        final appDocDir = await getApplicationDocumentsDirectory();
-        actualProjectPath = appDocDir.path;
-        print('📱 Modo iOS: Usando directorio de documentos: $actualProjectPath');
-      } else {
-        actualProjectPath = projectPath ?? _resolveDefaultProjectPath();
-      }
-
-      final projectDir = Directory(actualProjectPath);
-
-      if (!await projectDir.exists()) {
-        throw Exception(
-          'El directorio no existe: $actualProjectPath',
-        );
-      }
-
-      print('📦 Creando ZIP del proyecto en memoria...');
-      print('   Origen: $actualProjectPath');
+      final bool isMacOS = !isIOS && Platform.isMacOS;
 
       final archive = Archive();
       int filesAdded = 0;
       int totalSize = 0;
 
-      // En iOS, solo incluir archivos de la base de datos y configuraciones
       if (isIOS) {
+        // iOS: solo archivos de base de datos en el directorio de documentos
         print('📱 Modo iOS: Incluyendo solo archivos de la aplicación...');
-        try {
-          final appDocDir = await getApplicationDocumentsDirectory();
-          print('📁 Directorio de documentos de la app: ${appDocDir.path}');
-          
-          // Añadir archivos de la base de datos
-          final dbFiles = await _findDatabaseFiles(appDocDir);
-          print('🔍 Encontrados ${dbFiles.length} archivos de base de datos');
-          
-          for (final file in dbFiles) {
-            try {
-              final fileBytes = await file.readAsBytes();
-              final relativePath = path.relative(file.path, from: appDocDir.path);
-              final archiveFile = ArchiveFile(
-                relativePath,
-                fileBytes.length,
-                fileBytes,
-              );
-              archive.addFile(archiveFile);
-              totalSize = totalSize + fileBytes.length;
-              filesAdded++;
-              print('   ✅ Añadido: $relativePath (${fileBytes.length} bytes)');
-            } catch (e) {
-              print('   ⚠️  Error añadiendo ${file.path}: $e');
-            }
+        final appDocDir = await getApplicationDocumentsDirectory();
+        print('   Origen: ${appDocDir.path}');
+
+        final dbFiles = await _findDatabaseFiles(appDocDir);
+        print('🔍 Encontrados ${dbFiles.length} archivos de base de datos');
+
+        for (final file in dbFiles) {
+          try {
+            final fileBytes = await file.readAsBytes();
+            final relativePath = path.relative(file.path, from: appDocDir.path);
+            archive.addFile(ArchiveFile(relativePath, fileBytes.length, fileBytes));
+            totalSize += fileBytes.length;
+            filesAdded++;
+            print('   ✅ Añadido: $relativePath (${fileBytes.length} bytes)');
+          } catch (e) {
+            print('   ⚠️  Error añadiendo ${file.path}: $e');
           }
-          
-          if (dbFiles.isEmpty) {
-            print('ℹ️  No se encontraron archivos de base de datos para respaldar');
-          }
-        } catch (e) {
-          print('❌ Error accediendo al directorio de documentos: $e');
-          rethrow;
+        }
+
+        if (dbFiles.isEmpty) {
+          print('ℹ️  No se encontraron archivos de base de datos para respaldar');
+        }
+      } else if (isMacOS && projectPath == null) {
+        // macOS sin ruta explícita: backup de los datos relevantes de la app
+        // (NO el container completo, que incluye Library/Caches con GBs de imágenes)
+        final appSupportDir = await getApplicationSupportDirectory();
+        final appDocDir = await getApplicationDocumentsDirectory();
+
+        final directoriesToBackup = [
+          MapEntry('AppSupport', appSupportDir),
+          MapEntry('Documents', appDocDir),
+        ];
+
+        print('📦 Creando ZIP de datos de la app en macOS...');
+
+        for (final entry in directoriesToBackup) {
+          final label = entry.key;
+          final dir = entry.value;
+
+          if (!await dir.exists()) continue;
+          print('   Incluyendo $label: ${dir.path}');
+
+          final result = await _addFilesToArchiveRecursive(
+            dir,
+            dir.path,
+            archive,
+            pathPrefix: '$label/',
+          );
+          filesAdded += result['filesAdded'] as int;
+          totalSize += result['totalSize'] as int;
         }
       } else {
-        // Para otras plataformas, usar la lógica normal
+        // Ruta explícita o plataforma no-macOS: lógica normal con filtros de exclusión
+        final actualProjectPath = projectPath ?? _resolveDefaultProjectPath();
+        final projectDir = Directory(actualProjectPath);
+
+        if (!await projectDir.exists()) {
+          throw Exception('El directorio no existe: $actualProjectPath');
+        }
+
+        print('📦 Creando ZIP del proyecto en memoria...');
+        print('   Origen: $actualProjectPath');
+
         final result = await _addFilesToArchiveRecursive(
           projectDir,
           actualProjectPath,
@@ -699,13 +724,15 @@ class ProjectBackupService {
     }
   }
 
-  /// Añadir archivos al archivo ZIP de forma recursiva, manejando errores de permisos
+  /// Añadir archivos al archivo ZIP de forma recursiva, manejando errores de permisos.
+  /// [pathPrefix] — prefijo opcional para las rutas dentro del ZIP.
   /// Retorna un mapa con 'filesAdded' y 'totalSize'
   Future<Map<String, int>> _addFilesToArchiveRecursive(
     Directory dir,
     String projectRoot,
-    Archive archive,
-  ) async {
+    Archive archive, {
+    String pathPrefix = '',
+  }) async {
     int filesAdded = 0;
     int totalSize = 0;
 
@@ -714,7 +741,8 @@ class ProjectBackupService {
       await for (final entity in dir.list()) {
         try {
           final entityName = path.basename(entity.path);
-          final relativePath = path.relative(entity.path, from: projectRoot);
+          final relativePath =
+              pathPrefix + path.relative(entity.path, from: projectRoot);
 
           // Verificar si el directorio debe ser excluido usando la ruta completa
           if (entity is Directory) {
@@ -727,6 +755,7 @@ class ProjectBackupService {
               entity,
               projectRoot,
               archive,
+              pathPrefix: pathPrefix,
             );
             filesAdded += subResult['filesAdded'] as int;
             totalSize += subResult['totalSize'] as int;
@@ -831,10 +860,10 @@ class ProjectBackupService {
           if (entity is File) {
             final ext = path.extension(entity.path).toLowerCase();
             // Incluir archivos de base de datos comunes
-            if (ext == '.db' || 
-                ext == '.sqlite' || 
-                ext == '.sqlite3' || 
-                entity.path.toLowerCase().contains('catalogo') || 
+            if (ext == '.db' ||
+                ext == '.sqlite' ||
+                ext == '.sqlite3' ||
+                entity.path.toLowerCase().contains('catalogo') ||
                 entity.path.toLowerCase().contains('backup')) {
               dbFiles.add(entity);
             }

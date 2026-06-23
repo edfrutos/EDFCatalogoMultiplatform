@@ -18,37 +18,40 @@ class ProfileView extends StatefulWidget {
 
 class _ProfileViewState extends State<ProfileView> {
   final _formKey = GlobalKey<FormState>();
-  late TextEditingController _usernameController;
-  late TextEditingController _nameController;
-  late TextEditingController _fullNameController;
-  late TextEditingController _phoneController;
-  late TextEditingController _companyController;
-  late TextEditingController _addressController;
-  late TextEditingController _occupationController;
+  final _usernameController = TextEditingController();
+  final _nameController = TextEditingController();
+  final _fullNameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _companyController = TextEditingController();
+  final _addressController = TextEditingController();
+  final _occupationController = TextEditingController();
 
-  bool _isSaving = false;
-  String? _successMessage;
-  String? _errorMessage;
-
-  // Foto de perfil
   File? _selectedImageFile;
+  bool _shouldRemoveImage = false;
+  bool _isSaving = false;
   bool _isUploadingImage = false;
-  bool _shouldRemoveImage =
-      false; // Flag para indicar que se debe eliminar la imagen
+  String? _errorMessage;
+  String? _successMessage;
+
+  // URL pre-firmada para mostrar la imagen de perfil
+  String? _presignedImageUrl;
 
   @override
   void initState() {
     super.initState();
-    final authViewModel = context.read<AuthViewModel>();
-    final user = authViewModel.currentUser;
-
-    _usernameController = TextEditingController(text: user?.username ?? '');
-    _nameController = TextEditingController(text: user?.name ?? '');
-    _fullNameController = TextEditingController(text: user?.fullName ?? '');
-    _phoneController = TextEditingController(text: user?.phone ?? '');
-    _companyController = TextEditingController(text: user?.company ?? '');
-    _addressController = TextEditingController(text: user?.address ?? '');
-    _occupationController = TextEditingController(text: user?.occupation ?? '');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final user = context.read<AuthViewModel>().currentUser;
+      if (user != null) {
+        _usernameController.text = user.username ?? '';
+        _nameController.text = user.name;
+        _fullNameController.text = user.fullName ?? '';
+        _phoneController.text = user.phone ?? '';
+        _companyController.text = user.company ?? '';
+        _occupationController.text = user.occupation ?? '';
+        _addressController.text = user.address ?? '';
+        _loadPresignedUrl(user.profileImageUrl);
+      }
+    });
   }
 
   @override
@@ -63,11 +66,24 @@ class _ProfileViewState extends State<ProfileView> {
     super.dispose();
   }
 
-  Future<void> _handleSave() async {
-    if (!_formKey.currentState!.validate()) {
+  /// Genera una URL pre-firmada para mostrar la imagen desde S3
+  Future<void> _loadPresignedUrl(String? rawUrl) async {
+    if (rawUrl == null) {
+      if (mounted) setState(() => _presignedImageUrl = null);
       return;
     }
+    try {
+      final uri = await S3Service().getPresignedUrl(key: rawUrl);
+      if (mounted) {
+        setState(() => _presignedImageUrl = uri.toString());
+      }
+    } catch (e) {
+      print('❌ Error generando URL pre-firmada: $e');
+    }
+  }
 
+  Future<void> _handleSave() async {
+    if (!_formKey.currentState!.validate()) return;
     setState(() {
       _isSaving = true;
       _errorMessage = null;
@@ -103,8 +119,7 @@ class _ProfileViewState extends State<ProfileView> {
           profileImageUrl = await s3Service.uploadFile(
             filePath: _selectedImageFile!.path,
             userId: user.id,
-            catalogId:
-                'profile', // Usar 'profile' como catalogId para fotos de perfil
+            catalogId: 'profile',
             fileType: FileType.image,
           );
 
@@ -144,6 +159,9 @@ class _ProfileViewState extends State<ProfileView> {
       // Recargar usuario actualizado
       await authViewModel.reloadCurrentUser();
 
+      // Recargar URL pre-firmada con la nueva imagen
+      await _loadPresignedUrl(profileImageUrl);
+
       setState(() {
         _successMessage = 'Perfil actualizado correctamente';
         _errorMessage = null;
@@ -179,7 +197,8 @@ class _ProfileViewState extends State<ProfileView> {
           .FilePicker
           .platform
           .pickFiles(
-            type: file_picker.FileType.image,
+            type: file_picker.FileType.custom,
+            allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'],
             allowMultiple: false,
             withData: false,
             withReadStream: false,
@@ -189,7 +208,7 @@ class _ProfileViewState extends State<ProfileView> {
         final filePath = result.files.single.path!;
         setState(() {
           _selectedImageFile = File(filePath);
-          _shouldRemoveImage = false; // Si selecciona nueva, no eliminar
+          _shouldRemoveImage = false;
           _errorMessage = null;
         });
         print('✅ Imagen seleccionada: $filePath');
@@ -222,7 +241,8 @@ class _ProfileViewState extends State<ProfileView> {
   void _removeProfileImage() {
     setState(() {
       _selectedImageFile = null;
-      _shouldRemoveImage = true; // Marcar que se debe eliminar la imagen actual
+      _shouldRemoveImage = true;
+      _presignedImageUrl = null;
     });
   }
 
@@ -269,14 +289,17 @@ class _ProfileViewState extends State<ProfileView> {
                               backgroundColor: Colors.grey[300],
                               backgroundImage: _selectedImageFile != null
                                   ? FileImage(_selectedImageFile!)
-                                  : user.profileImageUrl != null
+                                        as ImageProvider
+                                  : (_presignedImageUrl != null &&
+                                        !_shouldRemoveImage)
                                   ? CachedNetworkImageProvider(
-                                      user.profileImageUrl!,
+                                      _presignedImageUrl!,
                                     )
                                   : null,
                               child:
                                   _selectedImageFile == null &&
-                                      user.profileImageUrl == null
+                                      (_presignedImageUrl == null ||
+                                          _shouldRemoveImage)
                                   ? Text(
                                       user.name.isNotEmpty
                                           ? user.name[0].toUpperCase()

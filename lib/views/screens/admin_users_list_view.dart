@@ -5,6 +5,7 @@ import '../../models/user.dart';
 import '../../viewmodels/admin_viewmodel.dart';
 import 'admin_user_detail_view.dart';
 import 'widgets/create_user_dialog.dart';
+import 'widgets/s3_presigned_widget.dart';
 
 class AdminUsersListView extends StatefulWidget {
   const AdminUsersListView({super.key});
@@ -351,6 +352,43 @@ class _UserListItem extends StatelessWidget {
     required this.onDelete,
   });
 
+  Widget _buildAvatar(BuildContext context) {
+    final initials = Text(
+      user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
+      style: TextStyle(
+        color: Colors.blue.shade700,
+        fontWeight: FontWeight.bold,
+      ),
+    );
+
+    if (user.profileImageUrl == null) {
+      return CircleAvatar(
+        radius: 20,
+        backgroundColor: Colors.blue.shade100,
+        child: initials,
+      );
+    }
+
+    return S3PresignedBuilder(
+      rawUrl: user.profileImageUrl!,
+      loadingWidget: CircleAvatar(
+        radius: 20,
+        backgroundColor: Colors.blue.shade100,
+        child: initials,
+      ),
+      errorWidget: CircleAvatar(
+        radius: 20,
+        backgroundColor: Colors.blue.shade100,
+        child: initials,
+      ),
+      builder: (context, signedUrl) => CircleAvatar(
+        radius: 20,
+        backgroundColor: Colors.blue.shade100,
+        backgroundImage: CachedNetworkImageProvider(signedUrl),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isActive = user.isActive ?? true;
@@ -364,22 +402,7 @@ class _UserListItem extends StatelessWidget {
           child: Row(
             children: [
               // Avatar con foto de perfil si existe
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: Colors.blue.shade100,
-                backgroundImage: user.profileImageUrl != null
-                    ? CachedNetworkImageProvider(user.profileImageUrl!)
-                    : null,
-                child: user.profileImageUrl == null
-                    ? Text(
-                        user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
-                        style: TextStyle(
-                          color: Colors.blue.shade700,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      )
-                    : null,
-              ),
+              _buildAvatar(context),
               const SizedBox(width: 12),
               // User Info
               Expanded(

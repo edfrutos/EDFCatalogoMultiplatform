@@ -28,9 +28,12 @@ class KeychainService {
     iOptions: IOSOptions(
       accessibility: KeychainAccessibility.first_unlock_this_device,
     ),
-    // macOS: opciones por defecto — usa el Keychain del usuario sin requerir
-    // el entitlement "Keychain Sharing". Funciona en desarrollo sin certificado.
-    mOptions: MacOsOptions(),
+    // macOS: useDataProtectionKeychain: false permite usar el Keychain estándar
+    // sin necesitar el entitlement "keychain-access-groups" ni certificado de firma.
+    // Funciona correctamente en desarrollo (flutter run -d macos) sin signing.
+    mOptions: MacOsOptions(
+      useDataProtectionKeyChain: false,
+    ),
     lOptions: LinuxOptions(),
     wOptions: WindowsOptions(useBackwardCompatibility: false),
   );

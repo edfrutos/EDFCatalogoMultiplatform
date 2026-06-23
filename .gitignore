@@ -1,148 +1,52 @@
-# Miscellaneous
-*.class
-*.log
-*.pyc
-*.swp
+# Sync .project/sourceTexts/ folder (source text files)
+
+# Don't sync user-specific SQLite databases
+.project/*.sqlite
+
+# Don't sync SQLite auxiliary files
+.project/*.sqlite-wal
+.project/*.sqlite-shm
+
+# Don't sync temporary files
+.project/.temp/**
+
+# Don't sync user-specific files
+.project/complete_drafts.txt
+.project/localProjectSettings.json
+.project/localProjectSwap.json
+copilot-messages.log
+
+# Archive formats
+*.zip
+*.rar
+*.7z
+*.tar
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.gz
+*.bz2
+*.xz
+
+# Windows executables and installers
+*.exe
+*.msi
+*.bat
+*.cmd
+*.com
+*.scr
+*.dll
+
+# macOS executables and disk images
+*.dmg
+*.pkg
+
+# Disk images and virtual machine files
+*.iso
+*.img
+*.vhd
+*.vmdk
+
+# System files
 .DS_Store
-.atom/
-.build/
-.buildlog/
-.history
-.svn/
-.swiftpm/
-migrate_working_dir/
-
-# IntelliJ related
-*.iml
-*.ipr
-*.iws
-.idea/
-
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
-
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
-.dart_tool/
-.flutter-plugins-dependencies
-.pub-cache/
-.pub/
-/build/
-/bundle/
-/coverage/
-
-# Symbolication related
-app.*.symbols
-
-# Obfuscation related
-app.*.map.json
-
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
-/android/build/
-/android/.gradle/
-/android/local.properties
-/android/key.properties
-**/android/build/
-**/android/gradle/
-
-# Environment variables (contiene credenciales sensibles)
-.env
-.env.local
-.env.*.local
-.env.production
-.env.development
-*.env
-!.env.example
-
-# Credentials and secrets
-*.pem
-*.key
-*.p12
-*.jks
-*.keystore
-*credentials*.json
-*secret*.json
-credentials/
-secrets/
-**/credentials/
-**/secrets/
-
-# API Keys and configuration files with secrets
-*api-key*.json
-*apikey*.json
-*secret*.json
-*password*.json
-*password*.txt
-*password*.env
-google-services.json
-GoogleService-Info.plist
-firebase_options.dart
-**/android/app/google-services.json
-**/ios/Runner/GoogleService-Info.plist
-
-# Logs (pueden contener información sensible)
-*.log
-logs/
-*.log.*
-
-# Database files
-*.db
-*.sqlite
-*.sqlite3
-
-# Backup files
-*.bak
-*.backup
-*~
-
-# Temporary files
-tmp/
-temp/
-*.tmp
-
-# Auxly - AI Task Management (internal data)
-.auxly/
-
-# Flutter build artifacts
-build/
-.dart_tool/
-.flutter-plugins
-.flutter-plugins-dependencies
-
-# Dart generated files
-*.g.dart
-*.freezed.dart
-
-# iOS/macOS
-ios/Pods/
-ios/.symlinks/
-macos/Pods/
-*.xcworkspace/xcuserdata/
-xcuserdata/
-*.xcuserstate
-
-# Android
-android/.gradle/
-android/local.properties
-android/app/google-services.json
-
-# VS Code / Cursor
-.vscode/
-.cursor/
-
-# Credenciales locales
-.env
-.env.local
-appsettings.local.json
-
-# macOS
-.DS_Store
-
-# Logs
-*.log
+.project/attachments/files/**

@@ -61,9 +61,12 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
     // Inicializar controladores para todas las columnas
     _controllers = {};
     for (final column in widget.catalog.columns) {
-      _controllers[column] = TextEditingController(
-        text: widget.row?.data[column] ?? '',
-      );
+      // Para columnas de fecha en filas nuevas, usar la fecha actual como valor por defecto
+      String defaultValue = widget.row?.data[column] ?? '';
+      if (_isDateColumn(column) && defaultValue.isEmpty && widget.row == null) {
+        defaultValue = _formatDate(DateTime.now());
+      }
+      _controllers[column] = TextEditingController(text: defaultValue);
     }
     _files = widget.row?.files ?? RowFiles();
     // Inicializar listas de URLs existentes
@@ -327,7 +330,8 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
     switch (fileType) {
       case app_file_type.FileType.image:
         result = await file_picker.FilePicker.platform.pickFiles(
-          type: file_picker.FileType.image,
+          type: file_picker.FileType.custom,
+          allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'],
           allowMultiple: allowMultiple,
         );
         break;
@@ -509,6 +513,59 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
     });
   }
 
+  // ── Helpers de fecha ──────────────────────────────────────────────────────
+
+  /// Detecta si una columna es de tipo fecha por su nombre
+  bool _isDateColumn(String columnName) {
+    final lower = columnName.toLowerCase().trim();
+    return lower == 'fecha' ||
+        lower == 'date' ||
+        lower.startsWith('fecha') ||
+        lower.contains('fecha');
+  }
+
+  /// Formatea una fecha como dd/MM/yyyy
+  String _formatDate(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}/'
+        '${date.month.toString().padLeft(2, '0')}/'
+        '${date.year}';
+  }
+
+  /// Abre el selector de fecha y actualiza el controlador de la columna
+  Future<void> _selectDate(String column) async {
+    final currentValue = _controllers[column]?.text ?? '';
+    DateTime initialDate = DateTime.now();
+
+    // Intentar parsear la fecha actual del campo (formato dd/MM/yyyy)
+    if (currentValue.isNotEmpty) {
+      try {
+        final parts = currentValue.split('/');
+        if (parts.length == 3) {
+          initialDate = DateTime(
+            int.parse(parts[2]),
+            int.parse(parts[1]),
+            int.parse(parts[0]),
+          );
+        }
+      } catch (_) {}
+    }
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+
+    if (picked != null && mounted) {
+      setState(() {
+        _controllers[column]?.text = _formatDate(picked);
+      });
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+
   TextEditingController _getOrCreateTitleController(String url) {
     if (!_titleControllers.containsKey(url)) {
       _titleControllers[url] = TextEditingController(
@@ -606,22 +663,42 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
                       ...widget.catalog.columns.map((column) {
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 16),
-                          child: TextFormField(
-                            controller: _controllers[column],
-                            decoration: InputDecoration(
-                              labelText: column,
-                              border: const OutlineInputBorder(),
-                              helperText: 'Campo requerido',
-                              helperMaxLines: 1,
-                            ),
-                            validator: (value) {
-                              // Validación básica - puede extenderse con reglas por columna
-                              return Validators.validateRequired(
-                                value,
-                                fieldName: column,
-                              );
-                            },
-                          ),
+                          child: _isDateColumn(column)
+                              ? TextFormField(
+                                  controller: _controllers[column],
+                                  decoration: InputDecoration(
+                                    labelText: column,
+                                    border: const OutlineInputBorder(),
+                                    helperText: 'dd/MM/aaaa',
+                                    helperMaxLines: 1,
+                                    suffixIcon: IconButton(
+                                      icon: const Icon(Icons.calendar_today),
+                                      tooltip: 'Seleccionar fecha',
+                                      onPressed: () => _selectDate(column),
+                                    ),
+                                  ),
+                                  readOnly: true,
+                                  onTap: () => _selectDate(column),
+                                  validator: (value) =>
+                                      Validators.validateRequired(
+                                        value,
+                                        fieldName: column,
+                                      ),
+                                )
+                              : TextFormField(
+                                  controller: _controllers[column],
+                                  decoration: InputDecoration(
+                                    labelText: column,
+                                    border: const OutlineInputBorder(),
+                                    helperText: 'Campo requerido',
+                                    helperMaxLines: 1,
+                                  ),
+                                  validator: (value) =>
+                                      Validators.validateRequired(
+                                        value,
+                                        fieldName: column,
+                                      ),
+                                ),
                         );
                       }),
                       const SizedBox(height: 24),

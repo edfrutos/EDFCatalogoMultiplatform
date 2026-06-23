@@ -191,7 +191,7 @@ class MongoService {
 
       // Intentar buscar por Email primero
       print('🔍 Buscando por Email: $emailOrUsername');
-      await collection.find({'Email': emailOrUsername}).forEach((doc) {
+      await collection.find({r'$or': [{'Email': emailOrUsername}, {'email': emailOrUsername}]}).forEach((doc) {
         results.add(doc.map((key, value) => MapEntry(key, value)));
       });
 
@@ -200,7 +200,7 @@ class MongoService {
         print(
           '🔍 No encontrado por Email, buscando por Username: $emailOrUsername',
         );
-        await collection.find({'Username': emailOrUsername}).forEach((doc) {
+        await collection.find({r'$or': [{'Username': emailOrUsername}, {'username': emailOrUsername}]}).forEach((doc) {
           results.add(doc.map((key, value) => MapEntry(key, value)));
         });
       }
@@ -1051,30 +1051,36 @@ class MongoService {
       try {
         objectId = ObjectId.fromHexString(id);
       } catch (_) {
-        // Si no es un ObjectId válido, actualizar directamente
+        // Si no es un ObjectId válido, actualizar directamente con string
         print('💾 updateCatalog - Actualizando con _id como string: $id');
         final result = await collection.update(where.eq('_id', id), updateDoc);
-        final success = result['ok'] == 1.0;
+        final success = (result['ok'] as num?)?.toInt() == 1;
         print(
-          '💾 updateCatalog - Resultado de actualización: ${success ? "✅ Éxito" : "❌ Falló"}',
+          '💾 updateCatalog - Resultado: ${success ? "✅ Éxito" : "❌ Falló"} | raw=$result',
         );
         return success;
       }
-      final objectIdValue = objectId; // Para evitar el warning del linter
-      print(
-        '💾 updateCatalog - Actualizando con ObjectId: ${objectIdValue.oid}',
-      );
-      final result = await collection.update(where.id(objectId), updateDoc);
-      final success = result['ok'] == 1.0;
-      print(
-        '💾 updateCatalog - Resultado de actualización: ${success ? "✅ Éxito" : "❌ Falló"}',
-      );
-      if (success && result.containsKey('nModified')) {
-        print(
-          '💾 updateCatalog - Documentos modificados: ${result['nModified']}',
-        );
+
+      // Intentar primero con ObjectId
+      print('💾 updateCatalog - Actualizando con ObjectId: ${objectId.oid}');
+      var result = await collection.update(where.id(objectId), updateDoc);
+      var nModified = (result['nModified'] as num?)?.toInt() ?? -1;
+      var okVal = (result['ok'] as num?)?.toInt() ?? 0;
+      print('💾 updateCatalog - ObjectId → ok=$okVal nModified=$nModified');
+
+      // Si no modificó nada o falló, el _id puede estar guardado como string
+      if (nModified == 0 || okVal != 1) {
+        print('💾 updateCatalog - Reintentando con _id string: $id');
+        result = await collection.update(where.eq('_id', id), updateDoc);
+        nModified = (result['nModified'] as num?)?.toInt() ?? 0;
+        okVal = (result['ok'] as num?)?.toInt() ?? 0;
+        print('💾 updateCatalog - String → ok=$okVal nModified=$nModified');
       }
 
+      final success = okVal == 1;
+      print(
+        '💾 updateCatalog - Resultado final: ${success ? "✅ Éxito" : "❌ Falló"} | nModified=$nModified',
+      );
       return success;
     } catch (e) {
       print('❌ Error actualizando catálogo: $e');
