@@ -147,7 +147,7 @@ class S3Image extends StatelessWidget {
           width: width,
           height: height,
           fit: fit,
-          placeholder: (_, __) =>
+          placeholder: (_, _) =>
               placeholder ??
               Container(
                 color: Colors.grey[200],
@@ -155,7 +155,7 @@ class S3Image extends StatelessWidget {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
               ),
-          errorWidget: (_, __, ___) =>
+          errorWidget: (_, _, _) =>
               errorWidget ??
               Container(
                 color: Colors.grey[200],

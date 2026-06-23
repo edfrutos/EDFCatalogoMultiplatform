@@ -940,7 +940,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                 final docsDir = await getApplicationDocumentsDirectory();
                 savedFilePath = '${docsDir.path}/$fileName';
               }
-              await File(savedFilePath!).writeAsBytes(zipBytes);
+              await File(savedFilePath).writeAsBytes(zipBytes);
               print('✅ Backup guardado en fallback: $savedFilePath');
             } catch (e) {
               print('❌ Error guardando backup en fallback: $e');
@@ -1596,7 +1596,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
       if (finalPath != null) {
         await _showFileOptionsDialog(
           context,
-          finalPath!,
+          finalPath,
           fileName,
           Uint8List.fromList(zipBytes),
         );

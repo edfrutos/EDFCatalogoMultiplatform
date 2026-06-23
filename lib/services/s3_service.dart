@@ -261,7 +261,7 @@ class S3Service {
         .join('&');
 
     final canonicalRequest =
-        'GET\n/${normalizedKey}\n$canonicalQueryString\nhost:$host\n\nhost\nUNSIGNED-PAYLOAD';
+        'GET\n/$normalizedKey\n$canonicalQueryString\nhost:$host\n\nhost\nUNSIGNED-PAYLOAD';
 
     final stringToSign =
         'AWS4-HMAC-SHA256\n$amzDate\n$credentialScope\n'

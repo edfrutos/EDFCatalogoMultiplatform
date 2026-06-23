@@ -42,7 +42,7 @@ class _ProfileViewState extends State<ProfileView> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final user = context.read<AuthViewModel>().currentUser;
       if (user != null) {
-        _usernameController.text = user.username ?? '';
+        _usernameController.text = user.username;
         _nameController.text = user.name;
         _fullNameController.text = user.fullName ?? '';
         _phoneController.text = user.phone ?? '';
