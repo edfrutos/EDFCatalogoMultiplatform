@@ -23,8 +23,8 @@ de tablas con soporte multimedia. Corre en seis plataformas desde un único code
 │  │  Models  │  │  Utils   │               │
 │  └──────────┘  └──────────┘               │
 └────────────────────────────────────────────┘
-         │                    │
-    MongoDB Atlas          AWS S3
+         │           │              │
+    MongoDB Atlas  AWS S3     Google Drive
 ```
 
 ---
@@ -81,6 +81,28 @@ se guardan en local o no se adjuntan.
 
 Credenciales necesarias: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`,
 `S3_BUCKET_NAME` (o `BUCKET_NAME` como alternativa).
+
+### 3.3 Google Drive — Sistema de Backups (`google_drive_backup_service.dart`, `project_backup_service.dart`)
+
+Backups automáticos en Google Drive. Tres tipos:
+
+| Tipo | Contenido | Formato |
+|------|-----------|---------|
+| `catalogs` | Todos los catálogos del usuario | JSON |
+| `users` | Todos los usuarios (solo admin) | JSON |
+| `project` | Datos de la app (AppSupport + AppDocuments) | ZIP |
+
+**Flujo de creación:**
+- Catálogos/usuarios: serialización JSON → `GoogleDriveBackupService.backupCatalogs/Users()` → sube a carpeta `Backups_CatalogoTablas` en Drive.
+- Proyecto: `ProjectBackupService.createProjectZipInMemory()` crea ZIP en memoria (sin tocar disco) → `uploadProjectBackupFromBytes()` sube directamente a Drive. En macOS sandbox usa `getApplicationSupportDirectory()` + `getApplicationDocumentsDirectory()` en lugar de `Directory.current` (que apuntaría a la raíz del contenedor sandbox, incluyendo `Library/Caches/` con varios GB).
+
+**Flujo de descarga (macOS):**
+- Descarga los bytes desde Drive → los escribe en `~/Downloads/` con fallback a `getApplicationDocumentsDirectory()`.
+- Bug conocido y resuelto: el `context` del `builder` del diálogo de detalles sobreescribía el `context` externo. Al hacer `Navigator.pop()` del diálogo, el contexto quedaba desmontado (`context.mounted = false`) antes de llegar al código de guardado. Fix: guardar `outerContext` antes de abrir el diálogo y pasarlo a la función de descarga.
+
+**Listado (`files.list`):**
+- Requiere `$fields: 'files(id,name,size,createdTime,mimeType)'` para obtener el tamaño (la API no lo devuelve por defecto).
+- Query con OR para cubrir ambos prefijos de nombre: `name contains 'project_backup' OR name contains 'catalogo_backup'`.
 
 ---
 
@@ -189,7 +211,39 @@ conexión a MongoDB ni a AWS — todos los servicios externos se mockean con `mo
 
 ---
 
-## 8. Herramientas y scripts
+## 8. Convenciones de catálogos
+
+### 8.1 Columna Fecha
+
+Al crear un catálogo, `create_catalog_dialog.dart` inserta automáticamente `'Fecha'`
+como primera columna si el usuario no la ha incluido. En `add_edit_row_dialog.dart`:
+
+- Columnas cuyo nombre sea `fecha` / empiece por `fecha` / contenga `fecha` (case-insensitive)
+  se renderizan como campo de solo lectura con botón de calendario.
+- El selector usa `showDatePicker()` nativo de Flutter.
+- En filas nuevas, el valor por defecto es la fecha de hoy en formato `dd/MM/yyyy`.
+
+### 8.2 File Picker en macOS sandbox
+
+`FileType.image` en `file_picker` desactiva (greys out) los directorios en el sandbox
+de macOS, impidiendo la navegación. Patrón correcto en toda la app:
+
+```dart
+// ❌ Evitar
+FilePicker.platform.pickFiles(type: FileType.image)
+
+// ✅ Correcto
+FilePicker.platform.pickFiles(
+  type: FileType.custom,
+  allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'],
+)
+```
+
+Afecta a: `profile_view.dart`, `admin_user_detail_view.dart`, `add_edit_row_dialog.dart`.
+
+---
+
+## 9. Herramientas y scripts
 
 | Script | Propósito |
 |--------|-----------|
@@ -200,7 +254,7 @@ conexión a MongoDB ni a AWS — todos los servicios externos se mockean con `mo
 
 ---
 
-## 9. Evolución del proyecto
+## 10. Evolución del proyecto
 
 | Versión | Hito |
 |---------|------|
