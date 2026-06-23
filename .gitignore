@@ -50,3 +50,34 @@ copilot-messages.log
 # System files
 .DS_Store
 .project/attachments/files/**
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
+*.g.dart
+doc/api/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+android/.idea/
+.vscode/
+*.iml
+
+# Auxly
+.auxly/
+
+# macOS Xcode temp files
+*.xcconfig.bak
+*.xcconfig.bak2
+*.xcconfig.tmp
+
+# Python scripts temporales (si se quieren ignorar descomenta)
+# migrate_catalogs.py
+# migrate_users.py
+# reset_password.py
