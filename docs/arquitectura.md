@@ -32,12 +32,26 @@ de tablas con soporte multimedia. Corre en seis plataformas desde un único code
 ## 2. Estructura de carpetas
 
 ```
+api/                               # Servidor API Dart/Shelf (solo para web)
+├── bin/server.dart                # Punto de entrada HTTP
+└── lib/
+    ├── config.dart                # Configuración del servidor (puerto, CORS, etc.)
+    ├── auth/jwt_service.dart      # Autenticación JWT
+    ├── db/mongo_db.dart           # Conexión MongoDB
+    └── routes/
+        ├── auth_routes.dart       # POST /api/auth/login
+        ├── s3_routes.dart         # POST /api/s3/upload, GET /api/s3/presign
+        ├── catalog_routes.dart    # CRUD catálogos
+        ├── user_routes.dart       # CRUD usuarios (admin)
+        └── helpers.dart           # Utilidades compartidas
+
 lib/
 ├── main.dart                  # Punto de entrada — llama a initEnv() y runApp()
 ├── models/                    # Entidades de dominio (User, Catalog, Row, …)
 ├── services/                  # Acceso a datos externos
 │   ├── mongo_service.dart     # Todas las operaciones MongoDB
 │   ├── s3_service.dart        # Upload/download en AWS S3
+│   ├── api_service.dart       # ← NUEVO: cliente HTTP para el servidor API (solo web)
 │   ├── keychain_service.dart  # Persistencia segura de sesión
 │   └── export_service.dart    # Exportación (PDF, CSV, Excel, compartir)
 ├── viewmodels/                # Lógica de presentación (ChangeNotifier)
@@ -48,8 +62,13 @@ lib/
 │   │   └── widgets/           # Widgets reutilizables entre pantallas
 │   └── …
 └── utils/
-    ├── env_loader.dart        # Carga de .env multiplataforma + globalEnvMap
-    └── env_config.dart        # Getters tipados sobre las variables de entorno
+    ├── env_loader.dart           # Carga de .env multiplataforma + globalEnvMap
+    ├── env_config.dart           # Getters tipados sobre las variables de entorno
+    ├── io_stub.dart              # ← NUEVO: stub dart:io File/Directory para web
+    ├── web_download.dart         # ← NUEVO: descarga Blob en browser (web only)
+    ├── web_download_stub.dart    # ← NUEVO: stub para plataformas nativas
+    ├── web_pdf_view.dart         # ← NUEVO: visor PDF via <iframe> (web only)
+    └── web_pdf_view_stub.dart    # ← NUEVO: stub para plataformas nativas
 ```
 
 ---
@@ -73,7 +92,7 @@ Para producción se usa MongoDB Atlas; el formato esperado es:
 mongodb+srv://<user>:<pass>@<cluster>/<db>?retryWrites=true&w=majority
 ```
 
-### 3.2 AWS S3 (`s3_service.dart`)
+### 3.2 AWS S3 (`s3_service.dart` + `api_service.dart`)
 
 Almacenamiento de archivos multimedia (imágenes, vídeos, documentos adjuntos a filas).
 Se activa únicamente cuando `USE_S3=true` en `.env`. Si está desactivado, los archivos
@@ -81,6 +100,32 @@ se guardan en local o no se adjuntan.
 
 Credenciales necesarias: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`,
 `S3_BUCKET_NAME` (o `BUCKET_NAME` como alternativa).
+
+**Diferencia por plataforma en el upload:**
+
+| Plataforma | Ruta | Servicio usado |
+|-----------|------|----------------|
+| macOS / iOS / Android | path local del archivo | `S3Service.uploadFile(filePath)` → SDK AWS directo |
+| Web | bytes del `PlatformFile` | `ApiService.instance.uploadBytes(bytes, fileName, folder, contentType)` → POST al servidor API → SDK AWS en servidor |
+
+El servidor API recibe el `Content-Type` del header HTTP y lo aplica al `PutObject` de S3.
+**Crítico**: si se omite `contentType`, S3 almacena `application/octet-stream` y Chrome
+descarga el archivo en vez de mostrarlo inline (p. ej. PDFs en el visor `<iframe>`).
+
+Mapa de extensiones → MIME types definido en `add_edit_row_dialog.dart > uploadPlatformFile()`:
+
+```dart
+const mimeByExt = {
+  'pdf': 'application/pdf',
+  'jpg': 'image/jpeg', 'png': 'image/png',
+  'mp4': 'video/mp4', 'mov': 'video/quicktime',
+  // … ver código fuente para la tabla completa
+};
+```
+
+**Presigned URLs**: `S3Service.getPresignedUrl(key)` genera una URL temporal firmada
+para descarga directa desde S3 (sin pasar por el servidor). En web delega a
+`ApiService.instance.getPresignedUrl(key)` vía GET `/api/s3/presign?key=…`.
 
 ### 3.3 Google Drive — Sistema de Backups (`google_drive_backup_service.dart`, `project_backup_service.dart`)
 
@@ -170,26 +215,53 @@ Las rutas de administración están protegidas por comprobación de `user.isAdmi
 
 ---
 
-## 6. Despliegue Web (Docker)
+## 6. Despliegue Web (Docker + API Dart)
+
+### 6.1 Servidor API Dart (`api/`)
+
+El servidor API es necesario en web porque:
+- `dart:io` no está disponible en browser → no puede conectar directo a MongoDB ni a AWS SDK
+- El servidor actúa como proxy seguro: recibe requests de Flutter Web y se comunica con MongoDB y S3
+
+```
+api/
+├── bin/server.dart          # shelf_router, middleware CORS + JWT
+└── lib/
+    ├── config.dart          # API_PORT (default 8089), API_CORS_ORIGIN, JWT_SECRET
+    ├── auth/jwt_service.dart
+    ├── db/mongo_db.dart
+    └── routes/              # /api/auth, /api/s3, /api/catalog, /api/users, /api/health
+```
+
+**Arranque en desarrollo:**
+```bash
+./scripts/dev_web.sh        # API en background (puerto 8089) + flutter run -d chrome
+./scripts/run_api_dev.sh    # Solo la API
+```
+
+> **Puerto**: se usa **8089** (no 8080) porque Docker Desktop ocupa el 8080
+> permanentemente en macOS independientemente de si hay contenedores activos.
+
+### 6.2 Docker para producción
 
 ```
 docker/
-├── Dockerfile.web          # Multi-stage: Flutter builder + Caddy runtime
-├── Caddyfile               # SPA routing + cabeceras de seguridad + caché
-└── docker-compose.web.yml  # Orquestación con BuildKit secrets para .env
+├── Dockerfile.api          # Imagen Dart slim para el servidor API
+├── Caddyfile.web           # Reverse proxy: Flutter Web (/) + API (/api/)
+└── docker-compose.web.yml  # Servicios: caddy + api
 ```
 
-El `.env` se inyecta durante la build con `--mount=type=secret` y **no queda**
-en ninguna capa de la imagen final. El binario web resultante no contiene
-credenciales — las variables de entorno en web se leen del asset `.env` que
-se bundlea en `build/web/assets/`.
+El `.env` se inyecta durante la build de Flutter con `--mount=type=secret` y
+**no queda** en ninguna capa de la imagen final. El binario web resultante no
+contiene credenciales — las variables de entorno en web se leen del asset `.env`
+que se bundlea en `build/web/assets/`.
 
 ```bash
-docker compose -f docker/docker-compose.web.yml up -d \
-  --build
+docker compose -f docker/docker-compose.web.yml up -d --build
 ```
 
-Puerto por defecto: `8080`. Configurable con `WEB_PORT` en el entorno del host.
+Puerto web por defecto: `80/443` (Caddy con HTTPS automático).
+El servidor API escucha en `8089` internamente; Caddy hace el proxy.
 
 ---
 
@@ -247,20 +319,105 @@ Afecta a: `profile_view.dart`, `admin_user_detail_view.dart`, `add_edit_row_dial
 
 | Script | Propósito |
 |--------|-----------|
-| `scripts/cleanup_duplicate_catalogs.dart` | CLI para limpiar duplicados en MongoDB. Ver [docs/misc/cleanup-duplicate-catalogs.md](misc/cleanup-duplicate-catalogs.md) |
+| `scripts/dev_web.sh` | Arranca API Dart (puerto 8089) + Flutter Web en Chrome en paralelo. Ctrl+C mata ambos |
+| `scripts/run_api_dev.sh` | Solo la API Dart (para debug aislado) |
+| `scripts/build_macos_dmg.sh` | Build release macOS → firma ad-hoc → DMG con hdiutil |
 | `scripts/build_linux_release.sh` | Build de release para Linux en local |
 | `scripts/build_linux_release_docker.sh` | Build de release Linux dentro de Docker |
 | `scripts/ejecutar_linux_gui.sh` | Ejecutar la app Linux con DISPLAY |
+| `scripts/cleanup_duplicate_catalogs.dart` | CLI para limpiar duplicados en MongoDB. Ver [docs/misc/cleanup-duplicate-catalogs.md](misc/cleanup-duplicate-catalogs.md) |
+
+### 9.1 `build_macos_dmg.sh` — detalles de codesign
+
+El script aplica firma ad-hoc (no distribuible en App Store, válida para uso local/intranet).
+Orden estricto de firma ("inside-out") requerido por codesign:
+
+1. `.dylib` sueltos en `Contents/Frameworks/`
+2. Binarios internos de cada `.framework` + el bundle `.framework`
+3. Binario en `Contents/MacOS/` — **usa `find -exec` para evitar problemas con nombres con acentos (NFD/NFC) en bash pipes**
+4. El bundle `.app` completo — **con `--entitlements macos/Runner/Release.entitlements`** para que el sandbox permita `FilePicker.getDirectoryPath()`
+
+**Problema conocido resuelto**: `hdiutil create` falla con "Recurso ocupado" si el
+TMP_DMG anterior quedó montado. El script ahora: (a) detacha el volumen, (b) espera
+1 segundo, (c) elimina el archivo antes de crear uno nuevo.
 
 ---
 
-## 10. Evolución del proyecto
+## 10. Gotchas de plataforma
+
+### 10.1 Web — `dart:io` vs `io_stub.dart`
+
+Flutter Web no incluye `dart:io`. El import condicional:
+```dart
+import 'dart:io' if (dart.library.html) 'package:edfcatalogomultiplatform/utils/io_stub.dart';
+```
+hace que en web `File` resuelva a la clase stub. dart2js verifica tipos en **todas** las
+ramas del código incluso las protegidas con `!kIsWeb`, por lo que una asignación
+`FileImage(File(path))` produce error de tipos en build web aunque nunca ejecute.
+
+**Fix**: `File(_selectedPlatformFile!.path!) as dynamic` — el cast a `dynamic`
+omite la verificación de tipos de dart2js. Patrón ya extendido a todos los sites de uso.
+
+### 10.2 Web — `html.Blob` y encoding
+
+`html.Blob([parts], mimeType, endings)` solo acepta `'transparent'` o `'native'`
+como tercer argumento (`endings`). Pasar `'utf-8'` lanza:
+```
+TypeError: ... 'utf-8' is not a valid enum value of type EndingType
+```
+
+**Fix**: codificar a bytes antes de crear el Blob:
+```dart
+final bytes = utf8.encode(content);
+final blob = html.Blob([bytes], mimeType);  // sin tercer argumento
+```
+
+### 10.3 Web — File Picker con `PlatformFile`
+
+Para que el mismo código funcione en web y nativo se usa `file_picker.PlatformFile`
+con `withData: true`. Esto rellena tanto `pf.bytes` (web) como `pf.path` (nativo):
+
+```dart
+// Web
+Image.memory(_selectedPlatformFile!.bytes!, fit: BoxFit.cover)
+ApiService.instance.uploadBytes(bytes: pf.bytes!, ...)
+
+// Nativo
+Image.file(File(_selectedPlatformFile!.path!) as dynamic, ...)
+S3Service().uploadFile(filePath: pf.path!, ...)
+```
+
+### 10.4 macOS — Sandbox y entitlements
+
+`codesign --sign - app.app` sin `--entitlements` NO embebe el archivo `.entitlements`
+aunque exista en el proyecto. Resultado: `ENTITLEMENT_NOT_FOUND` al llamar a
+`FilePicker.platform.getDirectoryPath()` en runtime.
+
+Siempre usar:
+```bash
+codesign --force --sign - --entitlements macos/Runner/Release.entitlements app.app
+```
+
+### 10.5 macOS — codesign con nombres no-ASCII
+
+`find ... | while read -r bin; do codesign ... "$bin"; done` puede fallar silenciosamente
+con binarios cuyos paths contienen caracteres con acento (NFD en HFS+, NFC en la shell).
+**Fix**: usar `find -exec` para que codesign reciba el path directamente del kernel:
+```bash
+find "${APP_PATH}/Contents/MacOS" -type f \
+  -exec codesign --force --sign - {} \;
+```
+
+---
+
+## 11. Evolución del proyecto
 
 | Versión | Hito |
 |---------|------|
 | Previa | `EDFCatalogoSwift` — app nativa macOS en SwiftUI (archivada) |
 | v0.x | `edf_catalogotablas_macOS` — versión Flutter solo macOS |
 | **v1.0.0** | `EDFCatalogoMultiplatform` — Flutter 6 plataformas, Docker Web, CI, tests |
+| **v1.1.0** | Soporte web completo: servidor API Dart/Shelf, uploads S3 vía API con Content-Type correcto, visor PDF inline, export CSV fix, scripts dev_web.sh, build_macos_dmg.sh con entitlements |
 
 El repositorio Swift original se mantiene como referencia histórica pero ya no
 recibe actualizaciones. Todo el desarrollo futuro ocurre en este repo.
