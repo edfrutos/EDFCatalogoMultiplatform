@@ -1,5 +1,4 @@
-import 'dart:io' show File;
-
+import 'package:file_picker/file_picker.dart' as file_picker;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
@@ -41,7 +40,7 @@ class MultipleFilesSection extends StatefulWidget {
   final app_file_type.FileType fileType;
 
   /// Archivos locales seleccionados via file_picker (antes de subir).
-  final List<File> selectedFiles;
+  final List<file_picker.PlatformFile> selectedFiles;
 
   /// URLs ya guardadas en el servidor.
   final List<String> existingUrls;
@@ -225,20 +224,13 @@ class _MultipleFilesSectionState extends State<MultipleFilesSection> {
     int? fileSize;
 
     if (isFile) {
-      final file = widget.selectedFiles[index];
-      displayName = path.basename(file.path);
-      // Validación de tamaño (solo en plataformas nativas)
-      if (!kIsWeb) {
-        try {
-          fileSize = file.lengthSync();
-          final maxBytes = _maxBytesForType(widget.fileType);
-          if (fileSize > maxBytes) {
-            // El parent debería haber rechazado esto, pero mostramos aviso visual
-            displayName = '⚠️ $displayName (supera ${_formatBytes(maxBytes)})';
-          }
-        } catch (_) {
-          // file no accesible todavía (raro)
-        }
+      final pf = widget.selectedFiles[index];
+      // PlatformFile: en nativo tiene path, en web solo name
+      displayName = pf.path != null ? path.basename(pf.path!) : pf.name;
+      fileSize = pf.size;
+      final maxBytes = _maxBytesForType(widget.fileType);
+      if (fileSize != null && fileSize! > maxBytes) {
+        displayName = '⚠️ $displayName (supera ${_formatBytes(maxBytes)})';
       }
     } else {
       displayName = widget.existingUrls[index - widget.selectedFiles.length];
@@ -391,8 +383,8 @@ class _MultipleFilesSectionState extends State<MultipleFilesSection> {
   }
 
   Widget _buildActionButtons(ThemeData theme) {
-    // En web no hay path local, ocultamos los botones de archivo local
-    final showFileButtons = !kIsWeb;
+    // file_picker con withData:true funciona en web — mostramos siempre los botones
+    const showFileButtons = true;
 
     return Row(
       children: [

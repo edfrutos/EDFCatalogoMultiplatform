@@ -1,0 +1,52 @@
+# Caddyfile.web — Flutter Web SPA + proxy /api/* → servidor Dart API
+#
+# Variables de entorno:
+#   CADDY_HOST  — dominio o ":puerto" (por defecto :80)
+#
+# Ejemplos:
+#   CADDY_HOST=":80"                  → HTTP local sin TLS
+#   CADDY_HOST="catalogo.example.com" → HTTPS automático (Let's Encrypt)
+
+{$CADDY_HOST:80} {
+
+    # ── API proxy: /api/* → servicio Dart ────────────────────────────────────
+    handle /api/* {
+        reverse_proxy edfcatalogo-api:8080
+    }
+
+    # ── Health endpoint del propio Caddy ──────────────────────────────────────
+    handle /health {
+        respond "ok" 200
+    }
+
+    # ── Flutter Web SPA ───────────────────────────────────────────────────────
+    handle {
+        root * /srv
+
+        # Cabeceras de seguridad
+        header {
+            X-Content-Type-Options nosniff
+            X-Frame-Options SAMEORIGIN
+            Referrer-Policy strict-origin-when-cross-origin
+            -Server
+        }
+
+        # Caché inmutable para assets con hash
+        @hashed {
+            path_regexp \.[0-9a-f]{8,}\.(js|css|wasm|png|jpg|svg|ttf|woff2)$
+        }
+        header @hashed Cache-Control "public, max-age=31536000, immutable"
+
+        # Sin caché para HTML
+        @html {
+            path *.html
+            path /
+        }
+        header @html Cache-Control "no-cache, no-store, must-revalidate"
+
+        # SPA fallback
+        try_files {path} /index.html
+
+        file_server
+    }
+}

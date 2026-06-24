@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' if (dart.library.html) 'package:edfcatalogomultiplatform/utils/io_stub.dart';
 import 'package:path/path.dart' as path;
 import '../services/mongo_service.dart';
 // ignore: unused_import

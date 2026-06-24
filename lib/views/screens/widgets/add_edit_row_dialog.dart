@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart' as file_picker;
@@ -6,6 +6,7 @@ import '../../../models/catalog.dart';
 import '../../../models/file_type.dart' as app_file_type;
 import '../../../viewmodels/auth_viewmodel.dart';
 import '../../../services/s3_service.dart';
+import '../../../services/api_service.dart';
 import '../../../utils/validators.dart';
 import 'multiple_files_section.dart';
 
@@ -33,10 +34,10 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
   late RowFiles _files;
   bool _isSaving = false;
 
-  // Archivos seleccionados (listas para múltiples archivos)
-  List<File> _selectedImageFiles = [];
-  List<File> _selectedDocumentFiles = [];
-  List<File> _selectedMultimediaFiles = [];
+  // Archivos seleccionados como PlatformFile (funciona en web y nativo)
+  List<file_picker.PlatformFile> _selectedImageFiles = [];
+  List<file_picker.PlatformFile> _selectedDocumentFiles = [];
+  List<file_picker.PlatformFile> _selectedMultimediaFiles = [];
 
   // URLs existentes
   List<String> _imageUrls = [];
@@ -141,6 +142,59 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
     final authViewModel = context.read<AuthViewModel>();
     final userId = authViewModel.currentUser?.id ?? '';
 
+    // ── Helper: sube un PlatformFile según plataforma ────────────────────────
+    Future<String> uploadPlatformFile(
+      file_picker.PlatformFile pf,
+      app_file_type.FileType fileType,
+    ) async {
+      if (kIsWeb) {
+        // Web: sin path nativo, usar bytes + ApiService
+        final bytes = pf.bytes;
+        if (bytes == null) throw Exception('Archivo sin datos en web');
+        final folder = switch (fileType) {
+          app_file_type.FileType.image => 'images',
+          app_file_type.FileType.document => 'documents',
+          app_file_type.FileType.multimedia => 'multimedia',
+          _ => 'uploads',
+        };
+        // Inferir MIME type por extensión para que S3 lo almacene correctamente.
+        // Sin esto el servidor usa 'application/octet-stream' → Chrome descarga
+        // los PDFs en vez de abrirlos inline en el visor.
+        final ext = pf.name.split('.').last.toLowerCase();
+        const mimeByExt = {
+          'pdf': 'application/pdf',
+          'jpg': 'image/jpeg', 'jpeg': 'image/jpeg',
+          'png': 'image/png', 'gif': 'image/gif',
+          'webp': 'image/webp', 'heic': 'image/heic',
+          'mp4': 'video/mp4', 'mov': 'video/quicktime',
+          'webm': 'video/webm', 'avi': 'video/x-msvideo',
+          'mp3': 'audio/mpeg', 'wav': 'audio/wav',
+          'ogg': 'audio/ogg', 'aac': 'audio/aac',
+          'doc': 'application/msword',
+          'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'xls': 'application/vnd.ms-excel',
+          'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'txt': 'text/plain', 'md': 'text/markdown',
+          'rtf': 'application/rtf', 'csv': 'text/csv',
+        };
+        final contentType = mimeByExt[ext] ?? 'application/octet-stream';
+        return ApiService.instance.uploadBytes(
+          bytes: bytes,
+          fileName: pf.name,
+          folder: folder,
+          contentType: contentType,
+        );
+      } else {
+        // Nativo: path disponible, usar S3Service directo
+        return S3Service.shared.uploadFile(
+          filePath: pf.path!,
+          userId: userId,
+          catalogId: widget.catalog.id,
+          fileType: fileType,
+        );
+      }
+    }
+
     // Subir imágenes
     if (_selectedImageFiles.isNotEmpty) {
       setState(() {
@@ -148,21 +202,15 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
       });
       try {
         for (final file in _selectedImageFiles) {
-          final url = await S3Service.shared.uploadFile(
-            filePath: file.path,
-            userId: userId,
-            catalogId: widget.catalog.id,
-            fileType: app_file_type.FileType.image,
-          );
+          final url = await uploadPlatformFile(file, app_file_type.FileType.image);
           _imageUrls.add(url);
-          // Preservar título si existe para la ruta temporal
-          final tempPath = file.path;
-          if (_fileTitles.containsKey(tempPath)) {
-            final title = _fileTitles.remove(tempPath)!;
+          // Preservar título si existe para el identificador temporal
+          final tempKey = kIsWeb ? file.name : (file.path ?? file.name);
+          if (_fileTitles.containsKey(tempKey)) {
+            final title = _fileTitles.remove(tempKey)!;
             _fileTitles[url] = title;
-            // Transferir controlador
-            if (_titleControllers.containsKey(tempPath)) {
-              final controller = _titleControllers.remove(tempPath)!;
+            if (_titleControllers.containsKey(tempKey)) {
+              final controller = _titleControllers.remove(tempKey)!;
               controller.text = title;
               _titleControllers[url] = controller;
             } else {
@@ -188,21 +236,14 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
       });
       try {
         for (final file in _selectedDocumentFiles) {
-          final url = await S3Service.shared.uploadFile(
-            filePath: file.path,
-            userId: userId,
-            catalogId: widget.catalog.id,
-            fileType: app_file_type.FileType.document,
-          );
+          final url = await uploadPlatformFile(file, app_file_type.FileType.document);
           _documentUrls.add(url);
-          // Preservar título si existe para la ruta temporal
-          final tempPath = file.path;
-          if (_fileTitles.containsKey(tempPath)) {
-            final title = _fileTitles.remove(tempPath)!;
+          final tempKey = kIsWeb ? file.name : (file.path ?? file.name);
+          if (_fileTitles.containsKey(tempKey)) {
+            final title = _fileTitles.remove(tempKey)!;
             _fileTitles[url] = title;
-            // Transferir controlador
-            if (_titleControllers.containsKey(tempPath)) {
-              final controller = _titleControllers.remove(tempPath)!;
+            if (_titleControllers.containsKey(tempKey)) {
+              final controller = _titleControllers.remove(tempKey)!;
               controller.text = title;
               _titleControllers[url] = controller;
             } else {
@@ -223,26 +264,17 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
 
     // Subir multimedia
     if (_selectedMultimediaFiles.isNotEmpty) {
-      setState(() {
-        _isUploadingMultimedia = true;
-      });
+      setState(() => _isUploadingMultimedia = true);
       try {
         for (final file in _selectedMultimediaFiles) {
-          final url = await S3Service.shared.uploadFile(
-            filePath: file.path,
-            userId: userId,
-            catalogId: widget.catalog.id,
-            fileType: app_file_type.FileType.multimedia,
-          );
+          final url = await uploadPlatformFile(file, app_file_type.FileType.multimedia);
           _multimediaUrls.add(url);
-          // Preservar título si existe para la ruta temporal
-          final tempPath = file.path;
-          if (_fileTitles.containsKey(tempPath)) {
-            final title = _fileTitles.remove(tempPath)!;
+          final tempKey = kIsWeb ? file.name : (file.path ?? file.name);
+          if (_fileTitles.containsKey(tempKey)) {
+            final title = _fileTitles.remove(tempKey)!;
             _fileTitles[url] = title;
-            // Transferir controlador
-            if (_titleControllers.containsKey(tempPath)) {
-              final controller = _titleControllers.remove(tempPath)!;
+            if (_titleControllers.containsKey(tempKey)) {
+              final controller = _titleControllers.remove(tempKey)!;
               controller.text = title;
               _titleControllers[url] = controller;
             } else {
@@ -255,9 +287,7 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
       } catch (e) {
         _uploadError = 'Error subiendo multimedia: $e';
       } finally {
-        setState(() {
-          _isUploadingMultimedia = false;
-        });
+        setState(() => _isUploadingMultimedia = false);
       }
     }
 
@@ -333,6 +363,7 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
           type: file_picker.FileType.custom,
           allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'],
           allowMultiple: allowMultiple,
+          withData: true, // necesario en web para que bytes no sea null
         );
         break;
       case app_file_type.FileType.document:
@@ -352,6 +383,7 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
             'log',
           ],
           allowMultiple: allowMultiple,
+          withData: true,
         );
         break;
       case app_file_type.FileType.text:
@@ -368,27 +400,31 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
             'rtf',
           ],
           allowMultiple: allowMultiple,
+          withData: true,
         );
         break;
       case app_file_type.FileType.multimedia:
         result = await file_picker.FilePicker.platform.pickFiles(
           type: file_picker.FileType.media,
           allowMultiple: allowMultiple,
+          withData: true,
         );
         break;
       case app_file_type.FileType.other:
         result = await file_picker.FilePicker.platform.pickFiles(
           type: file_picker.FileType.any,
           allowMultiple: allowMultiple,
+          withData: true,
         );
         break;
     }
 
     if (result != null && result.files.isNotEmpty) {
       setState(() {
+        // En web: bytes disponible pero path es null. En nativo: path disponible.
+        // PlatformFile funciona en ambos sin necesitar dart:io File.
         final files = result!.files
-            .where((f) => f.path != null)
-            .map((f) => File(f.path!))
+            .where((f) => kIsWeb ? f.bytes != null : f.path != null)
             .toList();
 
         switch (fileType) {
@@ -579,7 +615,8 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
     switch (fileType) {
       case app_file_type.FileType.image:
         if (index < _selectedImageFiles.length) {
-          return _selectedImageFiles[index].path; // Temporal hasta subir
+          // En nativo: path local; en web: nombre del archivo (no hay path)
+          return _selectedImageFiles[index].path ?? _selectedImageFiles[index].name;
         } else {
           final urlIndex = index - _selectedImageFiles.length;
           if (urlIndex < _imageUrls.length) {
@@ -589,7 +626,7 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
         break;
       case app_file_type.FileType.document:
         if (index < _selectedDocumentFiles.length) {
-          return _selectedDocumentFiles[index].path; // Temporal hasta subir
+          return _selectedDocumentFiles[index].path ?? _selectedDocumentFiles[index].name;
         } else {
           final urlIndex = index - _selectedDocumentFiles.length;
           if (urlIndex < _documentUrls.length) {
@@ -599,7 +636,7 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
         break;
       case app_file_type.FileType.multimedia:
         if (index < _selectedMultimediaFiles.length) {
-          return _selectedMultimediaFiles[index].path; // Temporal hasta subir
+          return _selectedMultimediaFiles[index].path ?? _selectedMultimediaFiles[index].name;
         } else {
           final urlIndex = index - _selectedMultimediaFiles.length;
           if (urlIndex < _multimediaUrls.length) {

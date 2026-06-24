@@ -42,7 +42,13 @@ flutter clean
 flutter pub get
 
 # ── 2. Compilar release macOS ────────────────────────────────────────────────
-info "Compilando flutter build macos --release..."
+info "Compilando flutter build macos --release (firma ad-hoc)..."
+# Desactivar code signing de Xcode pasando las variables con prefijo FLUTTER_XCODE_.
+# El script aplica firma ad-hoc (codesign --sign -) en el paso 3.
+FLUTTER_XCODE_CODE_SIGNING_REQUIRED=NO \
+FLUTTER_XCODE_CODE_SIGNING_ALLOWED=NO \
+FLUTTER_XCODE_CODE_SIGN_IDENTITY="-" \
+FLUTTER_XCODE_DEVELOPMENT_TEAM="" \
 flutter build macos --release
 
 # Buscar el .app generado (puede tener el nombre del PRODUCT_NAME o el binario)
@@ -61,18 +67,59 @@ info "App encontrada: ${APP_PATH}"
 
 # ── 3. Firma ad-hoc ──────────────────────────────────────────────────────────
 info "Aplicando firma ad-hoc (uso local)..."
-codesign --deep --force --sign - "${APP_PATH}" 2>&1 || warning "codesign falló — continuando sin firma"
+# Nota: --deep falla en binarios grandes (Bus error).
+# Firmamos de dentro hacia fuera: dylibs → frameworks → binario principal → .app
+
+# 3a. Firmar dylibs sueltos dentro de Frameworks
+# Usamos -exec en lugar de | while read para evitar problemas con nombres
+# que contienen caracteres especiales (acentos, espacios) en encodings NFD/NFC.
+find "${APP_PATH}/Contents/Frameworks" -name "*.dylib" \
+  -exec codesign --force --sign - {} \; 2>&1 || true
+
+# 3b. Firmar cada .framework (el ejecutable dentro, luego el bundle)
+find "${APP_PATH}/Contents/Frameworks" -name "*.framework" -type d 2>/dev/null | while read -r fw; do
+  # Firmar el binario interno si existe
+  fw_bin="${fw}/$(basename "${fw%.framework}")"
+  [ -f "$fw_bin" ] && codesign --force --sign - "$fw_bin" 2>&1 || true
+  codesign --force --sign - "$fw" 2>&1 || true
+done
+
+# 3c. Firmar el binario principal de la app
+# Usamos -exec para que codesign reciba el path directamente del kernel,
+# evitando cualquier problema de encoding en la variable de shell.
+find "${APP_PATH}/Contents/MacOS" -type f \
+  -exec codesign --force --sign - {} \; 2>&1 \
+  || warning "No se pudo firmar algún binario en Contents/MacOS"
+
+# 3d. Firmar el bundle .app completo con entitlements para que el sandbox funcione
+ENTITLEMENTS_PATH="$(dirname "$0")/../macos/Runner/Release.entitlements"
+if [ -f "${ENTITLEMENTS_PATH}" ]; then
+  codesign --force --sign - --entitlements "${ENTITLEMENTS_PATH}" "${APP_PATH}" 2>&1 \
+    || warning "codesign falló — continuando sin firma"
+else
+  codesign --force --sign - "${APP_PATH}" 2>&1 \
+    || warning "codesign falló — continuando sin firma"
+fi
 
 # ── 4. Preparar directorio de distribución ───────────────────────────────────
 info "Preparando distribución en ${DIST_DIR}/..."
+# Desmontar cualquier volumen previo con el mismo nombre para evitar "Recurso ocupado"
+VOL_NAME="${APP_NAME} ${VERSION}"
+TMP_DMG="/tmp/tmp_${DMG_NAME}"
+hdiutil detach "/Volumes/${VOL_NAME}" 2>/dev/null || true
+# Dar tiempo al kernel para liberar el archivo de imagen antes de sobreescribirlo
+sleep 1
+# Eliminar TMP_DMG previo explícitamente (no confiar solo en -ov si el archivo estuvo montado)
+rm -f "${TMP_DMG}"
 rm -rf "${DIST_DIR}"
 mkdir -p "${DIST_DIR}"
 
 # ── 5. Crear DMG con hdiutil ─────────────────────────────────────────────────
 info "Creando DMG temporal..."
-TMP_DMG="${DIST_DIR}/tmp_${DMG_NAME}"
+# Usamos /tmp para el DMG temporal para evitar "Recurso ocupado" en discos externos
 FINAL_DMG="${DIST_DIR}/${DMG_NAME}"
 STAGING_DIR="$(mktemp -d)"
+TMP_DMG="/tmp/tmp_${DMG_NAME}"  # ya definida arriba; redefinir por si la sección se usa de forma aislada
 
 # Copiar .app al staging
 cp -R "${APP_PATH}" "${STAGING_DIR}/"

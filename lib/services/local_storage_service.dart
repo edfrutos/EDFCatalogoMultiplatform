@@ -1,6 +1,7 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path_provider/path_provider.dart';
-import 'dart:io';
+import 'dart:io' if (dart.library.html) 'package:edfcatalogomultiplatform/utils/io_stub.dart';
 import '../models/catalog.dart';
 import '../models/user.dart';
 
@@ -17,6 +18,8 @@ class LocalStorageService {
 
   Future<void> _ensureInitialized() async {
     if (_catalogsFile != null) return;
+    // En web no hay sistema de ficheros nativo — los datos vienen del servidor
+    if (kIsWeb) return;
 
     final directory = await getApplicationDocumentsDirectory();
     final appDir = Directory('${directory.path}/edfcatalogo');
@@ -31,6 +34,7 @@ class LocalStorageService {
 
   /// Guarda catálogos localmente
   Future<void> saveCatalogsLocally(List<Catalog> catalogs) async {
+    if (kIsWeb) return;
     await _ensureInitialized();
     try {
       final jsonList = catalogs.map((c) => c.toJson()).toList();
@@ -44,6 +48,7 @@ class LocalStorageService {
 
   /// Carga catálogos desde almacenamiento local
   Future<List<Catalog>> loadCatalogsLocally() async {
+    if (kIsWeb) return [];
     await _ensureInitialized();
     try {
       if (!await _catalogsFile!.exists()) {
@@ -61,6 +66,7 @@ class LocalStorageService {
 
   /// Guarda usuario localmente
   Future<void> saveUserLocally(User user) async {
+    if (kIsWeb) return;
     await _ensureInitialized();
     try {
       await _usersFile!.writeAsString(jsonEncode(user.toJson()));
@@ -72,6 +78,7 @@ class LocalStorageService {
 
   /// Carga usuario desde almacenamiento local
   Future<User?> loadUserLocally() async {
+    if (kIsWeb) return null;
     await _ensureInitialized();
     try {
       if (!await _usersFile!.exists()) {
@@ -89,6 +96,7 @@ class LocalStorageService {
 
   /// Agrega una operación a la cola de sincronización
   Future<void> addToSyncQueue(String operation, Map<String, dynamic> data) async {
+    if (kIsWeb) return;
     await _ensureInitialized();
     try {
       List<Map<String, dynamic>> queue = [];
@@ -113,6 +121,7 @@ class LocalStorageService {
 
   /// Obtiene la cola de sincronización
   Future<List<Map<String, dynamic>>> getSyncQueue() async {
+    if (kIsWeb) return [];
     await _ensureInitialized();
     try {
       if (!await _syncQueueFile!.exists()) {
@@ -129,6 +138,7 @@ class LocalStorageService {
 
   /// Limpia la cola de sincronización
   Future<void> clearSyncQueue() async {
+    if (kIsWeb) return;
     await _ensureInitialized();
     try {
       if (await _syncQueueFile!.exists()) {
@@ -142,6 +152,7 @@ class LocalStorageService {
 
   /// Limpia todos los datos locales
   Future<void> clearAllLocalData() async {
+    if (kIsWeb) return;
     await _ensureInitialized();
     try {
       if (await _catalogsFile!.exists()) {

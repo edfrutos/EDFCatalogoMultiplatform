@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'env_loader.dart';
 
@@ -69,7 +70,17 @@ class EnvConfig {
   }
 
   // Backend API (para Flutter Web)
-  static String get apiBaseUrl => getEnvVariable('API_BASE_URL');
+  static String get apiBaseUrl {
+    final url = getEnvVariable('API_BASE_URL');
+    if (url.isNotEmpty) return url;
+    // El servidor de desarrollo de Flutter bloquea dotfiles (.env → 404).
+    // Fallback: en web+debug, apuntar al API local; en producción web, lanzará
+    // un error claro en lugar de llamadas silenciosas a una URL vacía.
+    if (kIsWeb && kDebugMode) {
+      return 'http://localhost:8080';
+    }
+    return url;
+  }
   static bool get useApiBackend => apiBaseUrl.isNotEmpty;
 
   /// Validar que las variables críticas estén configuradas

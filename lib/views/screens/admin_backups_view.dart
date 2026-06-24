@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:io' if (dart.library.html) 'package:edfcatalogomultiplatform/utils/io_stub.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -51,6 +51,8 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
   }
 
   void _loadBackupsForTab(int tabIndex, BackupViewModel viewModel) {
+    // En web, Google Drive no está disponible — no cargar
+    if (kIsWeb) return;
     // Cargar backups según la pestaña seleccionada
     switch (tabIndex) {
       case 0: // Backups de Catálogos
@@ -227,64 +229,77 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
-                        // Botón crear backup de catálogos
-                        ElevatedButton.icon(
-                          onPressed: viewModel.isLoading
-                              ? null
-                              : () => _createBackup(
-                                  context,
-                                  viewModel,
-                                  BackupType.catalogs,
-                                ),
-                          icon: const Icon(Icons.add, size: 18),
-                          label: const Text('Catálogos'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
+                        // Backups Google Drive — solo en plataformas nativas
+                        if (!kIsWeb) ...[
+                          // Botón crear backup de catálogos
+                          ElevatedButton.icon(
+                            onPressed: viewModel.isLoading
+                                ? null
+                                : () => _createBackup(
+                                    context,
+                                    viewModel,
+                                    BackupType.catalogs,
+                                  ),
+                            icon: const Icon(Icons.add, size: 18),
+                            label: const Text('Catálogos'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        // Botón crear backup de usuarios
-                        ElevatedButton.icon(
-                          onPressed: viewModel.isLoading
-                              ? null
-                              : () => _createBackup(
-                                  context,
-                                  viewModel,
-                                  BackupType.users,
-                                ),
-                          icon: const Icon(Icons.add, size: 18),
-                          label: const Text('Usuarios'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
+                          const SizedBox(width: 8),
+                          // Botón crear backup de usuarios
+                          ElevatedButton.icon(
+                            onPressed: viewModel.isLoading
+                                ? null
+                                : () => _createBackup(
+                                    context,
+                                    viewModel,
+                                    BackupType.users,
+                                  ),
+                            icon: const Icon(Icons.add, size: 18),
+                            label: const Text('Usuarios'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        // Botón crear backup del proyecto
-                        ElevatedButton.icon(
-                          onPressed: viewModel.isLoading
-                              ? null
-                              : () => _createProjectBackup(context, viewModel),
-                          icon: const Icon(Icons.folder_copy, size: 18),
-                          label: const Text('Proyecto'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.orange,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
+                        ],
+                        if (kIsWeb)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 4),
+                            child: Text(
+                              'Los backups de Google Drive solo están disponibles en la app de escritorio.',
+                              style: TextStyle(color: Colors.grey, fontSize: 13),
                             ),
                           ),
-                        ),
+                        // Botón crear backup del proyecto — solo en plataformas nativas
+                        if (!kIsWeb) ...[
+                          const SizedBox(width: 8),
+                          ElevatedButton.icon(
+                            onPressed: viewModel.isLoading
+                                ? null
+                                : () => _createProjectBackup(context, viewModel),
+                            icon: const Icon(Icons.folder_copy, size: 18),
+                            label: const Text('Proyecto'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -384,6 +399,29 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
     List<BackupInfo> backups,
     BackupType type,
   ) {
+    // En web, Google Drive no disponible
+    if (kIsWeb) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.cloud_off, size: 64, color: Colors.grey.shade400),
+            const SizedBox(height: 16),
+            const Text(
+              'Backups disponibles solo en la app de escritorio',
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Descarga la app macOS para gestionar backups en Google Drive.',
+              style: TextStyle(fontSize: 13, color: Colors.grey),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
     if (viewModel.isLoading && backups.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -975,10 +1013,10 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
           try {
             final home = Platform.environment['HOME'] ?? '';
             final downloadsDir = Directory('$home/Downloads');
-            final targetDir = await downloadsDir.exists()
+            final dynamic targetDir = await downloadsDir.exists()
                 ? downloadsDir
                 : await getApplicationDocumentsDirectory();
-            savedPath = '${targetDir.path}/$fileName';
+            savedPath = '${(targetDir as dynamic).path}/$fileName';
             print('💾 Guardando backup JSON en: $savedPath');
             await File(savedPath).writeAsBytes(jsonBytes);
             print('✅ Backup JSON guardado correctamente');
@@ -1303,6 +1341,28 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
     BuildContext context,
     BackupViewModel viewModel,
   ) {
+    if (kIsWeb) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.cloud_off, size: 64, color: Colors.grey.shade400),
+            const SizedBox(height: 16),
+            const Text(
+              'Backups disponibles solo en la app de escritorio',
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Descarga la app macOS para gestionar backups en Google Drive.',
+              style: TextStyle(fontSize: 13, color: Colors.grey),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
     if (viewModel.isLoading && viewModel.projectBackups.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -1570,8 +1630,8 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
       try {
         final home = Platform.environment['HOME'] ?? '';
         final downloadsDir = Directory('$home/Downloads');
-        final targetDir = await downloadsDir.exists() ? downloadsDir : await getApplicationDocumentsDirectory();
-        finalPath = '${targetDir.path}/$fileName';
+        final dynamic targetDir = await downloadsDir.exists() ? downloadsDir : await getApplicationDocumentsDirectory();
+        finalPath = '${(targetDir as dynamic).path}/$fileName';
         print('💾 Guardando backup en: $finalPath (${zipBytes.length} bytes)');
         await File(finalPath).writeAsBytes(zipBytes);
         print('✅ Backup guardado correctamente');

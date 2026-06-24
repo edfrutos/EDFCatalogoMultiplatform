@@ -9,7 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:webview_flutter/webview_flutter.dart' as fv;
 import 'package:file_picker/file_picker.dart' as file_picker;
 import 'dart:convert' show utf8, latin1;
-import 'dart:io';
+import 'dart:io' if (dart.library.html) 'package:edfcatalogomultiplatform/utils/io_stub.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:media_kit/media_kit.dart';
@@ -17,6 +17,8 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart' as yt;
 import '../../../models/file_type.dart';
 import '../../../services/s3_service.dart';
+import '../../../utils/web_pdf_view_stub.dart'
+    if (dart.library.html) '../../../utils/web_pdf_view.dart';
 
 /// Visualizador completo de archivos con soporte para PDF, video, audio e imágenes
 class FileViewerView extends StatefulWidget {
@@ -1902,6 +1904,11 @@ class _EmbeddedPdfViewerState extends State<_EmbeddedPdfViewer> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
+    // En web: iframe nativo del browser (sin CORS). En nativo: Syncfusion.
+    if (kIsWeb) {
+      return WebPdfView(key: ValueKey(widget.url), url: widget.url);
+    }
 
     return Column(
       children: [

@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' if (dart.library.html) 'package:edfcatalogomultiplatform/utils/io_stub.dart';
 import 'package:flutter/foundation.dart';
 import 'package:mongo_dart/mongo_dart.dart' as mongo;
 import 'package:path/path.dart' as path;
@@ -178,6 +178,11 @@ class BackupViewModel extends ChangeNotifier {
   /// Crear backup de catálogos (Google Drive)
   Future<void> createCatalogBackup() async {
     if (_isDisposed) return;
+    if (kIsWeb) {
+      _errorMessage = 'El backup a Google Drive no está disponible en la versión web.';
+      notifyListeners();
+      return;
+    }
     _isLoading = true;
     _errorMessage = null;
     _successMessage = null;
@@ -245,6 +250,11 @@ class BackupViewModel extends ChangeNotifier {
   /// Crear backup de usuarios (Google Drive)
   Future<void> createUserBackup() async {
     if (_isDisposed) return;
+    if (kIsWeb) {
+      _errorMessage = 'El backup a Google Drive no está disponible en la versión web.';
+      notifyListeners();
+      return;
+    }
     _isLoading = true;
     _errorMessage = null;
     _successMessage = null;
@@ -319,6 +329,12 @@ class BackupViewModel extends ChangeNotifier {
     bool uploadToGoogleDrive = true,
   }) async {
     if (_isDisposed) return;
+    // El backup del proyecto accede al sistema de ficheros local — no disponible en web
+    if (kIsWeb) {
+      _errorMessage = 'El backup del proyecto no está disponible en la versión web.';
+      notifyListeners();
+      return;
+    }
     _isLoading = true;
     _errorMessage = null;
     _successMessage = null;

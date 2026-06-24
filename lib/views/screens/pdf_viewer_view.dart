@@ -2,6 +2,9 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
+import '../../services/s3_service.dart';
+import '../../utils/web_pdf_view_stub.dart'
+    if (dart.library.html) '../../utils/web_pdf_view.dart';
 
 /// Visor de PDF completo con navegación, zoom y compartir.
 ///
@@ -31,10 +34,34 @@ class _PdfViewerViewState extends State<PdfViewerView> {
   double _zoomLevel = 1.0;
   bool _isLoading = true;
   String? _errorMessage;
+  // URL efectiva: presignada en web (S3 privado), original en nativo
+  String? _effectiveUrl;
 
   static const double _zoomStep = 0.25;
   static const double _zoomMin = 0.5;
   static const double _zoomMax = 3.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolveUrl();
+  }
+
+  Future<void> _resolveUrl() async {
+    // En web, los PDFs en S3 privado necesitan URL presignada
+    final needsPresign = widget.url.contains('amazonaws.com') &&
+        !widget.url.contains('X-Amz-Signature');
+    if (needsPresign) {
+      try {
+        final signed = await S3Service().getPresignedUrl(key: widget.url);
+        if (mounted) setState(() => _effectiveUrl = signed.toString());
+      } catch (e) {
+        if (mounted) setState(() => _effectiveUrl = widget.url);
+      }
+    } else {
+      setState(() => _effectiveUrl = widget.url);
+    }
+  }
 
   @override
   void dispose() {
@@ -134,42 +161,52 @@ class _PdfViewerViewState extends State<PdfViewerView> {
           Expanded(
             child: _errorMessage != null
                 ? _buildError()
-                : Stack(
-                    children: [
-                      SfPdfViewer.network(
-                        widget.url,
-                        controller: _controller,
-                        enableDoubleTapZooming: true,
-                        enableTextSelection: true,
-                        canShowScrollHead: true,
-                        canShowScrollStatus: true,
-                        onDocumentLoaded: (details) {
-                          setState(() {
-                            _totalPages = details.document.pages.count;
-                            _isLoading = false;
-                          });
-                        },
-                        onDocumentLoadFailed: (details) {
-                          setState(() {
-                            _errorMessage = details.description;
-                            _isLoading = false;
-                          });
-                        },
-                        onPageChanged: (details) {
-                          setState(() => _currentPage = details.newPageNumber);
-                        },
-                        onZoomLevelChanged: (details) {
-                          setState(() => _zoomLevel = details.newZoomLevel);
-                        },
-                      ),
-                      if (_isLoading)
-                        const Center(child: CircularProgressIndicator()),
-                    ],
-                  ),
+                : _effectiveUrl == null
+                    ? const Center(child: CircularProgressIndicator())
+                    // En web: iframe nativo (sin CORS). En nativo: Syncfusion.
+                    : kIsWeb
+                        ? WebPdfView(
+                            key: ValueKey(_effectiveUrl),
+                            url: _effectiveUrl!,
+                          )
+                        : Stack(
+                            children: [
+                              SfPdfViewer.network(
+                                _effectiveUrl!,
+                                controller: _controller,
+                                enableDoubleTapZooming: true,
+                                enableTextSelection: true,
+                                canShowScrollHead: true,
+                                canShowScrollStatus: true,
+                                onDocumentLoaded: (details) {
+                                  setState(() {
+                                    _totalPages = details.document.pages.count;
+                                    _isLoading = false;
+                                  });
+                                },
+                                onDocumentLoadFailed: (details) {
+                                  setState(() {
+                                    _errorMessage = details.description;
+                                    _isLoading = false;
+                                  });
+                                },
+                                onPageChanged: (details) {
+                                  setState(() =>
+                                      _currentPage = details.newPageNumber);
+                                },
+                                onZoomLevelChanged: (details) {
+                                  setState(() => _zoomLevel = details.newZoomLevel);
+                                },
+                              ),
+                              if (_isLoading)
+                                const Center(child: CircularProgressIndicator()),
+                            ],
+                          ),
           ),
 
-          // ── Barra de controles ───────────────────────────────────────────
-          if (!_isLoading && _errorMessage == null) _buildControlBar(theme),
+          // ── Barra de controles (solo nativo) ────────────────────────────
+          if (!kIsWeb && !_isLoading && _errorMessage == null)
+            _buildControlBar(theme),
         ],
       ),
     );

@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart' as file_picker;
 import 'package:cached_network_image/cached_network_image.dart';
-import 'dart:io';
+import 'dart:io' if (dart.library.html) 'package:edfcatalogomultiplatform/utils/io_stub.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../models/user.dart';
 import '../../viewmodels/admin_viewmodel.dart';
 import '../../services/s3_service.dart';
+import '../../services/api_service.dart';
 import '../../models/file_type.dart';
 import 'admin_user_catalogs_view.dart';
 
@@ -33,8 +34,8 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
   late bool _isActive;
   bool _isEditing = false;
 
-  // Foto de perfil
-  File? _selectedImageFile;
+  // Foto de perfil (PlatformFile funciona en web y nativo)
+  file_picker.PlatformFile? _selectedPlatformFile;
   bool _isUploadingImage = false;
   bool _shouldRemoveImage = false;
 
@@ -105,7 +106,7 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
         _occupationController.text != (widget.user.occupation ?? '') ||
         _isAdmin != widget.user.isAdmin ||
         _isActive != (widget.user.isActive ?? true) ||
-        _selectedImageFile != null ||
+        _selectedPlatformFile != null ||
         _shouldRemoveImage;
   }
 
@@ -122,29 +123,33 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
     String? profileImageUrl = widget.user.profileImageUrl;
 
     // Si se debe eliminar la imagen, establecer como null
-    if (_shouldRemoveImage && _selectedImageFile == null) {
+    if (_shouldRemoveImage && _selectedPlatformFile == null) {
       profileImageUrl = null;
     }
     // Subir imagen si hay una nueva seleccionada
-    else if (_selectedImageFile != null) {
-      setState(() {
-        _isUploadingImage = true;
-      });
+    else if (_selectedPlatformFile != null) {
+      setState(() => _isUploadingImage = true);
 
       try {
-        final s3Service = S3Service();
-        profileImageUrl = await s3Service.uploadFile(
-          filePath: _selectedImageFile!.path,
-          userId: widget.user.id,
-          catalogId: 'profile',
-          fileType: FileType.image,
-        );
-
+        final pf = _selectedPlatformFile!;
+        if (kIsWeb) {
+          profileImageUrl = await ApiService.instance.uploadBytes(
+            bytes: pf.bytes!,
+            fileName: pf.name,
+            folder: 'users/${widget.user.id}/catalogs/profile/image',
+            contentType: 'image/${pf.extension ?? 'jpeg'}',
+          );
+        } else {
+          profileImageUrl = await S3Service().uploadFile(
+            filePath: pf.path!,
+            userId: widget.user.id,
+            catalogId: 'profile',
+            fileType: FileType.image,
+          );
+        }
         print('✅ Imagen de perfil subida: $profileImageUrl');
       } catch (e) {
-        setState(() {
-          _isUploadingImage = false;
-        });
+        setState(() => _isUploadingImage = false);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -156,9 +161,7 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
         return;
       }
 
-      setState(() {
-        _isUploadingImage = false;
-      });
+      setState(() => _isUploadingImage = false);
     }
 
     final updatedUser = User(
@@ -195,7 +198,7 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
 
     // Limpiar archivo seleccionado y flags después de guardar
     setState(() {
-      _selectedImageFile = null;
+      _selectedPlatformFile = null;
       _shouldRemoveImage = false;
       _isEditing = false;
     });
@@ -211,17 +214,18 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
             type: file_picker.FileType.custom,
             allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'],
             allowMultiple: false,
-            withData: false,
-            withReadStream: false,
+            withData: true,
           );
 
-      if (result != null && result.files.single.path != null) {
-        final filePath = result.files.single.path!;
-        setState(() {
-          _selectedImageFile = File(filePath);
-          _shouldRemoveImage = false;
-        });
-        print('✅ Imagen seleccionada: $filePath');
+      if (result != null && result.files.isNotEmpty) {
+        final pf = result.files.single;
+        if (kIsWeb ? pf.bytes != null : pf.path != null) {
+          setState(() {
+            _selectedPlatformFile = pf;
+            _shouldRemoveImage = false;
+          });
+          print('✅ Imagen seleccionada: ${pf.name}');
+        }
       } else {
         print('⚠️ No se seleccionó ninguna imagen');
       }
@@ -247,7 +251,7 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
   /// Eliminar foto de perfil
   void _removeProfileImage() {
     setState(() {
-      _selectedImageFile = null;
+      _selectedPlatformFile = null;
       _shouldRemoveImage = true;
       _presignedImageUrl = null;
     });
@@ -277,7 +281,7 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
                 _initializeControllers();
                 setState(() {
                   _isEditing = false;
-                  _selectedImageFile = null;
+                  _selectedPlatformFile = null;
                   _shouldRemoveImage = false;
                 });
               },
@@ -309,12 +313,15 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
                       CircleAvatar(
                         radius: 50,
                         backgroundColor: Colors.blue.shade100,
-                        backgroundImage: _selectedImageFile != null
-                            ? FileImage(_selectedImageFile!) as ImageProvider
+                        backgroundImage: _selectedPlatformFile != null
+                            ? (kIsWeb
+                                ? MemoryImage(_selectedPlatformFile!.bytes!)
+                                : FileImage(File(_selectedPlatformFile!.path!) as dynamic))
+                                  as ImageProvider
                             : (_presignedImageUrl != null && !_shouldRemoveImage)
                             ? CachedNetworkImageProvider(_presignedImageUrl!)
                             : null,
-                        child: _selectedImageFile == null &&
+                        child: _selectedPlatformFile == null &&
                                 (_presignedImageUrl == null || _shouldRemoveImage)
                             ? Text(
                                 widget.user.name.isNotEmpty
@@ -372,7 +379,7 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
                             ),
                           ),
                         ),
-                        if ((_selectedImageFile != null ||
+                        if ((_selectedPlatformFile != null ||
                                 widget.user.profileImageUrl != null) &&
                             !_isUploadingImage) ...[
                           const SizedBox(width: 12),

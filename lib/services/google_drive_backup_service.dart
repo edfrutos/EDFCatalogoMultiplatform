@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' if (dart.library.html) 'package:edfcatalogomultiplatform/utils/io_stub.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:googleapis_auth/googleapis_auth.dart' as auth;
 import 'package:http/http.dart' as http;
@@ -38,6 +38,11 @@ class GoogleDriveBackupService {
   /// Si hay un token guardado, lo reutilizará
   Future<void> initialize({Function(String)? onAuthUrl}) async {
     if (_isInitialized) return;
+    // Google Drive OAuth usa HttpServer local — no funciona en web
+    if (kIsWeb) {
+      print('ℹ️  Google Drive backup no está disponible en web');
+      return;
+    }
 
     try {
       final clientId = EnvConfig.googleClientId;

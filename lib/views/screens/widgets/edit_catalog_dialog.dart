@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart' as file_picker;
-import 'dart:io';
+import 'dart:io' if (dart.library.html) 'package:edfcatalogomultiplatform/utils/io_stub.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import '../../../models/catalog.dart';
 import '../../../viewmodels/auth_viewmodel.dart';
 import '../../../services/s3_service.dart';
+import '../../../services/api_service.dart';
 import '../../../models/file_type.dart';
 
 class EditCatalogDialog extends StatefulWidget {
@@ -35,8 +36,8 @@ class _EditCatalogDialogState extends State<EditCatalogDialog> {
   late final TextEditingController _columnsController;
   final _formKey = GlobalKey<FormState>();
 
-  // Foto de perfil del catálogo
-  File? _selectedImageFile;
+  // Foto de perfil del catálogo (PlatformFile funciona en web y nativo)
+  file_picker.PlatformFile? _selectedPlatformFile;
   bool _isUploadingImage = false;
   bool _shouldRemoveImage = false;
 
@@ -102,32 +103,38 @@ class _EditCatalogDialogState extends State<EditCatalogDialog> {
     String? thumbnailUrl = widget.catalog.thumbnailUrl;
 
     // Si se debe eliminar la imagen, establecer como null
-    if (_shouldRemoveImage && _selectedImageFile == null) {
+    if (_shouldRemoveImage && _selectedPlatformFile == null) {
       thumbnailUrl = null;
     }
     // Subir imagen si hay una nueva seleccionada
-    else if (_selectedImageFile != null) {
-      setState(() {
-        _isUploadingImage = true;
-      });
+    else if (_selectedPlatformFile != null) {
+      setState(() => _isUploadingImage = true);
 
       try {
         final authViewModel = context.read<AuthViewModel>();
         final userId = authViewModel.currentUser?.id ?? widget.catalog.userId;
+        final pf = _selectedPlatformFile!;
 
-        final s3Service = S3Service();
-        thumbnailUrl = await s3Service.uploadFile(
-          filePath: _selectedImageFile!.path,
-          userId: userId,
-          catalogId: widget.catalog.id,
-          fileType: FileType.image,
-        );
+        if (kIsWeb) {
+          // Web: subir bytes directamente
+          thumbnailUrl = await ApiService.instance.uploadBytes(
+            bytes: pf.bytes!,
+            fileName: pf.name,
+            folder: 'users/$userId/catalogs/${widget.catalog.id}/image',
+            contentType: 'image/${pf.extension ?? 'jpeg'}',
+          );
+        } else {
+          thumbnailUrl = await S3Service().uploadFile(
+            filePath: pf.path!,
+            userId: userId,
+            catalogId: widget.catalog.id,
+            fileType: FileType.image,
+          );
+        }
 
         print('✅ Imagen del catálogo subida: $thumbnailUrl');
       } catch (e) {
-        setState(() {
-          _isUploadingImage = false;
-        });
+        setState(() => _isUploadingImage = false);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -139,9 +146,7 @@ class _EditCatalogDialogState extends State<EditCatalogDialog> {
         return;
       }
 
-      setState(() {
-        _isUploadingImage = false;
-      });
+      setState(() => _isUploadingImage = false);
     }
 
     widget.onSave(
@@ -169,17 +174,18 @@ class _EditCatalogDialogState extends State<EditCatalogDialog> {
             type: file_picker.FileType.custom,
             allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'],
             allowMultiple: false,
-            withData: false,
-            withReadStream: false,
+            withData: true, // necesario en web para obtener bytes
           );
 
-      if (result != null && result.files.single.path != null) {
-        final filePath = result.files.single.path!;
-        setState(() {
-          _selectedImageFile = File(filePath);
-          _shouldRemoveImage = false;
-        });
-        print('✅ Imagen seleccionada: $filePath');
+      if (result != null && result.files.isNotEmpty) {
+        final pf = result.files.single;
+        if (kIsWeb ? pf.bytes != null : pf.path != null) {
+          setState(() {
+            _selectedPlatformFile = pf;
+            _shouldRemoveImage = false;
+          });
+          print('✅ Imagen seleccionada: ${pf.name}');
+        }
       } else {
         print('⚠️ No se seleccionó ninguna imagen');
       }
@@ -205,7 +211,7 @@ class _EditCatalogDialogState extends State<EditCatalogDialog> {
   /// Eliminar imagen
   void _removeImage() {
     setState(() {
-      _selectedImageFile = null;
+      _selectedPlatformFile = null;
       _shouldRemoveImage = true;
     });
   }
@@ -241,11 +247,16 @@ class _EditCatalogDialogState extends State<EditCatalogDialog> {
                             ),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(8),
-                              child: _selectedImageFile != null
-                                  ? Image.file(
-                                      _selectedImageFile!,
-                                      fit: BoxFit.cover,
-                                    )
+                              child: _selectedPlatformFile != null
+                                  ? (kIsWeb
+                                      ? Image.memory(
+                                          _selectedPlatformFile!.bytes!,
+                                          fit: BoxFit.cover,
+                                        )
+                                      : Image.file(
+                                          File(_selectedPlatformFile!.path!) as dynamic,
+                                          fit: BoxFit.cover,
+                                        ))
                                   : _presignedThumbnailUrl != null &&
                                         !_shouldRemoveImage
                                   ? CachedNetworkImage(
@@ -325,7 +336,7 @@ class _EditCatalogDialogState extends State<EditCatalogDialog> {
                               ),
                             ),
                           ),
-                          if ((_selectedImageFile != null ||
+                          if ((_selectedPlatformFile != null ||
                                   widget.catalog.thumbnailUrl != null) &&
                               !_isUploadingImage) ...[
                             const SizedBox(width: 8),

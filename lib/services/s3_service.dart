@@ -1,11 +1,17 @@
-import 'dart:io';
+// ignore_for_file: avoid_print
 import 'dart:convert';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
 import 'package:uuid/uuid.dart';
 import '../utils/env_config.dart';
 import '../models/file_type.dart';
+import 'api_service.dart';
+
+// dart:io solo disponible en plataformas nativas (File, Directory, Platform)
+import 'dart:io' if (dart.library.html) 'package:edfcatalogomultiplatform/utils/io_stub.dart';
 
 /// Entrada interna de caché para URLs pre-firmadas de S3.
 /// Las URLs expiran en 3600s por defecto; cacheamos con 300s de margen.
@@ -74,6 +80,13 @@ class S3Service {
     required String catalogId,
     required FileType fileType,
   }) async {
+    // En web no hay sistema de archivos nativo; usar uploadBytes vía ApiService
+    if (kIsWeb) {
+      throw UnsupportedError(
+        'uploadFile no está disponible en web. '
+        'Usa ApiService.instance.uploadBytes() con Uint8List del file picker.',
+      );
+    }
     // Limpiar el userId antes de usarlo
     final cleanUserId = _cleanUserId(userId);
     if (cleanUserId != userId) {
@@ -223,6 +236,11 @@ class S3Service {
     required String key,
     int expirationInSeconds = 3600,
   }) async {
+    // En web, delegar al servidor API (evita dart:io y CORS)
+    // Normalizar la key ANTES de enviar: si llega una URL completa la convertimos
+    // en key relativa (users/xxx/...) para que el servidor no la duplique.
+    if (kIsWeb) return ApiService.instance.getPresignedUrl(_normalizeKey(key));
+
     final normalizedKey = _normalizeKey(key);
 
     // ── Revisar caché en memoria ──────────────────────────────────────────────
@@ -384,15 +402,19 @@ class S3Service {
 
   /// Normaliza una key de S3
   String _normalizeKey(String key) {
-    // Strip full HTTPS URL prefix
-    final httpsPrefix = 'https://$_bucketName.s3.$_region.amazonaws.com/';
-    if (key.startsWith(httpsPrefix)) {
-      return key.substring(httpsPrefix.length);
+    // Si ya es una key limpia (sin protocolo) devolverla tal cual
+    if (!key.contains('://')) {
+      return key.startsWith('/') ? key.substring(1) : key;
     }
-    // Strip S3 URI prefix
-    return key
-        .replaceFirst('s3://$_bucketName/', '')
-        .replaceFirst('/$_bucketName/', '');
+    // URL completa (https://bucket.s3.region.amazonaws.com/KEY o s3://bucket/KEY)
+    // Parsear con Uri para extraer solo el path — no depende del bucket name
+    // ni de que .env esté cargado (seguro en web).
+    final uri = Uri.tryParse(key);
+    if (uri != null && uri.path.isNotEmpty) {
+      final path = uri.path.startsWith('/') ? uri.path.substring(1) : uri.path;
+      return path;
+    }
+    return key;
   }
 
   /// Valida el tamaño del archivo según su tipo

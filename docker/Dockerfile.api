@@ -1,0 +1,34 @@
+# ── Etapa 1: compilar el servidor Dart ───────────────────────────────────────
+FROM dart:stable AS builder
+
+WORKDIR /app
+
+# Copiar manifiesto e instalar dependencias
+COPY api/pubspec.yaml api/pubspec.lock* ./
+RUN dart pub get
+
+# Copiar código fuente
+COPY api/ .
+
+# Compilar a binario nativo (AOT)
+RUN dart compile exe bin/server.dart -o bin/server
+
+# ── Etapa 2: imagen mínima de producción ─────────────────────────────────────
+FROM debian:bookworm-slim
+
+# Certificados CA para conexiones TLS (MongoDB Atlas + AWS S3)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Runtime de Dart (necesario aunque sea AOT)
+COPY --from=builder /runtime/ /
+
+# Binario compilado
+COPY --from=builder /app/bin/server /app/bin/server
+
+EXPOSE 8080
+
+CMD ["/app/bin/server"]

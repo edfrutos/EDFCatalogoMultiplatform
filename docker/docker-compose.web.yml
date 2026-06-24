@@ -1,4 +1,8 @@
-# docker-compose.web.yml — Despliegue de producción Flutter Web
+# docker-compose.web.yml — Despliegue de producción Flutter Web + API Dart
+#
+# Servicios:
+#   api  — Servidor Dart/Shelf → MongoDB Atlas + AWS S3 (puerto interno 8080)
+#   web  — Flutter Web servido por Caddy (proxea /api/* → api)
 #
 # Uso rápido (HTTP local en puerto 8080):
 #   docker compose -f docker/docker-compose.web.yml up -d
@@ -7,11 +11,40 @@
 #   CADDY_HOST=catalogo.example.com \
 #   docker compose -f docker/docker-compose.web.yml up -d
 #
-# Prerequisito: tener el archivo .env en la raíz del proyecto.
-# El build lo inyecta como secreto BuildKit; las credenciales NO
-# quedan grabadas en las capas de la imagen.
+# Requisitos:
+#   - Archivo .env en la raíz del proyecto con MONGO_URI, MONGO_DB,
+#     AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, API_JWT_SECRET
+#   - API_BASE_URL en .env apuntando al host externo, ej:
+#       API_BASE_URL=https://catalogo.example.com/api
+#       (en local: API_BASE_URL=http://localhost:8080/api)
 
 services:
+
+  # ── Servidor API Dart/Shelf ─────────────────────────────────────────────────
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    image: edfcatalogo-api:latest
+    container_name: edfcatalogo-api
+    restart: unless-stopped
+    # Lee todas las variables del .env directamente como env vars del proceso
+    env_file:
+      - ../.env
+    environment:
+      API_PORT: "8080"
+      # Permitir únicamente peticiones desde el servicio web (mismo stack)
+      API_CORS_ORIGIN: "${API_CORS_ORIGIN:-*}"
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ── Flutter Web con Caddy (sirve estáticos + proxea /api/*) ─────────────────
   web:
     build:
       context: ..
@@ -22,15 +55,19 @@ services:
     image: edfcatalogo-web:latest
     container_name: edfcatalogo-web
     restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
     ports:
       - "${WEB_PORT:-8080}:80"
     environment:
-      # Si se usa dominio real con HTTPS, cambiar a "catalogo.example.com"
       CADDY_HOST: "${CADDY_HOST:-:80}"
     volumes:
-      # Volumen persistente para certificados TLS de Caddy (necesario con HTTPS)
+      - ./Caddyfile.web:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+    networks:
+      - internal
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost/"]
       interval: 30s
@@ -41,6 +78,10 @@ services:
 secrets:
   env_file:
     file: ../.env
+
+networks:
+  internal:
+    driver: bridge
 
 volumes:
   caddy_data:

@@ -1,10 +1,13 @@
-import 'dart:io';
+import 'dart:io' if (dart.library.html) 'package:edfcatalogomultiplatform/utils/io_stub.dart';
 import 'package:csv/csv.dart';
 import 'package:excel/excel.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import '../models/catalog.dart';
+import '../utils/web_download_stub.dart'
+    if (dart.library.html) '../utils/web_download.dart';
 
 /// Servicio para exportar catálogos a diferentes formatos
 class ExportService {
@@ -169,46 +172,38 @@ class ExportService {
     );
   }
 
-  /// Exporta un catálogo como CSV y permite seleccionar el directorio de destino
-  /// Retorna la ruta del archivo exportado, o null si se canceló
+  /// Genera el contenido CSV de un catálogo como String.
+  String _buildCsvString(Catalog catalog) {
+    final List<List<dynamic>> rows = [];
+    rows.add(List<String>.from(catalog.columns));
+    for (final row in catalog.rows) {
+      rows.add(catalog.columns.map((c) => row.data[c] ?? '').toList());
+    }
+    return const ListToCsvConverter().convert(rows);
+  }
+
+  /// Exporta un catálogo como CSV.
+  /// En web: descarga directa en el browser.
+  /// En nativo: diálogo para seleccionar directorio.
+  /// Retorna la ruta/nombre del archivo, o null si se canceló.
   Future<String?> exportAndSaveCsv(Catalog catalog) async {
+    final fileName =
+        '${_sanitizeFileName(catalog.name)}_${DateTime.now().millisecondsSinceEpoch}.csv';
     try {
-      // Abrir diálogo para seleccionar directorio
-      String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
-
-      if (selectedDirectory == null) {
-        // Usuario canceló la selección
-        return null;
+      if (kIsWeb) {
+        final csvString = _buildCsvString(catalog);
+        WebDownload.downloadString(csvString, fileName, 'text/csv;charset=utf-8');
+        return fileName; // no hay path real, devolvemos el nombre
       }
 
-      // Generar el nombre del archivo
-      final fileName =
-          '${_sanitizeFileName(catalog.name)}_${DateTime.now().millisecondsSinceEpoch}.csv';
+      // Nativo: seleccionar directorio
+      final selectedDirectory = await FilePicker.platform.getDirectoryPath();
+      if (selectedDirectory == null) return null;
+
       final targetPath = '$selectedDirectory/$fileName';
-
-      // Crear el contenido CSV
-      final List<List<dynamic>> rows = [];
-
-      // Encabezado
-      final header = List<String>.from(catalog.columns);
-      rows.add(header);
-
-      // Filas de datos
-      for (final row in catalog.rows) {
-        final rowData = <String>[];
-        for (final column in catalog.columns) {
-          rowData.add(row.data[column] ?? '');
-        }
-        rows.add(rowData);
-      }
-
-      // Convertir a CSV
-      final csvString = const ListToCsvConverter().convert(rows);
-
-      // Guardar archivo en el directorio seleccionado
+      final csvString = _buildCsvString(catalog);
       final file = File(targetPath);
       await file.writeAsString(csvString);
-
       return targetPath;
     } catch (e) {
       throw Exception('Error al exportar CSV: $e');
@@ -217,68 +212,65 @@ class ExportService {
 
   /// Exporta un catálogo como Excel y permite seleccionar el directorio de destino
   /// Retorna la ruta del archivo exportado, o null si se canceló
-  Future<String?> exportAndSaveExcel(Catalog catalog) async {
-    try {
-      // Abrir diálogo para seleccionar directorio
-      String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
-
-      if (selectedDirectory == null) {
-        // Usuario canceló la selección
-        return null;
-      }
-
-      // Generar el nombre del archivo
-      final fileName =
-          '${_sanitizeFileName(catalog.name)}_${DateTime.now().millisecondsSinceEpoch}.xlsx';
-      final targetPath = '$selectedDirectory/$fileName';
-
-      // Crear el archivo Excel
-      final excel = Excel.createExcel();
-      excel.delete('Sheet1'); // Eliminar hoja por defecto
-      final sheetName = _sanitizeSheetName(catalog.name);
-      final sheet = excel[sheetName];
-
-      // Encabezado
-      for (int i = 0; i < catalog.columns.length; i++) {
+  /// Construye un objeto Excel para un catálogo (reutilizable web+nativo).
+  Excel _buildExcel(Catalog catalog) {
+    final excel = Excel.createExcel();
+    excel.delete('Sheet1');
+    final sheetName = _sanitizeSheetName(catalog.name);
+    final sheet = excel[sheetName];
+    for (int i = 0; i < catalog.columns.length; i++) {
+      final cell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0));
+      cell.value = TextCellValue(catalog.columns[i]);
+      cell.cellStyle = CellStyle(
+        bold: true,
+        backgroundColorHex: ExcelColor.fromHexString('#E8E8E8'),
+        horizontalAlign: HorizontalAlign.Center,
+      );
+    }
+    for (int rowIndex = 0; rowIndex < catalog.rows.length; rowIndex++) {
+      final row = catalog.rows[rowIndex];
+      for (int colIndex = 0; colIndex < catalog.columns.length; colIndex++) {
+        final column = catalog.columns[colIndex];
         final cell = sheet.cell(
-          CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0),
-        );
-        cell.value = TextCellValue(catalog.columns[i]);
-        // Estilo para encabezado
-        cell.cellStyle = CellStyle(
-          bold: true,
-          backgroundColorHex: ExcelColor.fromHexString('#E8E8E8'),
-          horizontalAlign: HorizontalAlign.Center,
-        );
+            CellIndex.indexByColumnRow(columnIndex: colIndex, rowIndex: rowIndex + 1));
+        cell.value = TextCellValue(row.data[column] ?? '');
       }
+    }
+    for (int i = 0; i < catalog.columns.length; i++) {
+      sheet.setColumnWidth(i, 20.0);
+    }
+    return excel;
+  }
 
-      // Filas de datos
-      for (int rowIndex = 0; rowIndex < catalog.rows.length; rowIndex++) {
-        final row = catalog.rows[rowIndex];
-        for (int colIndex = 0; colIndex < catalog.columns.length; colIndex++) {
-          final column = catalog.columns[colIndex];
-          final cell = sheet.cell(
-            CellIndex.indexByColumnRow(
-              columnIndex: colIndex,
-              rowIndex: rowIndex + 1,
-            ),
-          );
-          cell.value = TextCellValue(row.data[column] ?? '');
+  /// Exporta un catálogo como Excel (.xlsx).
+  /// En web: descarga directa en el browser.
+  /// En nativo: diálogo para seleccionar directorio.
+  Future<String?> exportAndSaveExcel(Catalog catalog) async {
+    const mimeXlsx =
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    final fileName =
+        '${_sanitizeFileName(catalog.name)}_${DateTime.now().millisecondsSinceEpoch}.xlsx';
+    try {
+      if (kIsWeb) {
+        final excel = _buildExcel(catalog);
+        final bytes = excel.save();
+        if (bytes != null) {
+          WebDownload.downloadBytes(bytes, fileName, mimeXlsx);
         }
+        return fileName;
       }
 
-      // Ajustar ancho de columnas
-      for (int i = 0; i < catalog.columns.length; i++) {
-        sheet.setColumnWidth(i, 20.0);
-      }
+      // Nativo: seleccionar directorio
+      final selectedDirectory = await FilePicker.platform.getDirectoryPath();
+      if (selectedDirectory == null) return null;
 
-      // Guardar archivo en el directorio seleccionado
+      final targetPath = '$selectedDirectory/$fileName';
+      final excel = _buildExcel(catalog);
       final excelBytes = excel.save();
       if (excelBytes != null) {
         final file = File(targetPath);
         await file.writeAsBytes(excelBytes);
       }
-
       return targetPath;
     } catch (e) {
       throw Exception('Error al exportar Excel: $e');

@@ -71,13 +71,16 @@ class _MainViewState extends State<MainView> {
                     ),
                   const Spacer(),
                   const Divider(),
-                  // Botón cerrar sesión
-                  ListTile(
-                    leading: const Icon(Icons.logout),
-                    title: const Text('Cerrar sesión'),
-                    onTap: () {
-                      authViewModel.signOut();
-                    },
+                  // Botón cerrar sesión (Material necesario: el Container padre crea un ColoredBox)
+                  Material(
+                    color: Colors.transparent,
+                    child: ListTile(
+                      leading: const Icon(Icons.logout),
+                      title: const Text('Cerrar sesión'),
+                      onTap: () {
+                        authViewModel.signOut();
+                      },
+                    ),
                   ),
                 ],
               ),

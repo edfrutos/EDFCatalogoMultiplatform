@@ -5,6 +5,7 @@ import 'package:mongo_dart/mongo_dart.dart';
 import '../utils/env_config.dart';
 import '../models/user.dart';
 import '../models/catalog.dart';
+import 'api_service.dart';
 
 /// Servicio para gestionar la conexión y operaciones con MongoDB
 class MongoService {
@@ -177,6 +178,12 @@ class MongoService {
     required String emailOrUsername,
     required String password,
   }) async {
+    if (kIsWeb) {
+      return ApiService.instance.login(
+        emailOrUsername: emailOrUsername,
+        password: password,
+      );
+    }
     try {
       final collection = await getUsersCollection();
 
@@ -393,6 +400,7 @@ class MongoService {
 
   /// Verificar si existe un usuario por email
   Future<bool> checkUserExists(String email) async {
+    if (kIsWeb) return ApiService.instance.checkUserExists(email);
     try {
       final collection = await getUsersCollection();
       final doc = await collection.findOne({'Email': email});
@@ -410,6 +418,14 @@ class MongoService {
     required String email,
     required String password,
   }) async {
+    if (kIsWeb) {
+      return ApiService.instance.createUser(
+        email: email,
+        username: username,
+        name: name,
+        password: password,
+      );
+    }
     try {
       final collection = await getUsersCollection();
 
@@ -438,6 +454,7 @@ class MongoService {
 
   /// Obtener usuario por email
   Future<User?> getUserByEmail(String email) async {
+    if (kIsWeb) return ApiService.instance.getUserByEmail(email);
     try {
       final collection = await getUsersCollection();
       // Intentar con 'Email' (mayúscula) primero, luego 'email' (minúscula)
@@ -455,6 +472,7 @@ class MongoService {
 
   /// Obtener usuario por ID
   Future<User?> getUserById(String id) async {
+    if (kIsWeb) return ApiService.instance.getUserById(id);
     try {
       final collection = await getUsersCollection();
       ObjectId? objectId;
@@ -479,6 +497,7 @@ class MongoService {
 
   /// Actualizar usuario
   Future<bool> updateUser(String id, Map<String, dynamic> updates) async {
+    if (kIsWeb) return ApiService.instance.updateUser(id, updates);
     try {
       final collection = await getUsersCollection();
       ObjectId? objectId;
@@ -504,6 +523,7 @@ class MongoService {
 
   /// Guarda token de recuperación de contraseña
   Future<void> savePasswordResetToken(String email, String token) async {
+    if (kIsWeb) return ApiService.instance.savePasswordResetToken(email, token);
     try {
       print('🔑 Guardando token de recuperación para: $email');
       final collection = await getUsersCollection();
@@ -531,6 +551,7 @@ class MongoService {
 
   /// Verifica el token de recuperación de contraseña
   Future<bool> verifyPasswordResetToken(String email, String token) async {
+    if (kIsWeb) return ApiService.instance.verifyPasswordResetToken(email, token);
     try {
       print('🔍 Verificando token de recuperación para: $email');
       final collection = await getUsersCollection();
@@ -568,6 +589,7 @@ class MongoService {
 
   /// Actualiza la contraseña de un usuario
   Future<void> updatePassword(String email, String newPassword) async {
+    if (kIsWeb) return ApiService.instance.updatePassword(email, newPassword);
     try {
       print('🔑 Actualizando contraseña para: $email');
       final collection = await getUsersCollection();
@@ -593,6 +615,7 @@ class MongoService {
 
   /// Limpia el token de recuperación de contraseña
   Future<void> clearPasswordResetToken(String email) async {
+    if (kIsWeb) return ApiService.instance.clearPasswordResetToken(email);
     try {
       print('🧽 Limpiando token de recuperación para: $email');
       final collection = await getUsersCollection();
@@ -610,6 +633,7 @@ class MongoService {
 
   /// Obtener todos los usuarios (para admin)
   Future<List<User>> getAllUsers() async {
+    if (kIsWeb) return ApiService.instance.getAllUsers();
     try {
       final collection = await getUsersCollection();
       final cursor = collection.find();
@@ -634,6 +658,7 @@ class MongoService {
 
   /// Eliminar usuario físicamente de la base de datos
   Future<bool> deleteUser(String id) async {
+    if (kIsWeb) return ApiService.instance.deleteUser(id);
     try {
       print('🗑️ Intentando eliminar usuario con ID: $id');
       final collection = await getUsersCollection();
@@ -694,6 +719,7 @@ class MongoService {
   /// Estadísticas de usuarios para el panel de administración.
   /// Devuelve: total, activos, inactivos, admins, usuarios normales.
   Future<Map<String, int>> getUserStats() async {
+    if (kIsWeb) return ApiService.instance.getUserStats();
     try {
       final collection = await getUsersCollection();
       final all = await collection.find().toList();
@@ -742,6 +768,13 @@ class MongoService {
     bool isAdmin = false,
     String? userEmail, // Email del usuario para buscar en Owner/CreatedBy
   }) async {
+    if (kIsWeb) {
+      return ApiService.instance.getCatalogs(
+        userId,
+        isAdmin: isAdmin,
+        userEmail: userEmail,
+      );
+    }
     try {
       final collection = await getCatalogsCollection();
       // Usar Map directamente en lugar de SelectorBuilder para evitar errores
@@ -803,6 +836,7 @@ class MongoService {
 
   /// Obtener catálogo por ID
   Future<Catalog?> getCatalogById(String id) async {
+    if (kIsWeb) return ApiService.instance.getCatalogById(id);
     try {
       final collection = await getCatalogsCollection();
       ObjectId? objectId;
@@ -832,6 +866,14 @@ class MongoService {
     required String userId,
     required List<String> columns,
   }) async {
+    if (kIsWeb) {
+      return ApiService.instance.createCatalog(
+        name: name,
+        description: description,
+        userId: userId,
+        columns: columns,
+      );
+    }
     try {
       final collection = await getCatalogsCollection();
       final now = DateTime.now();
@@ -874,6 +916,7 @@ class MongoService {
 
   /// Crear nuevo catálogo (sobrecarga con Map)
   Future<Catalog> createCatalogFromMap(Map<String, dynamic> catalogData) async {
+    if (kIsWeb) return ApiService.instance.createCatalogFromMap(catalogData);
     try {
       final collection = await getCatalogsCollection();
 
@@ -932,6 +975,7 @@ class MongoService {
 
   /// Actualizar catálogo (sobrecarga que acepta objeto Catalog)
   Future<bool> updateCatalogFromObject(Catalog catalog) async {
+    if (kIsWeb) return ApiService.instance.updateCatalogFromObject(catalog);
     try {
       // Convertir filas a JSON y verificar que FileTitles se incluye
       final rowsJson = catalog.rows.map((row) {
@@ -990,6 +1034,7 @@ class MongoService {
 
   /// Actualizar catálogo
   Future<bool> updateCatalog(String id, Map<String, dynamic> updates) async {
+    if (kIsWeb) return ApiService.instance.updateCatalog(id, updates);
     try {
       final collection = await getCatalogsCollection();
 
@@ -1090,6 +1135,7 @@ class MongoService {
 
   /// Eliminar catálogo
   Future<bool> deleteCatalog(String id) async {
+    if (kIsWeb) return ApiService.instance.deleteCatalog(id);
     try {
       final collection = await getCatalogsCollection();
       ObjectId? objectId;

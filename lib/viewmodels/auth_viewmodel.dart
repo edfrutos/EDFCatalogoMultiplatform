@@ -4,6 +4,7 @@ import '../models/user.dart';
 import '../services/mongo_service.dart';
 import '../services/keychain_service.dart';
 import '../services/email_service.dart';
+import '../services/api_service.dart';
 
 /// ViewModel para gestionar la autenticación de usuarios
 class AuthViewModel extends ChangeNotifier {
@@ -61,6 +62,9 @@ class AuthViewModel extends ChangeNotifier {
           await _keychainService.saveToken(user.email);
           await _keychainService.saveEmail(user.email);
           await _keychainService.saveUserId(user.id);
+          // En web persiste el JWT para restaurar la sesión en reinicios
+          final jwt = ApiService.instance.currentToken;
+          if (jwt != null) await _keychainService.saveJwtToken(jwt);
           print('✅ Sesión guardada para recordar contraseña');
         } else {
           // Limpiar datos guardados si no quiere recordar
@@ -88,6 +92,16 @@ class AuthViewModel extends ChangeNotifier {
   /// Restaurar sesión desde Keychain
   Future<void> restoreSession() async {
     print('🔐 Intentando restaurar sesión...');
+
+    // En web el JWT no sobrevive hot-restart: lo recuperamos del almacenamiento
+    // seguro y lo inyectamos en ApiService ANTES de hacer cualquier llamada auth.
+    if (kIsWeb) {
+      final jwt = await _keychainService.getJwtToken();
+      if (jwt != null) {
+        ApiService.instance.setToken(jwt);
+        print('🔑 JWT restaurado en ApiService desde almacenamiento seguro');
+      }
+    }
 
     final userEmail = await _keychainService.getToken();
     if (userEmail == null) {
@@ -159,6 +173,7 @@ class AuthViewModel extends ChangeNotifier {
     );
 
     _keychainService.clearAuthData();
+    ApiService.instance.clearToken();
 
     _currentUser = null;
     _isAuthenticated = false;

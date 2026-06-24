@@ -1,4 +1,5 @@
-import 'dart:io';
+import 'dart:io' if (dart.library.html) 'package:edfcatalogomultiplatform/utils/io_stub.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/catalog.dart';
@@ -109,12 +110,18 @@ class _CatalogDetailViewState extends State<CatalogDetailView> {
                   'Archivo: ${filePath.split('/').last}',
                   style: const TextStyle(fontSize: 11, color: Colors.white70),
                 ),
-                Text(
-                  'Ubicación: ${filePath.substring(0, filePath.length - filePath.split('/').last.length)}',
-                  style: const TextStyle(fontSize: 10, color: Colors.white60),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                if (!kIsWeb)
+                  Text(
+                    'Ubicación: ${filePath.substring(0, filePath.length - filePath.split('/').last.length)}',
+                    style: const TextStyle(fontSize: 10, color: Colors.white60),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  )
+                else
+                  const Text(
+                    'Descargado en la carpeta de descargas',
+                    style: TextStyle(fontSize: 10, color: Colors.white60),
+                  ),
               ],
             ),
             backgroundColor: Colors.green,

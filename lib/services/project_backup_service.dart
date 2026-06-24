@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:io' if (dart.library.html) 'package:edfcatalogomultiplatform/utils/io_stub.dart';
 import 'package:archive/archive.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
@@ -728,7 +728,7 @@ class ProjectBackupService {
   /// [pathPrefix] — prefijo opcional para las rutas dentro del ZIP.
   /// Retorna un mapa con 'filesAdded' y 'totalSize'
   Future<Map<String, int>> _addFilesToArchiveRecursive(
-    Directory dir,
+    dynamic dir,
     String projectRoot,
     Archive archive, {
     String pathPrefix = '',
@@ -851,7 +851,7 @@ class ProjectBackupService {
   }
 
   // Función para encontrar archivos de base de datos en un directorio
-  Future<List<File>> _findDatabaseFiles(Directory directory) async {
+  Future<List<File>> _findDatabaseFiles(dynamic directory) async {
     final List<File> dbFiles = [];
     try {
       if (await directory.exists()) {

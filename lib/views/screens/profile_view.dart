@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart' as file_picker;
 import 'package:cached_network_image/cached_network_image.dart';
-import 'dart:io';
+import 'dart:io' if (dart.library.html) 'package:edfcatalogomultiplatform/utils/io_stub.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../services/mongo_service.dart';
 import '../../services/s3_service.dart';
+import '../../services/api_service.dart';
 import '../../models/file_type.dart';
 
 class ProfileView extends StatefulWidget {
@@ -26,7 +27,7 @@ class _ProfileViewState extends State<ProfileView> {
   final _addressController = TextEditingController();
   final _occupationController = TextEditingController();
 
-  File? _selectedImageFile;
+  file_picker.PlatformFile? _selectedPlatformFile;
   bool _shouldRemoveImage = false;
   bool _isSaving = false;
   bool _isUploadingImage = false;
@@ -105,24 +106,30 @@ class _ProfileViewState extends State<ProfileView> {
       String? profileImageUrl = user.profileImageUrl;
 
       // Si se debe eliminar la imagen, establecer como null
-      if (_shouldRemoveImage && _selectedImageFile == null) {
+      if (_shouldRemoveImage && _selectedPlatformFile == null) {
         profileImageUrl = null;
       }
       // Subir imagen si hay una nueva seleccionada
-      else if (_selectedImageFile != null) {
-        setState(() {
-          _isUploadingImage = true;
-        });
+      else if (_selectedPlatformFile != null) {
+        setState(() => _isUploadingImage = true);
 
         try {
-          final s3Service = S3Service();
-          profileImageUrl = await s3Service.uploadFile(
-            filePath: _selectedImageFile!.path,
-            userId: user.id,
-            catalogId: 'profile',
-            fileType: FileType.image,
-          );
-
+          final pf = _selectedPlatformFile!;
+          if (kIsWeb) {
+            profileImageUrl = await ApiService.instance.uploadBytes(
+              bytes: pf.bytes!,
+              fileName: pf.name,
+              folder: 'users/${user.id}/catalogs/profile/image',
+              contentType: 'image/${pf.extension ?? 'jpeg'}',
+            );
+          } else {
+            profileImageUrl = await S3Service().uploadFile(
+              filePath: pf.path!,
+              userId: user.id,
+              catalogId: 'profile',
+              fileType: FileType.image,
+            );
+          }
           print('✅ Imagen de perfil subida: $profileImageUrl');
         } catch (e) {
           setState(() {
@@ -133,9 +140,7 @@ class _ProfileViewState extends State<ProfileView> {
           return;
         }
 
-        setState(() {
-          _isUploadingImage = false;
-        });
+        setState(() => _isUploadingImage = false);
       }
 
       final updates = <String, dynamic>{
@@ -169,7 +174,7 @@ class _ProfileViewState extends State<ProfileView> {
       });
 
       // Limpiar archivo seleccionado y flags después de guardar
-      _selectedImageFile = null;
+      _selectedPlatformFile = null;
       _shouldRemoveImage = false;
 
       // Limpiar mensaje de éxito después de 3 segundos
@@ -200,18 +205,19 @@ class _ProfileViewState extends State<ProfileView> {
             type: file_picker.FileType.custom,
             allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'],
             allowMultiple: false,
-            withData: false,
-            withReadStream: false,
+            withData: true,
           );
 
-      if (result != null && result.files.single.path != null) {
-        final filePath = result.files.single.path!;
-        setState(() {
-          _selectedImageFile = File(filePath);
-          _shouldRemoveImage = false;
-          _errorMessage = null;
-        });
-        print('✅ Imagen seleccionada: $filePath');
+      if (result != null && result.files.isNotEmpty) {
+        final pf = result.files.single;
+        if (kIsWeb ? pf.bytes != null : pf.path != null) {
+          setState(() {
+            _selectedPlatformFile = pf;
+            _shouldRemoveImage = false;
+            _errorMessage = null;
+          });
+          print('✅ Imagen seleccionada: ${pf.name}');
+        }
       } else {
         print('⚠️ No se seleccionó ninguna imagen');
       }
@@ -240,7 +246,7 @@ class _ProfileViewState extends State<ProfileView> {
   /// Eliminar foto de perfil
   void _removeProfileImage() {
     setState(() {
-      _selectedImageFile = null;
+      _selectedPlatformFile = null;
       _shouldRemoveImage = true;
       _presignedImageUrl = null;
     });
@@ -287,8 +293,10 @@ class _ProfileViewState extends State<ProfileView> {
                             CircleAvatar(
                               radius: 60,
                               backgroundColor: Colors.grey[300],
-                              backgroundImage: _selectedImageFile != null
-                                  ? FileImage(_selectedImageFile!)
+                              backgroundImage: _selectedPlatformFile != null
+                                  ? (kIsWeb
+                                      ? MemoryImage(_selectedPlatformFile!.bytes!)
+                                      : FileImage(File(_selectedPlatformFile!.path!) as dynamic))
                                         as ImageProvider
                                   : (_presignedImageUrl != null &&
                                         !_shouldRemoveImage)
@@ -297,7 +305,7 @@ class _ProfileViewState extends State<ProfileView> {
                                     )
                                   : null,
                               child:
-                                  _selectedImageFile == null &&
+                                  _selectedPlatformFile == null &&
                                       (_presignedImageUrl == null ||
                                           _shouldRemoveImage)
                                   ? Text(
@@ -357,7 +365,7 @@ class _ProfileViewState extends State<ProfileView> {
                                 ),
                               ),
                             ),
-                            if ((_selectedImageFile != null ||
+                            if ((_selectedPlatformFile != null ||
                                     user.profileImageUrl != null) &&
                                 !_isUploadingImage) ...[
                               const SizedBox(width: 12),

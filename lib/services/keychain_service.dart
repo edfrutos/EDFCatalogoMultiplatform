@@ -42,6 +42,7 @@ class KeychainService {
   static const String _tokenKey = 'authToken';
   static const String _userIdKey = 'userId';
   static const String _emailKey = 'email';
+  static const String _jwtKey = 'jwtToken';
 
   // ---------------------------------------------------------------------------
   // Primitivas seguras (sin fallback a texto plano)
@@ -134,12 +135,21 @@ class KeychainService {
   Future<bool> saveEmail(String email) => set(_emailKey, email);
   Future<String?> getEmail() => get(_emailKey);
 
-  /// Elimina token + userId + email en una sola operación (logout completo).
+  // ---------------------------------------------------------------------------
+  // JWT (para persistir sesión en web entre reinicios)
+  // ---------------------------------------------------------------------------
+
+  Future<bool> saveJwtToken(String jwt) => set(_jwtKey, jwt);
+  Future<String?> getJwtToken() => get(_jwtKey);
+  Future<bool> deleteJwtToken() => remove(_jwtKey);
+
+  /// Elimina token + userId + email + JWT en una sola operación (logout completo).
   Future<void> clearAuthData() async {
     await Future.wait([
       remove(_tokenKey),
       remove(_userIdKey),
       remove(_emailKey),
+      remove(_jwtKey),
     ]);
   }
 

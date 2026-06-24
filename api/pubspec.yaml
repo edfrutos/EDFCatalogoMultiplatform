@@ -1,0 +1,18 @@
+name: edfcatalogo_api
+description: API REST backend para EDF Catálogo (Flutter Web)
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  shelf: ^1.4.0
+  shelf_router: ^1.1.4
+  shelf_cors_headers: ^0.1.5
+  mongo_dart: ^0.10.5
+  dart_jsonwebtoken: ^2.8.0
+  crypto: ^3.0.3
+  http: ^1.1.0
+  uuid: ^4.4.0
+  mime: ^1.0.4
