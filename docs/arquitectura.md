@@ -418,9 +418,9 @@ Afecta a: `profile_view.dart`, `admin_user_detail_view.dart`, `add_edit_row_dial
 ## 9. Herramientas y scripts
 
 | Script | Propósito |
-
 |--------|-----------|
 | `scripts/dev_web.sh` | Arranca API Dart (puerto 8089) + Flutter Web en Chrome en paralelo. Ctrl+C mata ambos |
+| `scripts/dev_tailscale.sh` | Igual que `dev_web.sh` pero en sesión **tmux** persistente. Flutter corre en modo `web-server` headless (puerto 56001) para acceso via Tailscale Serve. `tmux attach -t edf` para reconectar |
 | `scripts/run_api_dev.sh` | Solo la API Dart (para debug aislado) |
 | `scripts/build_macos_dmg.sh` | Build release macOS → firma ad-hoc → DMG con hdiutil |
 | `scripts/build_linux_release.sh` | Build de release para Linux en local |
