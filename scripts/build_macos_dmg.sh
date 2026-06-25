@@ -85,17 +85,19 @@ find "${APP_PATH}/Contents/Frameworks" -name "*.framework" -type d 2>/dev/null |
 done
 
 # 3c. Firmar el binario principal de la app
-# Leemos el nombre real del ejecutable desde Info.plist en vez de usar find,
-# para evitar cualquier problema de encoding NFD/NFC con find en HFS+/APFS.
+# Leemos el nombre real del ejecutable desde Info.plist (PlistBuddy es más robusto
+# que 'defaults read' con paths que contienen caracteres no-ASCII).
 BINARY_NAME="$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" \
                "${APP_PATH}/Contents/Info.plist" 2>/dev/null \
                || basename "${APP_PATH%.app}")"
 BINARY_PATH="${APP_PATH}/Contents/MacOS/${BINARY_NAME}"
 info "  Firmando binario: ${BINARY_NAME}"
 if [ -e "${BINARY_PATH}" ]; then
+  # Limpiar extended attributes antes de firmar (evita errores con binarios Flutter/DartVM)
+  xattr -cr "${BINARY_PATH}" 2>/dev/null || true
   codesign --force --sign - "${BINARY_PATH}" 2>&1 \
     && info "  ✓ Binario firmado" \
-    || warning "  No se pudo firmar ${BINARY_NAME}"
+    || warning "  No se pudo firmar ${BINARY_NAME} (binario con subcomponentes DartVM — no crítico)"
 else
   warning "  Binario no encontrado en: ${BINARY_PATH}"
   info "  Contenido de Contents/MacOS/:"
@@ -103,13 +105,23 @@ else
 fi
 
 # 3d. Firmar el bundle .app completo con entitlements para que el sandbox funcione
+# Se intenta primero con --deep (firma recursiva de subcomponentes);
+# si falla con Bus error (conocido en algunos binarios Flutter grandes), se intenta sin --deep.
 ENTITLEMENTS_PATH="$(dirname "$0")/../macos/Runner/Release.entitlements"
-if [ -f "${ENTITLEMENTS_PATH}" ]; then
-  codesign --force --sign - --entitlements "${ENTITLEMENTS_PATH}" "${APP_PATH}" 2>&1 \
-    || warning "codesign falló — continuando sin firma"
+_sign_app() {
+  local deep_flag="$1"
+  if [ -f "${ENTITLEMENTS_PATH}" ]; then
+    codesign --force ${deep_flag} --sign - --entitlements "${ENTITLEMENTS_PATH}" "${APP_PATH}" 2>&1
+  else
+    codesign --force ${deep_flag} --sign - "${APP_PATH}" 2>&1
+  fi
+}
+info "  Firmando bundle .app..."
+if _sign_app "--deep"; then
+  info "  ✓ Bundle firmado (--deep)"
 else
-  codesign --force --sign - "${APP_PATH}" 2>&1 \
-    || warning "codesign falló — continuando sin firma"
+  warning "  codesign --deep falló — reintentando sin --deep"
+  _sign_app "" || warning "  codesign falló — continuando sin firma completa (la app puede pedir permiso al abrirse)"
 fi
 
 # ── 4. Preparar directorio de distribución ───────────────────────────────────
@@ -125,33 +137,57 @@ rm -rf "${DIST_DIR}"
 mkdir -p "${DIST_DIR}"
 
 # ── 5. Crear DMG con hdiutil ─────────────────────────────────────────────────
-info "Creando DMG temporal..."
+# Usamos create-vacío → attach → ditto → detach → convert
+# para evitar que -srcfolder falle con "Recurso ocupado" al procesar
+# archivos del .app que tienen locks/extended-attrs en discos externos.
+info "Creando DMG..."
 FINAL_DMG="${DIST_DIR}/${DMG_NAME}"
-STAGING_DIR="$(mktemp -d)"
-# mktemp -u genera un path único sin crear el archivo, evitando colisiones con runs anteriores
-TMP_DMG="$(mktemp -u /tmp/edf_XXXXXX.dmg)"
 
-# Copiar .app al staging
-cp -R "${APP_PATH}" "${STAGING_DIR}/"
-# Crear enlace simbólico a /Applications
-ln -s /Applications "${STAGING_DIR}/Applications"
+# Calcular tamaño: du -sm + 20% de margen + 20MB para metadatos HFS+
+APP_SIZE_MB=$(du -sm "${APP_PATH}" | cut -f1)
+DMG_SIZE_MB=$(( APP_SIZE_MB + APP_SIZE_MB / 5 + 20 ))
+info "  Tamaño app: ${APP_SIZE_MB}MB → imagen: ${DMG_SIZE_MB}MB"
 
-# Crear DMG escribible (volname ASCII para evitar problemas de encoding HFS+)
-hdiutil create \
+# path único para el DMG temporal (mktemp -u no crea el archivo, solo genera el nombre)
+TMP_BASE="$(mktemp -u /tmp/edf_XXXXXX)"
+TMP_DMG="${TMP_BASE}.dmg"
+
+# 5a. Crear imagen HFS+ vacía con tamaño explícito
+# (hdiutil agrega .dmg si el path no termina en extensión reconocida;
+#  pasamos TMP_BASE sin .dmg para que el archivo resultante sea TMP_DMG)
+hdiutil create -megabytes "${DMG_SIZE_MB}" \
     -volname "${VOL_NAME}" \
-    -srcfolder "${STAGING_DIR}" \
+    -fs HFS+ \
     -format UDRW \
-    "${TMP_DMG}"
+    "${TMP_BASE}" 2>&1
 
-# Convertir a DMG comprimido de solo lectura
+# 5b. Montar en un punto fijo conocido
+MOUNT_POINT="/Volumes/${VOL_NAME}"
+hdiutil attach "${TMP_DMG}" \
+    -mountpoint "${MOUNT_POINT}" \
+    -noautoopen \
+    -noautobrowse 2>&1
+
+# 5c. Copiar .app con ditto (respeta estructura bundle, más robusto que cp -R)
+info "  Copiando .app al volumen..."
+ditto "${APP_PATH}" "${MOUNT_POINT}/$(basename "${APP_PATH}")"
+# Enlace a /Applications para el instalador drag-and-drop
+ln -sf /Applications "${MOUNT_POINT}/Applications"
+
+# 5d. Desmontar (sync primero para evitar flush incompleto)
+sync
+sleep 1
+hdiutil detach "${MOUNT_POINT}" -force 2>&1
+
+# 5e. Convertir de UDRW a UDZO (solo lectura, comprimido zlib-9)
+info "  Comprimiendo DMG final..."
 hdiutil convert "${TMP_DMG}" \
     -format UDZO \
     -imagekey zlib-level=9 \
-    -o "${FINAL_DMG}"
+    -o "${FINAL_DMG}" 2>&1
 
-# Limpiar temporales
+# Limpiar temporal
 rm -f "${TMP_DMG}"
-rm -rf "${STAGING_DIR}"
 
 # ── 6. Resultado ──────────────────────────────────────────────────────────────
 echo ""
