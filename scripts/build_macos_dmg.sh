@@ -177,7 +177,7 @@ MOUNT_POINT="/Volumes/${VOL_NAME}"
 hdiutil attach "${TMP_DMG}" \
     -mountpoint "${MOUNT_POINT}" \
     -noautoopen \
-    -noautobrowse 2>&1
+    -nobrowse 2>&1
 
 # 5c. Copiar .app con ditto (respeta estructura bundle, más robusto que cp -R)
 info "  Copiando .app al volumen..."
