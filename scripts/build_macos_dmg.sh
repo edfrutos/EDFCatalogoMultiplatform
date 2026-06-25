@@ -65,9 +65,21 @@ else
 fi
 info "App encontrada: ${APP_PATH}"
 
+# ── 2b. Copiar .app a /tmp/ antes de firmar ───────────────────────────────────
+# codesign falla con rutas que contienen caracteres NFD (acentos) en discos
+# externos (HFS+/ExFAT). Copiamos a APFS local para que codesign opere sin
+# problemas de encoding. La firma se aplica sobre esta copia local.
+TMP_SIGN_DIR="/tmp/edf_sign_$$"
+mkdir -p "${TMP_SIGN_DIR}"
+LOCAL_APP="${TMP_SIGN_DIR}/$(basename "${APP_PATH}")"
+info "Copiando .app a /tmp/ para firma local..."
+ditto "${APP_PATH}" "${LOCAL_APP}"
+APP_PATH="${LOCAL_APP}"
+# Limpiar el directorio temporal al salir (éxito o error)
+trap 'rm -rf "${TMP_SIGN_DIR}"' EXIT
+
 # ── 3. Firma ad-hoc ──────────────────────────────────────────────────────────
 info "Aplicando firma ad-hoc (uso local)..."
-# Nota: --deep falla en binarios grandes (Bus error).
 # Firmamos de dentro hacia fuera: dylibs → frameworks → binario principal → .app
 
 # 3a. Firmar dylibs sueltos dentro de Frameworks
@@ -158,7 +170,6 @@ TMP_DMG="${TMP_BASE}.dmg"
 hdiutil create -megabytes "${DMG_SIZE_MB}" \
     -volname "${VOL_NAME}" \
     -fs HFS+ \
-    -format UDRW \
     "${TMP_BASE}" 2>&1
 
 # 5b. Montar en un punto fijo conocido
