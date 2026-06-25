@@ -32,6 +32,7 @@ else
 fi
 
 API_PORT="${API_PORT:-8089}"
+WEB_PORT="${WEB_PORT:-56001}"
 
 # ── Instalar dependencias API si faltan ───────────────────────────────────────
 if [ ! -d "$API_DIR/.dart_tool" ]; then
@@ -78,10 +79,12 @@ cleanup() {
 trap cleanup INT TERM
 
 # ── Arrancar Flutter Web ─────────────────────────────────────────────────────
-info "Arrancando Flutter Web en Chrome..."
+info "Arrancando Flutter Web en Chrome (puerto $WEB_PORT)..."
+echo ""
+echo "  Tailscale: tailscale serve $WEB_PORT"
 echo ""
 cd "$PROJECT_ROOT"
-flutter run -d chrome
+flutter run -d chrome --web-port "$WEB_PORT"
 
 # Si flutter termina limpiamente, limpiar también el servidor
 cleanup
