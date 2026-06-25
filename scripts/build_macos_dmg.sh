@@ -85,11 +85,22 @@ find "${APP_PATH}/Contents/Frameworks" -name "*.framework" -type d 2>/dev/null |
 done
 
 # 3c. Firmar el binario principal de la app
-# Usamos -exec para que codesign reciba el path directamente del kernel,
-# evitando cualquier problema de encoding en la variable de shell.
-find "${APP_PATH}/Contents/MacOS" -type f \
-  -exec codesign --force --sign - {} \; 2>&1 \
-  || warning "No se pudo firmar algún binario en Contents/MacOS"
+# Leemos el nombre real del ejecutable desde Info.plist en vez de usar find,
+# para evitar cualquier problema de encoding NFD/NFC con find en HFS+/APFS.
+BINARY_NAME="$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" \
+               "${APP_PATH}/Contents/Info.plist" 2>/dev/null \
+               || basename "${APP_PATH%.app}")"
+BINARY_PATH="${APP_PATH}/Contents/MacOS/${BINARY_NAME}"
+info "  Firmando binario: ${BINARY_NAME}"
+if [ -e "${BINARY_PATH}" ]; then
+  codesign --force --sign - "${BINARY_PATH}" 2>&1 \
+    && info "  ✓ Binario firmado" \
+    || warning "  No se pudo firmar ${BINARY_NAME}"
+else
+  warning "  Binario no encontrado en: ${BINARY_PATH}"
+  info "  Contenido de Contents/MacOS/:"
+  ls -la "${APP_PATH}/Contents/MacOS/" 2>&1 || true
+fi
 
 # 3d. Firmar el bundle .app completo con entitlements para que el sandbox funcione
 ENTITLEMENTS_PATH="$(dirname "$0")/../macos/Runner/Release.entitlements"
@@ -103,34 +114,32 @@ fi
 
 # ── 4. Preparar directorio de distribución ───────────────────────────────────
 info "Preparando distribución en ${DIST_DIR}/..."
-# Desmontar cualquier volumen previo con el mismo nombre para evitar "Recurso ocupado"
-VOL_NAME="${APP_NAME} ${VERSION}"
-TMP_DMG="/tmp/tmp_${DMG_NAME}"
+# Nombre ASCII para el volumen del DMG — hdiutil puede fallar con caracteres
+# no-ASCII (acentos) al escribir la cabecera del volumen HFS+.
+VOL_NAME="EDFCatalogo-${VERSION}"
+# Desmontar cualquier volumen residual con ese nombre
 hdiutil detach "/Volumes/${VOL_NAME}" 2>/dev/null || true
-# Dar tiempo al kernel para liberar el archivo de imagen antes de sobreescribirlo
+hdiutil detach "/Volumes/${APP_NAME} ${VERSION}" 2>/dev/null || true
 sleep 1
-# Eliminar TMP_DMG previo explícitamente (no confiar solo en -ov si el archivo estuvo montado)
-rm -f "${TMP_DMG}"
 rm -rf "${DIST_DIR}"
 mkdir -p "${DIST_DIR}"
 
 # ── 5. Crear DMG con hdiutil ─────────────────────────────────────────────────
 info "Creando DMG temporal..."
-# Usamos /tmp para el DMG temporal para evitar "Recurso ocupado" en discos externos
 FINAL_DMG="${DIST_DIR}/${DMG_NAME}"
 STAGING_DIR="$(mktemp -d)"
-TMP_DMG="/tmp/tmp_${DMG_NAME}"  # ya definida arriba; redefinir por si la sección se usa de forma aislada
+# mktemp -u genera un path único sin crear el archivo, evitando colisiones con runs anteriores
+TMP_DMG="$(mktemp -u /tmp/edf_XXXXXX.dmg)"
 
 # Copiar .app al staging
 cp -R "${APP_PATH}" "${STAGING_DIR}/"
 # Crear enlace simbólico a /Applications
 ln -s /Applications "${STAGING_DIR}/Applications"
 
-# Crear DMG escribible
+# Crear DMG escribible (volname ASCII para evitar problemas de encoding HFS+)
 hdiutil create \
-    -volname "${APP_NAME} ${VERSION}" \
+    -volname "${VOL_NAME}" \
     -srcfolder "${STAGING_DIR}" \
-    -ov \
     -format UDRW \
     "${TMP_DMG}"
 
