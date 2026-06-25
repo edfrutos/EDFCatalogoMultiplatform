@@ -81,3 +81,4 @@ android/.idea/
 # migrate_catalogs.py
 # migrate_users.py
 # reset_password.py
+.api_dev.log
