@@ -233,14 +233,104 @@ api/
     └── routes/              # /api/auth, /api/s3, /api/catalog, /api/users, /api/health
 ```
 
-**Arranque en desarrollo:**
-```bash
-./scripts/dev_web.sh        # API en background (puerto 8089) + flutter run -d chrome
-./scripts/run_api_dev.sh    # Solo la API
+#### Requisitos previos
+
+| Herramienta | Verificación |
+|------------|-------------|
+| Flutter SDK | `flutter --version` |
+| Dart SDK (incluido en Flutter) | `dart --version` |
+| Google Chrome | debe estar instalado |
+| `.env` en la raíz del proyecto | ver variables necesarias abajo |
+
+Variables mínimas en `.env` para que el servidor API arranque:
+
+```dotenv
+MONGO_URI=mongodb+srv://user:pass@cluster/
+MONGO_DB=nombre_base_de_datos
+API_JWT_SECRET=una_cadena_larga_y_segura
+
+# Opcionales — para upload S3 desde web
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_REGION=eu-central-1
+S3_BUCKET_NAME=nombre-bucket
+
+# Puerto de la API (por defecto 8089)
+API_PORT=8089
+
+# CORS — debe coincidir con la URL de Flutter Web en desarrollo
+API_CORS_ORIGIN=http://localhost:PORT_FLUTTER
 ```
 
 > **Puerto**: se usa **8089** (no 8080) porque Docker Desktop ocupa el 8080
 > permanentemente en macOS independientemente de si hay contenedores activos.
+
+#### Arranque en desarrollo (opción recomendada)
+
+```bash
+# Desde la raíz del proyecto:
+./scripts/dev_web.sh
+```
+
+El script hace internamente:
+1. Carga `.env` en el entorno del proceso
+2. Ejecuta `dart pub get` en `api/` si faltan dependencias
+3. Mata cualquier proceso previo en el puerto 8089
+4. Arranca `dart run api/bin/server.dart` en background (log → `.api_dev.log`)
+5. Espera hasta 15 s a que `/api/health` responda
+6. Lanza `flutter run -d chrome` en primer plano
+7. Al pulsar Ctrl+C, mata el servidor API antes de salir
+
+#### Arranque manual (paso a paso)
+
+Si se necesita controlar cada proceso por separado:
+
+```bash
+# Terminal 1 — API
+./scripts/run_api_dev.sh
+# Verifica que arranca: curl http://localhost:8089/api/health
+
+# Terminal 2 — Flutter Web
+flutter run -d chrome \
+  --web-port 8080 \
+  --web-renderer canvaskit
+# O con renderer HTML (más rápido en dev, menos fiel):
+# flutter run -d chrome --web-renderer html
+```
+
+> `--web-port` fija el puerto de Flutter Web. Si se usa un puerto distinto del
+> esperado en `API_CORS_ORIGIN`, el navegador bloqueará las peticiones por CORS.
+> Asegúrate de que `API_CORS_ORIGIN=http://localhost:<web-port>` en `.env`.
+
+#### Solo la API (debug aislado)
+
+```bash
+./scripts/run_api_dev.sh
+# Log en tiempo real (si se usa dev_web.sh en otro terminal):
+tail -f .api_dev.log
+```
+
+#### Verificar que la API está funcionando
+
+```bash
+# Health check
+curl http://localhost:8089/api/health
+
+# Login de prueba
+curl -X POST http://localhost:8089/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"pass"}'
+```
+
+#### Problemas frecuentes en desarrollo web
+
+| Síntoma | Causa probable | Solución |
+|---------|---------------|----------|
+| `XMLHttpRequest error` en Flutter | CORS bloqueado | Revisar `API_CORS_ORIGIN` en `.env`; debe ser exactamente la URL de Chrome |
+| API no arranca — "port in use" | Proceso anterior no terminó | `lsof -ti tcp:8089 \| xargs kill` |
+| `Failed to connect to MongoDB` | `MONGO_URI` incorrecto o red | Verificar URI y que el cluster permite la IP actual |
+| Pantalla en blanco en Chrome | Error en build JS | Abrir DevTools → Console para ver el error real |
+| `.env` no se carga | Script ejecutado desde subdirectorio | Ejecutar siempre desde la raíz: `./scripts/dev_web.sh` |
 
 ### 6.2 Docker para producción
 
