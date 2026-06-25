@@ -18,11 +18,11 @@ class FileStat {
   final DateTime accessed;
   final DateTime changed;
   FileStat._({
-    this.size = 0,
     DateTime? modified,
     DateTime? accessed,
     DateTime? changed,
-  })  : modified = modified ?? DateTime(0),
+  })  : size = 0,
+        modified = modified ?? DateTime(0),
         accessed = accessed ?? DateTime(0),
         changed = changed ?? DateTime(0);
 }

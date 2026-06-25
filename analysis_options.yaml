@@ -8,6 +8,8 @@
 # The following line activates a set of recommended lints for Flutter apps,
 # packages, and plugins designed to encourage good coding practices.
 analyzer:
+  exclude:
+    - api/**       # paquete Dart independiente con sus propias deps; flutter analyze no lo debe analizar
   errors:
     avoid_print: ignore
 include: package:flutter_lints/flutter.yaml

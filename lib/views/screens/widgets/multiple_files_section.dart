@@ -1,5 +1,4 @@
 import 'package:file_picker/file_picker.dart' as file_picker;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
 
@@ -229,7 +228,7 @@ class _MultipleFilesSectionState extends State<MultipleFilesSection> {
       displayName = pf.path != null ? path.basename(pf.path!) : pf.name;
       fileSize = pf.size;
       final maxBytes = _maxBytesForType(widget.fileType);
-      if (fileSize != null && fileSize! > maxBytes) {
+      if (fileSize > maxBytes) {
         displayName = '⚠️ $displayName (supera ${_formatBytes(maxBytes)})';
       }
     } else {
@@ -383,38 +382,30 @@ class _MultipleFilesSectionState extends State<MultipleFilesSection> {
   }
 
   Widget _buildActionButtons(ThemeData theme) {
-    // file_picker con withData:true funciona en web — mostramos siempre los botones
-    const showFileButtons = true;
-
     return Row(
       children: [
-        if (showFileButtons) ...[
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: widget.isUploading ? null : widget.onSelectFile,
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('Archivo'),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(0, 36),
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-              ),
-            ),
-          ),
-          const SizedBox(width: 6),
-          OutlinedButton.icon(
-            onPressed: widget.isUploading ? null : widget.onSelectMultipleFiles,
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: widget.isUploading ? null : widget.onSelectFile,
             icon: const Icon(Icons.add, size: 16),
-            label: const Text('Varios'),
+            label: const Text('Archivo'),
             style: OutlinedButton.styleFrom(
               minimumSize: const Size(0, 36),
               padding: const EdgeInsets.symmetric(horizontal: 10),
             ),
           ),
-          const SizedBox(width: 6),
-        ] else ...[
-          // En web: un solo botón expandido para URL
-          const Spacer(),
-        ],
+        ),
+        const SizedBox(width: 6),
+        OutlinedButton.icon(
+          onPressed: widget.isUploading ? null : widget.onSelectMultipleFiles,
+          icon: const Icon(Icons.add, size: 16),
+          label: const Text('Varios'),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(0, 36),
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+          ),
+        ),
+        const SizedBox(width: 6),
         OutlinedButton(
           onPressed: widget.isUploading
               ? null
