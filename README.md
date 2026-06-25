@@ -9,6 +9,7 @@ Backend: MongoDB Atlas · AWS S3 · Gmail SMTP.
 ## Plataformas
 
 | Plataforma | Estado |
+
 |-----------|--------|
 | macOS | ✅ Nativo |
 | iOS | ✅ Nativo |
@@ -63,7 +64,7 @@ flutter run -d chrome             # Terminal 2: Flutter Web
 ### macOS — distribuible (DMG)
 
 ```bash
-./scripts/build_macos_dmg.sh
+./scripts/build_macos_dmg.shgitr 
 # → dist/EDFCatalogo-<version>.dmg  (firma ad-hoc, sin Developer ID)
 ```
 
@@ -79,6 +80,7 @@ docker compose -f docker/docker-compose.web.yml up -d --build
 ## Documentación
 
 | Tema | Referencia |
+
 |------|-----------|
 | Arquitectura y decisiones de diseño | [`docs/arquitectura.md`](docs/arquitectura.md) |
 | Configuración de entorno | [`docs/setup/`](docs/setup/) |

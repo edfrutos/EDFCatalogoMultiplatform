@@ -11,7 +11,7 @@ EDFCatalogoMultiplatform es una aplicación Flutter que permite gestionar catál
 de tablas con soporte multimedia. Corre en seis plataformas desde un único codebase:
 **macOS, iOS, Android, Web, Linux y Windows**.
 
-```
+```sh
 ┌────────────────────────────────────────────┐
 │               Flutter App                  │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐ │
@@ -31,7 +31,7 @@ de tablas con soporte multimedia. Corre en seis plataformas desde un único code
 
 ## 2. Estructura de carpetas
 
-```
+```sh
 api/                               # Servidor API Dart/Shelf (solo para web)
 ├── bin/server.dart                # Punto de entrada HTTP
 └── lib/
@@ -69,7 +69,7 @@ lib/
     ├── web_download_stub.dart    # ← NUEVO: stub para plataformas nativas
     ├── web_pdf_view.dart         # ← NUEVO: visor PDF via <iframe> (web only)
     └── web_pdf_view_stub.dart    # ← NUEVO: stub para plataformas nativas
-```
+```sh
 
 ---
 
@@ -88,7 +88,8 @@ Punto único de acceso a la base de datos. Todas las queries pasan por esta clas
 
 La URI de conexión se construye en `initEnv()` a partir de `MONGO_URI` y `MONGO_DB`.
 Para producción se usa MongoDB Atlas; el formato esperado es:
-```
+
+```sh
 mongodb+srv://<user>:<pass>@<cluster>/<db>?retryWrites=true&w=majority
 ```
 
@@ -104,6 +105,7 @@ Credenciales necesarias: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGI
 **Diferencia por plataforma en el upload:**
 
 | Plataforma | Ruta | Servicio usado |
+
 |-----------|------|----------------|
 | macOS / iOS / Android | path local del archivo | `S3Service.uploadFile(filePath)` → SDK AWS directo |
 | Web | bytes del `PlatformFile` | `ApiService.instance.uploadBytes(bytes, fileName, folder, contentType)` → POST al servidor API → SDK AWS en servidor |
@@ -132,20 +134,24 @@ para descarga directa desde S3 (sin pasar por el servidor). En web delega a
 Backups automáticos en Google Drive. Tres tipos:
 
 | Tipo | Contenido | Formato |
+
 |------|-----------|---------|
 | `catalogs` | Todos los catálogos del usuario | JSON |
 | `users` | Todos los usuarios (solo admin) | JSON |
 | `project` | Datos de la app (AppSupport + AppDocuments) | ZIP |
 
 **Flujo de creación:**
+
 - Catálogos/usuarios: serialización JSON → `GoogleDriveBackupService.backupCatalogs/Users()` → sube a carpeta `Backups_CatalogoTablas` en Drive.
 - Proyecto: `ProjectBackupService.createProjectZipInMemory()` crea ZIP en memoria (sin tocar disco) → `uploadProjectBackupFromBytes()` sube directamente a Drive. En macOS sandbox usa `getApplicationSupportDirectory()` + `getApplicationDocumentsDirectory()` en lugar de `Directory.current` (que apuntaría a la raíz del contenedor sandbox, incluyendo `Library/Caches/` con varios GB).
 
 **Flujo de descarga (macOS):**
+
 - Descarga los bytes desde Drive → los escribe en `~/Downloads/` con fallback a `getApplicationDocumentsDirectory()`.
 - Bug conocido y resuelto: el `context` del `builder` del diálogo de detalles sobreescribía el `context` externo. Al hacer `Navigator.pop()` del diálogo, el contexto quedaba desmontado (`context.mounted = false`) antes de llegar al código de guardado. Fix: guardar `outerContext` antes de abrir el diálogo y pasarlo a la función de descarga.
 
 **Listado (`files.list`):**
+
 - Requiere `$fields: 'files(id,name,size,createdTime,mimeType)'` para obtener el tamaño (la API no lo devuelve por defecto).
 - Query con OR para cubrir ambos prefijos de nombre: `name contains 'project_backup' OR name contains 'catalogo_backup'`.
 
@@ -155,7 +161,7 @@ Backups automáticos en Google Drive. Tres tipos:
 
 ### 4.1 Flujo de carga (`env_loader.dart`)
 
-```
+```sh
 initEnv()
 ├─ Web / Android  →  loadFromAssets()   (.env bundleado como Flutter asset)
 ├─ macOS / iOS    →  loadFromAppleBundle()   (NSBundle mainBundle)
@@ -189,7 +195,7 @@ EnvConfig.validate()    // Comprueba mínimo requerido
 Los `ViewModel` extienden `ChangeNotifier`. Las `View` los consumen vía
 `ChangeNotifierProvider` / `Consumer`. No hay BLoC ni Riverpod.
 
-```
+```sh
 View  →  llama método del ViewModel
        ←  recibe notifyListeners() → rebuild
 ```
@@ -220,10 +226,11 @@ Las rutas de administración están protegidas por comprobación de `user.isAdmi
 ### 6.1 Servidor API Dart (`api/`)
 
 El servidor API es necesario en web porque:
+
 - `dart:io` no está disponible en browser → no puede conectar directo a MongoDB ni a AWS SDK
 - El servidor actúa como proxy seguro: recibe requests de Flutter Web y se comunica con MongoDB y S3
 
-```
+```sh
 api/
 ├── bin/server.dart          # shelf_router, middleware CORS + JWT
 └── lib/
@@ -236,7 +243,8 @@ api/
 #### Requisitos previos
 
 | Herramienta | Verificación |
-|------------|-------------|
+
+|------------|-------------|º
 | Flutter SDK | `flutter --version` |
 | Dart SDK (incluido en Flutter) | `dart --version` |
 | Google Chrome | debe estar instalado |
@@ -273,6 +281,7 @@ API_CORS_ORIGIN=http://localhost:PORT_FLUTTER
 ```
 
 El script hace internamente:
+
 1. Carga `.env` en el entorno del proceso
 2. Ejecuta `dart pub get` en `api/` si faltan dependencias
 3. Mata cualquier proceso previo en el puerto 8089
@@ -325,6 +334,7 @@ curl -X POST http://localhost:8089/api/auth/login \
 #### Problemas frecuentes en desarrollo web
 
 | Síntoma | Causa probable | Solución |
+
 |---------|---------------|----------|
 | `XMLHttpRequest error` en Flutter | CORS bloqueado | Revisar `API_CORS_ORIGIN` en `.env`; debe ser exactamente la URL de Chrome |
 | API no arranca — "port in use" | Proceso anterior no terminó | `lsof -ti tcp:8089 \| xargs kill` |
@@ -334,7 +344,7 @@ curl -X POST http://localhost:8089/api/auth/login \
 
 ### 6.2 Docker para producción
 
-```
+```sh
 docker/
 ├── Dockerfile.api          # Imagen Dart slim para el servidor API
 ├── Caddyfile.web           # Reverse proxy: Flutter Web (/) + API (/api/)
@@ -408,6 +418,7 @@ Afecta a: `profile_view.dart`, `admin_user_detail_view.dart`, `add_edit_row_dial
 ## 9. Herramientas y scripts
 
 | Script | Propósito |
+
 |--------|-----------|
 | `scripts/dev_web.sh` | Arranca API Dart (puerto 8089) + Flutter Web en Chrome en paralelo. Ctrl+C mata ambos |
 | `scripts/run_api_dev.sh` | Solo la API Dart (para debug aislado) |
@@ -438,9 +449,11 @@ TMP_DMG anterior quedó montado. El script ahora: (a) detacha el volumen, (b) es
 ### 10.1 Web — `dart:io` vs `io_stub.dart`
 
 Flutter Web no incluye `dart:io`. El import condicional:
+
 ```dart
 import 'dart:io' if (dart.library.html) 'package:edfcatalogomultiplatform/utils/io_stub.dart';
 ```
+
 hace que en web `File` resuelva a la clase stub. dart2js verifica tipos en **todas** las
 ramas del código incluso las protegidas con `!kIsWeb`, por lo que una asignación
 `FileImage(File(path))` produce error de tipos en build web aunque nunca ejecute.
@@ -452,11 +465,13 @@ omite la verificación de tipos de dart2js. Patrón ya extendido a todos los sit
 
 `html.Blob([parts], mimeType, endings)` solo acepta `'transparent'` o `'native'`
 como tercer argumento (`endings`). Pasar `'utf-8'` lanza:
-```
+
+```sh
 TypeError: ... 'utf-8' is not a valid enum value of type EndingType
 ```
 
 **Fix**: codificar a bytes antes de crear el Blob:
+
 ```dart
 final bytes = utf8.encode(content);
 final blob = html.Blob([bytes], mimeType);  // sin tercer argumento
@@ -484,6 +499,7 @@ aunque exista en el proyecto. Resultado: `ENTITLEMENT_NOT_FOUND` al llamar a
 `FilePicker.platform.getDirectoryPath()` en runtime.
 
 Siempre usar:
+
 ```bash
 codesign --force --sign - --entitlements macos/Runner/Release.entitlements app.app
 ```
@@ -493,6 +509,7 @@ codesign --force --sign - --entitlements macos/Runner/Release.entitlements app.a
 `find ... | while read -r bin; do codesign ... "$bin"; done` puede fallar silenciosamente
 con binarios cuyos paths contienen caracteres con acento (NFD en HFS+, NFC en la shell).
 **Fix**: usar `find -exec` para que codesign reciba el path directamente del kernel:
+
 ```bash
 find "${APP_PATH}/Contents/MacOS" -type f \
   -exec codesign --force --sign - {} \;
@@ -503,6 +520,7 @@ find "${APP_PATH}/Contents/MacOS" -type f \
 ## 11. Evolución del proyecto
 
 | Versión | Hito |
+
 |---------|------|
 | Previa | `EDFCatalogoSwift` — app nativa macOS en SwiftUI (archivada) |
 | v0.x | `edf_catalogotablas_macOS` — versión Flutter solo macOS |
