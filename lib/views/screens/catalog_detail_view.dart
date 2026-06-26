@@ -971,7 +971,7 @@ class _FileChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AssistChip(
+    return ActionChip(
       avatar: Icon(icon, size: 16, color: cs.primary),
       label: Text(
         label,

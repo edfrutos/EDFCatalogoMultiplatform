@@ -220,7 +220,7 @@ class _ProfileViewState extends State<ProfileView> {
       if (kIsWeb && _selectedPlatformFile!.bytes != null) {
         return MemoryImage(_selectedPlatformFile!.bytes!);
       } else if (!kIsWeb && _selectedPlatformFile!.path != null) {
-        return FileImage(File(_selectedPlatformFile!.path!));
+        return FileImage(File(_selectedPlatformFile!.path!) as dynamic) as ImageProvider;
       }
     }
     if (!_shouldRemoveImage && _presignedImageUrl != null) {
@@ -345,7 +345,7 @@ class _ProfileViewState extends State<ProfileView> {
                                     fontSize: 14,
                                     color: cs.onSurface.withOpacity(0.55)),
                               ),
-                              if (user.role != null) ...[
+                              if (user.isAdmin) ...[
                                 const SizedBox(height: 8),
                                 Container(
                                   padding: const EdgeInsets.symmetric(
@@ -356,7 +356,7 @@ class _ProfileViewState extends State<ProfileView> {
                                         AppTheme.radiusFull),
                                   ),
                                   child: Text(
-                                    user.role!,
+                                    'Administrador',
                                     style: GoogleFonts.inter(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,
