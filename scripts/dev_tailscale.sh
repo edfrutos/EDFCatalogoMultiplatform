@@ -105,11 +105,15 @@ tailscale serve --bg --https="$HTTPS_PORT" "$WEB_PORT" 2>/dev/null || \
   tailscale serve --bg --https="$HTTPS_PORT" "http://localhost:$WEB_PORT" 2>/dev/null || \
   warning "  / → :$WEB_PORT ya configurado o error"
 
-if tailscale serve --bg --https="$HTTPS_PORT" --set-path /api "http://localhost:$API_PORT" 2>/dev/null; then
-  info "  /api → :$API_PORT ✅"
-else
-  warning "  --set-path no soportado — prueba: tailscale serve --bg --https=$HTTPS_PORT --set-path /api http://localhost:$API_PORT"
-fi
+# Puerto HTTPS dedicado para la API (sin path routing).
+# NOTA: Tailscale Serve con --set-path elimina el prefijo del path al hacer
+# el proxy (/api/auth/login → /auth/login en el backend). Para evitarlo,
+# usamos un puerto HTTPS separado (8444) donde el path llega intacto.
+API_HTTPS_PORT="${API_HTTPS_PORT:-8444}"
+tailscale serve --bg --https="$API_HTTPS_PORT" "$API_PORT" 2>/dev/null || \
+  tailscale serve --bg --https="$API_HTTPS_PORT" "http://localhost:$API_PORT" 2>/dev/null || \
+  warning "  API HTTPS :$API_HTTPS_PORT ya configurado o error"
+info "  API HTTPS :$API_HTTPS_PORT → :$API_PORT ✅"
 
 # ── URL de acceso ─────────────────────────────────────────────────────────────
 TAILSCALE_HOST=$(tailscale status --json 2>/dev/null | \

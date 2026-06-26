@@ -81,11 +81,14 @@ class EnvConfig {
           pageHost == '';
 
       if (!isLocal) {
-        // Acceso remoto (ej: Tailscale, producción).
-        // La API está expuesta en la misma origin via proxy inverso
-        // (Tailscale Serve enruta /api/* → puerto 8089, Caddy en Docker, etc.).
-        // Usar misma origin evita mixed-content y no necesita CORS.
-        return Uri.base.origin; // ej: https://mac-studio.tail9e7bd.ts.net:8443
+        // Acceso remoto (ej: Tailscale).
+        // Tailscale Serve con --set-path elimina el prefijo de ruta al hacer
+        // el proxy, por lo que /api/auth/login llega al backend como /auth/login.
+        // Solución: API en puerto HTTPS dedicado (8444) sin path routing,
+        // así el path llega intacto al backend Dart.
+        // CORS: la API tiene origin '*', así que distintos puertos no son problema.
+        const apiPort = String.fromEnvironment('TAILSCALE_API_PORT', defaultValue: '8444');
+        return '${Uri.base.scheme}://${Uri.base.host}:$apiPort';
       }
 
       // Acceso local: usar API_BASE_URL del .env o fallback a localhost
