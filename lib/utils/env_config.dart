@@ -75,8 +75,10 @@ class EnvConfig {
 
     if (kIsWeb) {
       final pageHost = Uri.base.host;
-      final isLocal =
-          pageHost == 'localhost' || pageHost == '127.0.0.1' || pageHost == '';
+      final isLocal = pageHost == 'localhost' ||
+          pageHost == '127.0.0.1' ||
+          pageHost == '0.0.0.0' ||
+          pageHost == '';
 
       if (!isLocal) {
         // Acceso remoto (ej: Tailscale, producción).
