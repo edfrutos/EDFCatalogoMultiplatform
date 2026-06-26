@@ -31,7 +31,7 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 SERVER="root@208.76.221.20"
 SSH_PORT="2222"
-WEBROOT="/var/www/vhosts/efjdefrutos.com/edfcat.efjdefrutos.com/httpdocs"
+WEBROOT="/var/www/vhosts/efjdefrutos.com/edfcat.efjdefrutos.com"
 SERVER_REPO="/opt/edfcatalogo"
 SKIP_API="${SKIP_API:-0}"
 
