@@ -1771,22 +1771,22 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Backup descargado'),
-            content: const SingleChildScrollView(
+            content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  const Text(
                     '✅ El backup se ha descargado correctamente.',
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
-                  SizedBox(height: 16),
-                  Text('Para restaurar el proyecto:'),
-                  SizedBox(height: 8),
-                  Text('1. Extrae el contenido del archivo ZIP'),
-                  Text('2. Copia los archivos a la ubicación del proyecto'),
-                  Text('3. Reemplaza los archivos existentes si es necesario'),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
+                  const Text('Para restaurar el proyecto:'),
+                  const SizedBox(height: 8),
+                  const Text('1. Extrae el contenido del archivo ZIP'),
+                  const Text('2. Copia los archivos a la ubicación del proyecto'),
+                  const Text('3. Reemplaza los archivos existentes si es necesario'),
+                  const SizedBox(height: 16),
                   Text(
                     '⚠️ Asegúrate de hacer una copia de seguridad del proyecto actual antes de restaurar.',
                     style: TextStyle(
