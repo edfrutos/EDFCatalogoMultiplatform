@@ -86,10 +86,10 @@ fi
 # ── Crear sesión tmux ─────────────────────────────────────────────────────────
 step "Creando sesión tmux '$SESSION'..."
 
-# Ventana 0: API Dart
+# Ventana 0: API Dart (carga .env antes de arrancar para tener MONGO_URI etc.)
 tmux new-session -d -s "$SESSION" -n "api" -x 220 -y 50
 tmux send-keys -t "$SESSION:api" \
-  "cd '$PROJECT_ROOT/api' && echo '▶ Arrancando API en :$API_PORT...' && dart run bin/server.dart" Enter
+  "cd '$PROJECT_ROOT' && set -o allexport && source .env && set +o allexport && cd api && echo '▶ Arrancando API en :$API_PORT...' && dart run bin/server.dart" Enter
 
 # Ventana 1: servidor HTTP estático para el build de release
 BUILD_DIR="$PROJECT_ROOT/build/web"
