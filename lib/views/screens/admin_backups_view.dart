@@ -413,12 +413,12 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
           children: [
             Icon(Icons.cloud_off, size: 64, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.35)),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'Backups disponibles solo en la app de escritorio',
               style: GoogleFonts.inter(fontSize: 16, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Descarga la app macOS para gestionar backups en Google Drive.',
               style: GoogleFonts.inter(fontSize: 13, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
               textAlign: TextAlign.center,
@@ -509,7 +509,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                   }
                 },
                 itemBuilder: (context) => [
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'restore',
                     child: Row(
                       children: [
@@ -529,7 +529,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                       ],
                     ),
                   ),
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'delete',
                     child: Row(
                       children: [
@@ -616,7 +616,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
   ) async {
     if (backup.driveFileId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('Error: No se encontró el ID del archivo'),
           backgroundColor: Theme.of(context).colorScheme.error,
         ),
@@ -661,7 +661,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
   ) async {
     if (backup.driveFileId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('Error: No se encontró el ID del archivo'),
           backgroundColor: Theme.of(context).colorScheme.error,
         ),
@@ -685,12 +685,12 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
             ),
             const SizedBox(height: 16),
             if (type == BackupType.catalogs)
-              const Text(
+              Text(
                 '⚠️ Se crearán nuevos catálogos en la base de datos. Los catálogos existentes no serán modificados.',
                 style: GoogleFonts.inter(color: Theme.of(context).colorScheme.error),
               )
             else
-              const Text(
+              Text(
                 '⚠️ Se crearán nuevos usuarios en la base de datos. Los usuarios existentes (por email) no serán restaurados.',
                 style: GoogleFonts.inter(color: Theme.of(context).colorScheme.secondary),
               ),
@@ -792,7 +792,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
             Text('Archivo guardado en:\n$filePath'),
             const SizedBox(height: 16),
             if (Platform.isIOS)
-              const Text(
+              Text(
                 'Puedes acceder a este archivo desde la aplicación Archivos en tu iPhone.',
                 style: GoogleFonts.inter(fontStyle: FontStyle.italic, fontSize: 12),
               ),
@@ -836,7 +836,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
     if (backup.driveFileId == null) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text('❌ Error: No se encontró el ID del archivo'),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
@@ -863,7 +863,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                   'Tipo: ${type == BackupType.catalogs ? 'Catálogos' : 'Usuarios'}',
                 ),
                 const SizedBox(height: 16),
-                const Text(
+                Text(
                   'Este backup contiene datos en formato JSON.',
                   style: GoogleFonts.inter(fontSize: 12, fontStyle: FontStyle.italic),
                 ),
@@ -935,7 +935,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
       // Mostrar mensaje de éxito
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text('✅ Backup descargado correctamente'),
             backgroundColor: Theme.of(context).colorScheme.tertiary,
             duration: Duration(seconds: 3),
@@ -1111,9 +1111,9 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
             children: [
               const CircularProgressIndicator(),
               const SizedBox(height: 16),
-              const Text('Creando backup del proyecto...'),
+              Text('Creando backup del proyecto...'),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Esto puede tardar varios minutos',
                 style: GoogleFonts.inter(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
               ),
@@ -1269,9 +1269,9 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                       children: [
                         const CircularProgressIndicator(),
                         const SizedBox(height: 16),
-                        const Text('Creando backup del proyecto...'),
+                        Text('Creando backup del proyecto...'),
                         const SizedBox(height: 8),
-                        const Text(
+                        Text(
                           'Esto puede tardar varios minutos',
                           style: GoogleFonts.inter(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
                         ),
@@ -1356,12 +1356,12 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
           children: [
             Icon(Icons.cloud_off, size: 64, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.35)),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'Backups disponibles solo en la app de escritorio',
               style: GoogleFonts.inter(fontSize: 16, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Descarga la app macOS para gestionar backups en Google Drive.',
               style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
               textAlign: TextAlign.center,
@@ -1386,7 +1386,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
               color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
             ),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'No hay backups del proyecto',
               style: TextStyle(fontSize: 16, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
             ),
@@ -1429,7 +1429,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                     overflow: TextOverflow.ellipsis,
                   ),
                   if (backup.isGoogleDrive)
-                    const Text(
+                    Text(
                       '📍 Google Drive',
                       style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.primary),
                     ),
@@ -1446,7 +1446,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                   }
                 },
                 itemBuilder: (context) => [
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'restore',
                     child: Row(
                       children: [
@@ -1466,7 +1466,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                       ],
                     ),
                   ),
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'delete',
                     child: Row(
                       children: [
@@ -1507,9 +1507,9 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
             children: [
               Text('Fecha: ${backup.formattedDate}'),
               Text('Tamaño: ${backup.formattedSize}'),
-              const Text('Tipo: Proyecto'),
+              Text('Tipo: Proyecto'),
               if (backup.isGoogleDrive)
-                const Text(
+                Text(
                   '📍 Google Drive',
                   style: TextStyle(color: Theme.of(context).colorScheme.primary),
                 ),
@@ -1550,7 +1550,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
     if (backup.driveFileId == null) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text('❌ Error: No se encontró el ID del archivo'),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
@@ -1609,7 +1609,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
       if (zipBytes == null || zipBytes.isEmpty) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+            SnackBar(
               content: Text('❌ El archivo descargado está vacío'),
               backgroundColor: Theme.of(context).colorScheme.error,
             ),
@@ -1755,7 +1755,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
       if (data == null || data['bytes'] == null) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+            SnackBar(
               content: Text('❌ Error: No se pudo descargar el backup'),
               backgroundColor: Theme.of(context).colorScheme.error,
               duration: Duration(seconds: 5),
