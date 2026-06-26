@@ -14,21 +14,21 @@ COPY api/ .
 RUN dart compile exe bin/server.dart -o bin/server
 
 # ── Etapa 2: imagen mínima de producción ─────────────────────────────────────
-FROM debian:bookworm-slim
+# FROM scratch evita el conflicto con debian:bookworm-slim donde /lib es un
+# symlink a /usr/lib — COPY --from=builder /runtime/ / falla sobre symlinks.
+FROM scratch
+
+# Runtime de Dart para binarios AOT
+COPY --from=builder /runtime/ /
 
 # Certificados CA para conexiones TLS (MongoDB Atlas + AWS S3)
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 WORKDIR /app
-
-# Runtime de Dart (necesario aunque sea AOT)
-COPY --from=builder /runtime/ /
 
 # Binario compilado
 COPY --from=builder /app/bin/server /app/bin/server
 
-EXPOSE 8080
+EXPOSE 8089
 
 CMD ["/app/bin/server"]
