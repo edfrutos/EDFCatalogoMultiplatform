@@ -72,13 +72,27 @@ class EnvConfig {
   // Backend API (para Flutter Web)
   static String get apiBaseUrl {
     final url = getEnvVariable('API_BASE_URL');
-    if (url.isNotEmpty) return url;
-    // El servidor de desarrollo de Flutter bloquea dotfiles (.env → 404).
-    // Fallback: en web+debug, apuntar al API local; en producción web, lanzará
-    // un error claro en lugar de llamadas silenciosas a una URL vacía.
-    if (kIsWeb && kDebugMode) {
-      return 'http://localhost:8080';
+
+    if (kIsWeb) {
+      final pageHost = Uri.base.host;
+      final isLocal =
+          pageHost == 'localhost' || pageHost == '127.0.0.1' || pageHost == '';
+
+      if (!isLocal) {
+        // Acceso remoto (ej: Tailscale, producción).
+        // La API está expuesta en la misma origin via proxy inverso
+        // (Tailscale Serve enruta /api/* → puerto 8089, Caddy en Docker, etc.).
+        // Usar misma origin evita mixed-content y no necesita CORS.
+        return Uri.base.origin; // ej: https://mac-studio.tail9e7bd.ts.net:8443
+      }
+
+      // Acceso local: usar API_BASE_URL del .env o fallback a localhost
+      if (url.isNotEmpty) return url;
+      if (kDebugMode) return 'http://localhost:8089';
+      return url;
     }
+
+    // No-web: usar API_BASE_URL del .env
     return url;
   }
   static bool get useApiBackend => apiBaseUrl.isNotEmpty;
