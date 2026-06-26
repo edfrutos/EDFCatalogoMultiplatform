@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart' as file_picker;
-import 'dart:io' if (dart.library.html) 'package:edfcatalogomultiplatform/utils/io_stub.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:google_fonts/google_fonts.dart';
+import 'package:file_picker/file_picker.dart' as file_picker;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
+import 'dart:io' if (dart.library.html) 'package:edfcatalogomultiplatform/utils/io_stub.dart';
 import '../../../models/catalog.dart';
+import '../../../models/file_type.dart';
+import '../../../utils/app_theme.dart';
 import '../../../viewmodels/auth_viewmodel.dart';
 import '../../../services/s3_service.dart';
 import '../../../services/api_service.dart';
-import '../../../models/file_type.dart';
 
 class EditCatalogDialog extends StatefulWidget {
   final Catalog catalog;
@@ -17,8 +19,7 @@ class EditCatalogDialog extends StatefulWidget {
     String description,
     List<String> columns,
     String? thumbnailUrl,
-  )
-  onSave;
+  ) onSave;
 
   const EditCatalogDialog({
     super.key,
@@ -31,70 +32,60 @@ class EditCatalogDialog extends StatefulWidget {
 }
 
 class _EditCatalogDialogState extends State<EditCatalogDialog> {
-  late final TextEditingController _nameController;
-  late final TextEditingController _descriptionController;
-  late final TextEditingController _columnsController;
   final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _descCtrl;
+  late final TextEditingController _colsCtrl;
 
-  // Foto de perfil del catálogo (PlatformFile funciona en web y nativo)
   file_picker.PlatformFile? _selectedPlatformFile;
   bool _isUploadingImage = false;
+  bool _isSaving = false;
   bool _shouldRemoveImage = false;
 
-  // URLs pre-firmadas para mostrar imágenes S3
   String? _presignedThumbnailUrl;
   String? _presignedFirstRowImageUrl;
 
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: widget.catalog.name);
-    _descriptionController = TextEditingController(
-      text: widget.catalog.description,
-    );
-    _columnsController = TextEditingController(
-      text: widget.catalog.columns.join(', '),
-    );
+    _nameCtrl = TextEditingController(text: widget.catalog.name);
+    _descCtrl = TextEditingController(text: widget.catalog.description);
+    _colsCtrl = TextEditingController(
+        text: widget.catalog.columns.join(', '));
     _loadPresignedUrls();
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _descCtrl.dispose();
+    _colsCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _loadPresignedUrls() async {
     final s3 = S3Service();
-
     if (widget.catalog.thumbnailUrl != null) {
       try {
         final uri = await s3.getPresignedUrl(key: widget.catalog.thumbnailUrl!);
         if (mounted) setState(() => _presignedThumbnailUrl = uri.toString());
-      } catch (e) {
-        print('❌ Error pre-firmando thumbnailUrl: $e');
-      }
+      } catch (_) {}
     }
-
     final firstRowImage = widget.catalog.getFirstImageFromRows();
     if (firstRowImage != null) {
       try {
         final uri = await s3.getPresignedUrl(key: firstRowImage);
         if (mounted) setState(() => _presignedFirstRowImageUrl = uri.toString());
-      } catch (e) {
-        print('❌ Error pre-firmando firstRowImage: $e');
-      }
+      } catch (_) {}
     }
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _descriptionController.dispose();
-    _columnsController.dispose();
-    super.dispose();
   }
 
   Future<void> _handleSave() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
 
-    final columns = _columnsController.text
+    setState(() => _isSaving = true);
+
+    final columns = _colsCtrl.text
         .split(',')
         .map((e) => e.trim())
         .where((e) => e.isNotEmpty)
@@ -102,21 +93,15 @@ class _EditCatalogDialogState extends State<EditCatalogDialog> {
 
     String? thumbnailUrl = widget.catalog.thumbnailUrl;
 
-    // Si se debe eliminar la imagen, establecer como null
     if (_shouldRemoveImage && _selectedPlatformFile == null) {
       thumbnailUrl = null;
-    }
-    // Subir imagen si hay una nueva seleccionada
-    else if (_selectedPlatformFile != null) {
+    } else if (_selectedPlatformFile != null) {
       setState(() => _isUploadingImage = true);
-
       try {
-        final authViewModel = context.read<AuthViewModel>();
-        final userId = authViewModel.currentUser?.id ?? widget.catalog.userId;
+        final userId = context.read<AuthViewModel>().currentUser?.id ??
+            widget.catalog.userId;
         final pf = _selectedPlatformFile!;
-
         if (kIsWeb) {
-          // Web: subir bytes directamente
           thumbnailUrl = await ApiService.instance.uploadBytes(
             bytes: pf.bytes!,
             fileName: pf.name,
@@ -131,52 +116,32 @@ class _EditCatalogDialogState extends State<EditCatalogDialog> {
             fileType: FileType.image,
           );
         }
-
-        print('✅ Imagen del catálogo subida: $thumbnailUrl');
       } catch (e) {
-        setState(() => _isUploadingImage = false);
+        setState(() { _isUploadingImage = false; _isSaving = false; });
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error al subir imagen: $e'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Error al subir imagen: $e'),
+            behavior: SnackBarBehavior.floating,
+          ));
         }
         return;
       }
-
       setState(() => _isUploadingImage = false);
     }
 
-    widget.onSave(
-      _nameController.text.trim(),
-      _descriptionController.text.trim(),
-      columns,
-      thumbnailUrl,
-    );
-
-    if (mounted) {
-      Navigator.of(context).pop();
-    }
+    widget.onSave(_nameCtrl.text.trim(), _descCtrl.text.trim(), columns,
+        thumbnailUrl);
+    if (mounted) Navigator.of(context).pop();
   }
 
-  /// Seleccionar imagen usando file_picker
-  /// NOTA: Usar FileType.custom con extensiones explícitas en lugar de
-  /// FileType.image para evitar el bug de macOS sandbox donde los directorios
-  /// aparecen inaccesibles con el filtro de tipo imagen.
   Future<void> _selectImage() async {
     try {
-      file_picker.FilePickerResult? result = await file_picker
-          .FilePicker
-          .platform
-          .pickFiles(
-            type: file_picker.FileType.custom,
-            allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'],
-            allowMultiple: false,
-            withData: true, // necesario en web para obtener bytes
-          );
-
+      final result = await file_picker.FilePicker.platform.pickFiles(
+        type: file_picker.FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'],
+        allowMultiple: false,
+        withData: true,
+      );
       if (result != null && result.files.isNotEmpty) {
         final pf = result.files.single;
         if (kIsWeb ? pf.bytes != null : pf.path != null) {
@@ -184,248 +149,243 @@ class _EditCatalogDialogState extends State<EditCatalogDialog> {
             _selectedPlatformFile = pf;
             _shouldRemoveImage = false;
           });
-          print('✅ Imagen seleccionada: ${pf.name}');
         }
-      } else {
-        print('⚠️ No se seleccionó ninguna imagen');
       }
     } catch (e) {
-      print('❌ Error al seleccionar imagen: $e');
       if (mounted) {
-        final isLinux = !kIsWeb && Platform.isLinux;
-        final errorMessage = isLinux && e.toString().contains('zenity')
-            ? 'Error: zenity no está disponible. En Docker, el selector de archivos puede no funcionar. Por favor, reconstruye la imagen Docker o usa la aplicación fuera de Docker.'
-            : 'Error al seleccionar imagen: $e';
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Error al seleccionar imagen: $e'),
+          behavior: SnackBarBehavior.floating,
+        ));
       }
     }
   }
 
-  /// Eliminar imagen
-  void _removeImage() {
-    setState(() {
-      _selectedPlatformFile = null;
-      _shouldRemoveImage = true;
-    });
+  void _removeImage() => setState(() {
+        _selectedPlatformFile = null;
+        _shouldRemoveImage = true;
+      });
+
+  Widget _buildThumbnail(ColorScheme cs) {
+    Widget imgContent;
+
+    if (_selectedPlatformFile != null) {
+      if (kIsWeb && _selectedPlatformFile!.bytes != null) {
+        imgContent = Image.memory(_selectedPlatformFile!.bytes!,
+            fit: BoxFit.cover);
+      } else if (!kIsWeb && _selectedPlatformFile!.path != null) {
+        imgContent = Image.file(
+            File(_selectedPlatformFile!.path!) as dynamic,
+            fit: BoxFit.cover);
+      } else {
+        imgContent = Icon(Icons.image_outlined,
+            size: 40, color: cs.onSurface.withOpacity(0.3));
+      }
+    } else if (_presignedThumbnailUrl != null && !_shouldRemoveImage) {
+      imgContent = CachedNetworkImage(
+        imageUrl: _presignedThumbnailUrl!,
+        fit: BoxFit.cover,
+        placeholder: (_, __) =>
+            Center(child: CircularProgressIndicator(color: cs.primary)),
+        errorWidget: (_, __, ___) => Icon(Icons.broken_image_rounded,
+            size: 40, color: cs.onSurface.withOpacity(0.3)),
+      );
+    } else if (_presignedFirstRowImageUrl != null) {
+      imgContent = CachedNetworkImage(
+        imageUrl: _presignedFirstRowImageUrl!,
+        fit: BoxFit.cover,
+        placeholder: (_, __) =>
+            Center(child: CircularProgressIndicator(color: cs.primary)),
+        errorWidget: (_, __, ___) => Icon(Icons.broken_image_rounded,
+            size: 40, color: cs.onSurface.withOpacity(0.3)),
+      );
+    } else {
+      imgContent = Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.image_outlined,
+              size: 40, color: cs.onSurface.withOpacity(0.3)),
+          const SizedBox(height: 6),
+          Text('Sin imagen',
+              style: GoogleFonts.inter(
+                  fontSize: 11, color: cs.onSurface.withOpacity(0.4))),
+        ],
+      );
+    }
+
+    return Stack(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
+          child: Container(
+            width: 110,
+            height: 110,
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerHighest,
+              border: Border.all(color: cs.outlineVariant),
+              borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
+            ),
+            child: imgContent,
+          ),
+        ),
+        Positioned(
+          bottom: 4,
+          right: 4,
+          child: GestureDetector(
+            onTap: _isUploadingImage ? null : _selectImage,
+            child: Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                color: cs.primary,
+                shape: BoxShape.circle,
+                border: Border.all(color: cs.surface, width: 2),
+              ),
+              child: Icon(Icons.camera_alt_rounded,
+                  size: 15, color: cs.onPrimary),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final hasThumbnail =
+        _selectedPlatformFile != null ||
+        (widget.catalog.thumbnailUrl != null && !_shouldRemoveImage);
+
     return AlertDialog(
-      title: const Text('Editar catálogo'),
-      content: Form(
-        key: _formKey,
-        child: SizedBox(
-          width: 400,
-          child: SingleChildScrollView(
+      icon: Icon(Icons.edit_rounded, color: cs.primary, size: 28),
+      title: Text('Editar catálogo',
+          style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+      contentPadding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+      content: SizedBox(
+        width: 440,
+        child: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Imagen del catálogo
-                Center(
-                  child: Column(
-                    children: [
-                      Stack(
+                const SizedBox(height: 4),
+
+                // ── Miniatura ─────────────────────────────────────────
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildThumbnail(cs),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Imagen o placeholder
-                          Container(
-                            width: 120,
-                            height: 120,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.rectangle,
-                              borderRadius: BorderRadius.circular(8),
-                              color: Colors.grey.shade200,
-                              border: Border.all(color: Colors.grey.shade300),
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: _selectedPlatformFile != null
-                                  ? (kIsWeb
-                                      ? Image.memory(
-                                          _selectedPlatformFile!.bytes!,
-                                          fit: BoxFit.cover,
-                                        )
-                                      : Image.file(
-                                          File(_selectedPlatformFile!.path!) as dynamic,
-                                          fit: BoxFit.cover,
-                                        ))
-                                  : _presignedThumbnailUrl != null &&
-                                        !_shouldRemoveImage
-                                  ? CachedNetworkImage(
-                                      imageUrl: _presignedThumbnailUrl!,
-                                      fit: BoxFit.cover,
-                                      placeholder: (context, url) =>
-                                          const Center(
-                                            child: CircularProgressIndicator(),
-                                          ),
-                                      errorWidget: (context, url, error) =>
-                                          const Icon(
-                                            Icons.image_not_supported,
-                                            size: 48,
-                                          ),
-                                    )
-                                  : _presignedFirstRowImageUrl != null
-                                  ? CachedNetworkImage(
-                                      imageUrl: _presignedFirstRowImageUrl!,
-                                      fit: BoxFit.cover,
-                                      placeholder: (context, url) =>
-                                          const Center(
-                                            child: CircularProgressIndicator(),
-                                          ),
-                                      errorWidget: (context, url, error) =>
-                                          const Icon(
-                                            Icons.image_not_supported,
-                                            size: 48,
-                                          ),
-                                    )
-                                  : const Icon(
-                                      Icons.image,
-                                      size: 48,
-                                      color: Colors.grey,
-                                    ),
-                            ),
-                          ),
-                          // Botón de editar
-                          Positioned(
-                            bottom: 0,
-                            right: 0,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Colors.blue,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Colors.white,
-                                  width: 2,
-                                ),
-                              ),
-                              child: IconButton(
-                                icon: const Icon(
-                                  Icons.camera_alt,
-                                  color: Colors.white,
-                                  size: 18,
-                                ),
-                                onPressed: _isUploadingImage
-                                    ? null
-                                    : _selectImage,
-                                tooltip: 'Cambiar imagen',
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          ElevatedButton.icon(
-                            onPressed: _isUploadingImage ? null : _selectImage,
-                            icon: const Icon(Icons.photo_library, size: 16),
+                          Text('Imagen del catálogo',
+                              style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: cs.onSurface.withOpacity(0.6))),
+                          const SizedBox(height: 8),
+                          OutlinedButton.icon(
+                            onPressed:
+                                _isUploadingImage ? null : _selectImage,
+                            icon: const Icon(Icons.photo_library_rounded,
+                                size: 14),
                             label: const Text('Seleccionar'),
-                            style: ElevatedButton.styleFrom(
+                            style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
+                                  horizontal: 10, vertical: 6),
                             ),
                           ),
-                          if ((_selectedPlatformFile != null ||
-                                  widget.catalog.thumbnailUrl != null) &&
-                              !_isUploadingImage) ...[
-                            const SizedBox(width: 8),
+                          if (hasThumbnail) ...[
+                            const SizedBox(height: 6),
                             OutlinedButton.icon(
                               onPressed: _removeImage,
-                              icon: const Icon(Icons.delete, size: 16),
-                              label: const Text('Eliminar'),
+                              icon: Icon(Icons.delete_rounded,
+                                  size: 14, color: cs.error),
+                              label: Text('Quitar',
+                                  style:
+                                      TextStyle(color: cs.error)),
                               style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.red,
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 6,
-                                ),
+                                    horizontal: 10, vertical: 6),
+                                side: BorderSide(color: cs.error),
                               ),
+                            ),
+                          ],
+                          if (_isUploadingImage) ...[
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: cs.primary)),
+                                const SizedBox(width: 6),
+                                Text('Subiendo...',
+                                    style: GoogleFonts.inter(
+                                        fontSize: 11)),
+                              ],
+                            ),
+                          ],
+                          if (widget.catalog.thumbnailUrl == null &&
+                              widget.catalog.getFirstImageFromRows() !=
+                                  null) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              'Usando primera imagen de las filas',
+                              style: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  color: cs.onSurface.withOpacity(0.45)),
                             ),
                           ],
                         ],
                       ),
-                      if (_isUploadingImage)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 8),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              ),
-                              SizedBox(width: 8),
-                              Text(
-                                'Subiendo imagen...',
-                                style: TextStyle(fontSize: 12),
-                              ),
-                            ],
-                          ),
-                        ),
-                      if (widget.catalog.thumbnailUrl == null &&
-                          widget.catalog.getFirstImageFromRows() != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            'Mostrando primera imagen de las filas',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 18),
+
+                // ── Campos ────────────────────────────────────────────
                 TextFormField(
-                  controller: _nameController,
+                  controller: _nameCtrl,
                   decoration: const InputDecoration(
                     labelText: 'Nombre',
-                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.label_rounded, size: 18),
                   ),
                   textInputAction: TextInputAction.next,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) {
                       return 'El nombre es obligatorio';
                     }
                     return null;
                   },
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
                 TextFormField(
-                  controller: _descriptionController,
+                  controller: _descCtrl,
                   decoration: const InputDecoration(
                     labelText: 'Descripción',
-                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.description_rounded, size: 18),
                   ),
-                  maxLines: 3,
+                  maxLines: 2,
                   textInputAction: TextInputAction.next,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
                 TextFormField(
-                  controller: _columnsController,
+                  controller: _colsCtrl,
                   decoration: const InputDecoration(
                     labelText: 'Columnas separadas por comas',
-                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.view_column_rounded, size: 18),
                   ),
                   textInputAction: TextInputAction.done,
                   onFieldSubmitted: (_) => _handleSave(),
                 ),
+                const SizedBox(height: 8),
               ],
             ),
           ),
@@ -433,18 +393,22 @@ class _EditCatalogDialogState extends State<EditCatalogDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: (_isSaving || _isUploadingImage)
+              ? null
+              : () => Navigator.of(context).pop(),
           child: const Text('Cancelar'),
         ),
-        ElevatedButton(
-          onPressed: _isUploadingImage ? null : _handleSave,
-          child: _isUploadingImage
-              ? const SizedBox(
+        FilledButton.icon(
+          onPressed: (_isSaving || _isUploadingImage) ? null : _handleSave,
+          icon: (_isSaving || _isUploadingImage)
+              ? SizedBox(
                   width: 16,
                   height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Guardar'),
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: cs.onPrimary))
+              : const Icon(Icons.save_rounded, size: 16),
+          label: Text(
+              (_isSaving || _isUploadingImage) ? 'Guardando...' : 'Guardar'),
         ),
       ],
     );

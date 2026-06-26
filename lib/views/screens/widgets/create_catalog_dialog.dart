@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../../utils/app_theme.dart';
 
 class CreateCatalogDialog extends StatefulWidget {
   final Function(String name, String description, List<String> columns) onCreate;
 
-  const CreateCatalogDialog({
-    super.key,
-    required this.onCreate,
-  });
+  const CreateCatalogDialog({super.key, required this.onCreate});
 
   @override
   State<CreateCatalogDialog> createState() => _CreateCatalogDialogState();
@@ -14,93 +13,117 @@ class CreateCatalogDialog extends StatefulWidget {
 
 class _CreateCatalogDialogState extends State<CreateCatalogDialog> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _descriptionController = TextEditingController();
-  final _columnsController = TextEditingController();
+  final _nameCtrl = TextEditingController();
+  final _descCtrl = TextEditingController();
+  final _colsCtrl = TextEditingController();
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _descriptionController.dispose();
-    _columnsController.dispose();
+    _nameCtrl.dispose();
+    _descCtrl.dispose();
+    _colsCtrl.dispose();
     super.dispose();
   }
 
   void _handleCreate() {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
 
-    final columns = _columnsController.text
+    final columns = _colsCtrl.text
         .split(',')
         .map((e) => e.trim())
         .where((e) => e.isNotEmpty)
         .toList();
 
-    // Añadir 'Fecha' como primera columna por defecto si no está ya incluida
     if (!columns.any((c) => c.toLowerCase() == 'fecha')) {
       columns.insert(0, 'Fecha');
     }
 
     widget.onCreate(
-      _nameController.text.trim(),
-      _descriptionController.text.trim(),
+      _nameCtrl.text.trim(),
+      _descCtrl.text.trim(),
       columns,
     );
-
     Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
     return AlertDialog(
-      title: const Text('Nuevo catálogo'),
-      content: Form(
-        key: _formKey,
-        child: SizedBox(
-          width: 400,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                TextFormField(
-                  controller: _nameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Nombre',
-                    border: OutlineInputBorder(),
-                  ),
-                  textInputAction: TextInputAction.next,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'El nombre es obligatorio';
-                    }
-                    return null;
-                  },
+      icon: Icon(Icons.library_add_rounded, color: cs.primary, size: 28),
+      title: Text('Nuevo catálogo',
+          style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+      contentPadding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+      content: SizedBox(
+        width: 420,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 4),
+              TextFormField(
+                controller: _nameCtrl,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Nombre',
+                  prefixIcon: Icon(Icons.label_rounded, size: 18),
                 ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _descriptionController,
-                  decoration: const InputDecoration(
-                    labelText: 'Descripción',
-                    border: OutlineInputBorder(),
-                  ),
-                  maxLines: 3,
-                  textInputAction: TextInputAction.next,
+                textInputAction: TextInputAction.next,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) {
+                    return 'El nombre es obligatorio';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 14),
+              TextFormField(
+                controller: _descCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Descripción (opcional)',
+                  prefixIcon: Icon(Icons.description_rounded, size: 18),
                 ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _columnsController,
-                  decoration: const InputDecoration(
-                    labelText: 'Columnas separadas por comas',
-                    hintText: 'Ej: Nombre, Precio, Categoría',
-                    border: OutlineInputBorder(),
-                  ),
-                  textInputAction: TextInputAction.done,
-                  onFieldSubmitted: (_) => _handleCreate(),
+                maxLines: 2,
+                textInputAction: TextInputAction.next,
+              ),
+              const SizedBox(height: 14),
+              TextFormField(
+                controller: _colsCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Columnas separadas por comas',
+                  hintText: 'Ej: Nombre, Precio, Categoría',
+                  prefixIcon: Icon(Icons.view_column_rounded, size: 18),
                 ),
-              ],
-            ),
+                textInputAction: TextInputAction.done,
+                onFieldSubmitted: (_) => _handleCreate(),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline_rounded,
+                        size: 14, color: cs.onSurface.withOpacity(0.5)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'La columna "Fecha" se añade automáticamente si no la incluyes.',
+                        style: GoogleFonts.inter(
+                            fontSize: 11,
+                            color: cs.onSurface.withOpacity(0.55)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
           ),
         ),
       ),
@@ -109,12 +132,12 @@ class _CreateCatalogDialogState extends State<CreateCatalogDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancelar'),
         ),
-        ElevatedButton(
+        FilledButton.icon(
           onPressed: _handleCreate,
-          child: const Text('Crear'),
+          icon: const Icon(Icons.add_rounded, size: 16),
+          label: const Text('Crear catálogo'),
         ),
       ],
     );
   }
 }
-

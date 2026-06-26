@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import '../../models/catalog.dart';
+import '../../utils/app_theme.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../viewmodels/admin_viewmodel.dart';
 import '../../services/mongo_service.dart';
-import '../../models/catalog.dart';
 
 class AdminStatisticsView extends StatefulWidget {
   const AdminStatisticsView({super.key});
@@ -17,154 +19,274 @@ class _AdminStatisticsViewState extends State<AdminStatisticsView> {
   bool _isLoading = false;
   int _totalRows = 0;
 
-  int get totalUsers {
-    final viewModel = context.watch<AdminViewModel>();
-    return viewModel.users.length;
-  }
-
-  int get activeUsers {
-    final viewModel = context.watch<AdminViewModel>();
-    return viewModel.users.where((u) => u.isActive ?? true).length;
-  }
-
-  int get adminUsers {
-    final viewModel = context.watch<AdminViewModel>();
-    return viewModel.users.where((u) => u.isAdmin).length;
-  }
-
-  int get totalCatalogs => _catalogs.length;
+  int get _totalUsers => context.watch<AdminViewModel>().users.length;
+  int get _activeUsers =>
+      context.watch<AdminViewModel>().users.where((u) => u.isActive ?? true).length;
+  int get _adminUsers =>
+      context.watch<AdminViewModel>().users.where((u) => u.isAdmin).length;
 
   @override
   void initState() {
     super.initState();
-    _loadStatistics();
+    _load();
   }
 
-  Future<void> _loadStatistics() async {
-    setState(() {
-      _isLoading = true;
-    });
-
+  Future<void> _load() async {
+    setState(() => _isLoading = true);
     try {
-      // Cargar usuarios si no están cargados
-      final adminViewModel = context.read<AdminViewModel>();
-      if (adminViewModel.users.isEmpty) {
-        await adminViewModel.loadUsers();
-      }
-
-      // Cargar catálogos
+      final adminVm = context.read<AdminViewModel>();
+      if (adminVm.users.isEmpty) await adminVm.loadUsers();
       if (!mounted) return;
-      final authViewModel = context.read<AuthViewModel>();
-      final user = authViewModel.currentUser;
 
+      final user = context.read<AuthViewModel>().currentUser;
       if (user != null) {
         _catalogs = await MongoService().getCatalogs(
-          user.id,
-          isAdmin: user.isAdmin,
-          userEmail: user.email,
+          user.id, isAdmin: user.isAdmin, userEmail: user.email,
         );
-
-        // Calcular total de filas
-        _totalRows = _catalogs.fold(
-          0,
-          (sum, catalog) => sum + catalog.rows.length,
-        );
+        _totalRows =
+            _catalogs.fold(0, (s, c) => s + c.rows.length);
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al cargar estadísticas: $e')),
+          SnackBar(
+            content: Text('Error al cargar estadísticas: $e'),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isWide = MediaQuery.of(context).size.width >= 700;
+
     return Column(
       children: [
+        // Toolbar
         Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
           child: Row(
             children: [
-              const Text(
-                'Estadísticas Generales',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
+              Text('Estadísticas',
+                  style: GoogleFonts.inter(
+                      fontSize: 18, fontWeight: FontWeight.w700)),
               const Spacer(),
               IconButton(
-                icon: const Icon(Icons.refresh),
-                color: Colors.blue,
-                onPressed: _isLoading ? null : _loadStatistics,
+                icon: const Icon(Icons.refresh_rounded),
+                color: cs.primary,
+                onPressed: _isLoading ? null : _load,
+                tooltip: 'Recargar',
               ),
             ],
           ),
         ),
+        const SizedBox(height: 4),
         Expanded(
           child: _isLoading
-              ? const Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      CircularProgressIndicator(),
-                      SizedBox(height: 16),
-                      Text('Cargando estadísticas...'),
-                    ],
-                  ),
-                )
+              ? Center(
+                  child: CircularProgressIndicator(color: cs.primary))
               : RefreshIndicator(
-                  onRefresh: _loadStatistics,
-                  child: ListView(
+                  onRefresh: _load,
+                  child: SingleChildScrollView(
                     padding: const EdgeInsets.all(16),
-                    children: [
-                      _StatisticCard(
-                        title: 'Total de Usuarios',
-                        value: totalUsers.toString(),
-                        icon: Icons.person,
-                        color: Colors.blue,
-                      ),
-                      const SizedBox(height: 12),
-                      _StatisticCard(
-                        title: 'Usuarios Activos',
-                        value: activeUsers.toString(),
-                        icon: Icons.check_circle,
-                        color: Colors.green,
-                      ),
-                      const SizedBox(height: 12),
-                      _StatisticCard(
-                        title: 'Usuarios Inactivos',
-                        value: (totalUsers - activeUsers).toString(),
-                        icon: Icons.circle_notifications,
-                        color: Colors.red,
-                      ),
-                      const SizedBox(height: 12),
-                      _StatisticCard(
-                        title: 'Administradores',
-                        value: adminUsers.toString(),
-                        icon: Icons.admin_panel_settings,
-                        color: Colors.orange,
-                      ),
-                      const SizedBox(height: 12),
-                      _StatisticCard(
-                        title: 'Total de Catálogos',
-                        value: totalCatalogs.toString(),
-                        icon: Icons.library_books,
-                        color: Colors.purple,
-                      ),
-                      const SizedBox(height: 12),
-                      _StatisticCard(
-                        title: 'Total de Filas',
-                        value: _totalRows.toString(),
-                        icon: Icons.list,
-                        color: Colors.indigo,
-                      ),
-                    ],
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Sección Usuarios
+                        _SectionTitle(title: 'Usuarios', cs: cs),
+                        const SizedBox(height: 10),
+                        isWide
+                            ? Row(
+                                children: [
+                                  Expanded(
+                                    child: _StatCard(
+                                      title: 'Total usuarios',
+                                      value: _totalUsers,
+                                      icon: Icons.people_rounded,
+                                      color: cs.primary,
+                                      bg: cs.primaryContainer,
+                                      fg: cs.onPrimaryContainer,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: _StatCard(
+                                      title: 'Activos',
+                                      value: _activeUsers,
+                                      icon: Icons.check_circle_rounded,
+                                      color: Colors.green.shade700,
+                                      bg: Colors.green.shade50,
+                                      fg: Colors.green.shade800,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: _StatCard(
+                                      title: 'Inactivos',
+                                      value: _totalUsers - _activeUsers,
+                                      icon: Icons.block_rounded,
+                                      color: cs.error,
+                                      bg: cs.errorContainer,
+                                      fg: cs.onErrorContainer,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: _StatCard(
+                                      title: 'Admins',
+                                      value: _adminUsers,
+                                      icon: Icons.admin_panel_settings_rounded,
+                                      color: cs.tertiary,
+                                      bg: cs.tertiaryContainer,
+                                      fg: cs.onTertiaryContainer,
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : Column(
+                                children: [
+                                  _StatCard(
+                                    title: 'Total usuarios',
+                                    value: _totalUsers,
+                                    icon: Icons.people_rounded,
+                                    color: cs.primary,
+                                    bg: cs.primaryContainer,
+                                    fg: cs.onPrimaryContainer,
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: _StatCard(
+                                          title: 'Activos',
+                                          value: _activeUsers,
+                                          icon: Icons.check_circle_rounded,
+                                          color: Colors.green.shade700,
+                                          bg: Colors.green.shade50,
+                                          fg: Colors.green.shade800,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: _StatCard(
+                                          title: 'Inactivos',
+                                          value: _totalUsers - _activeUsers,
+                                          icon: Icons.block_rounded,
+                                          color: cs.error,
+                                          bg: cs.errorContainer,
+                                          fg: cs.onErrorContainer,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 10),
+                                  _StatCard(
+                                    title: 'Administradores',
+                                    value: _adminUsers,
+                                    icon: Icons.admin_panel_settings_rounded,
+                                    color: cs.tertiary,
+                                    bg: cs.tertiaryContainer,
+                                    fg: cs.onTertiaryContainer,
+                                  ),
+                                ],
+                              ),
+
+                        const SizedBox(height: 24),
+
+                        // Sección Catálogos
+                        _SectionTitle(title: 'Catálogos', cs: cs),
+                        const SizedBox(height: 10),
+                        isWide
+                            ? Row(
+                                children: [
+                                  Expanded(
+                                    child: _StatCard(
+                                      title: 'Total catálogos',
+                                      value: _catalogs.length,
+                                      icon: Icons.library_books_rounded,
+                                      color: cs.primary,
+                                      bg: cs.primaryContainer,
+                                      fg: cs.onPrimaryContainer,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: _StatCard(
+                                      title: 'Total filas',
+                                      value: _totalRows,
+                                      icon: Icons.table_rows_rounded,
+                                      color: cs.secondary,
+                                      bg: cs.secondaryContainer,
+                                      fg: cs.onSecondaryContainer,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: _StatCard(
+                                      title: 'Media filas/catálogo',
+                                      value: _catalogs.isEmpty
+                                          ? 0
+                                          : (_totalRows / _catalogs.length)
+                                              .round(),
+                                      icon: Icons.analytics_rounded,
+                                      color: cs.tertiary,
+                                      bg: cs.tertiaryContainer,
+                                      fg: cs.onTertiaryContainer,
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : Column(
+                                children: [
+                                  _StatCard(
+                                    title: 'Total catálogos',
+                                    value: _catalogs.length,
+                                    icon: Icons.library_books_rounded,
+                                    color: cs.primary,
+                                    bg: cs.primaryContainer,
+                                    fg: cs.onPrimaryContainer,
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: _StatCard(
+                                          title: 'Total filas',
+                                          value: _totalRows,
+                                          icon: Icons.table_rows_rounded,
+                                          color: cs.secondary,
+                                          bg: cs.secondaryContainer,
+                                          fg: cs.onSecondaryContainer,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: _StatCard(
+                                          title: 'Media filas',
+                                          value: _catalogs.isEmpty
+                                              ? 0
+                                              : (_totalRows / _catalogs.length)
+                                                  .round(),
+                                          icon: Icons.analytics_rounded,
+                                          color: cs.tertiary,
+                                          bg: cs.tertiaryContainer,
+                                          fg: cs.onTertiaryContainer,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+
+                        const SizedBox(height: 32),
+                      ],
+                    ),
                   ),
                 ),
         ),
@@ -173,54 +295,83 @@ class _AdminStatisticsViewState extends State<AdminStatisticsView> {
   }
 }
 
-class _StatisticCard extends StatelessWidget {
+class _SectionTitle extends StatelessWidget {
   final String title;
-  final String value;
+  final ColorScheme cs;
+  const _SectionTitle({required this.title, required this.cs});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+            width: 3, height: 18,
+            decoration: BoxDecoration(
+                color: cs.primary,
+                borderRadius: BorderRadius.circular(2))),
+        const SizedBox(width: 8),
+        Text(title,
+            style: GoogleFonts.inter(
+                fontSize: 15, fontWeight: FontWeight.w700,
+                color: cs.onSurface)),
+      ],
+    );
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  final String title;
+  final int value;
   final IconData icon;
   final Color color;
+  final Color bg;
+  final Color fg;
 
-  const _StatisticCard({
+  const _StatCard({
     required this.title,
     required this.value,
     required this.icon,
     required this.color,
+    required this.bg,
+    required this.fg,
   });
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(8),
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
+        border: Border.all(color: cs.outlineVariant),
       ),
       child: Row(
         children: [
           Container(
-            width: 50,
-            height: 50,
+            width: 48, height: 48,
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, color: color, size: 28),
+                color: bg,
+                borderRadius: BorderRadius.circular(AppTheme.radiusMedium)),
+            child: Icon(icon, size: 26, color: fg),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Text(title,
+                    style: GoogleFonts.inter(
+                        fontSize: 11,
+                        color: cs.onSurface.withOpacity(0.55))),
+                const SizedBox(height: 3),
                 Text(
-                  title,
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  value.toString(),
+                  style: GoogleFonts.inter(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                      color: color,
+                      height: 1.0),
                 ),
               ],
             ),

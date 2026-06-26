@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../models/user.dart';
+import '../../utils/app_theme.dart';
 import 'admin_users_list_view.dart';
 import 'admin_catalogs_list_view.dart';
 import 'admin_statistics_view.dart';
@@ -19,191 +21,146 @@ class AdminPanelView extends StatefulWidget {
 class _AdminPanelViewState extends State<AdminPanelView> {
   AdminTab _selectedTab = AdminTab.users;
 
+  static const _tabs = [
+    (tab: AdminTab.users,      icon: Icons.people_rounded,       label: 'Usuarios'),
+    (tab: AdminTab.catalogs,   icon: Icons.library_books_rounded, label: 'Catálogos'),
+    (tab: AdminTab.statistics, icon: Icons.bar_chart_rounded,    label: 'Estadísticas'),
+    (tab: AdminTab.backups,    icon: Icons.cloud_upload_rounded,  label: 'Backups'),
+  ];
+
   @override
   Widget build(BuildContext context) {
-    final isMobile = MediaQuery.of(context).size.width < 600;
+    final cs = Theme.of(context).colorScheme;
+    final isWide = MediaQuery.of(context).size.width >= 600;
 
     return Scaffold(
       body: Column(
         children: [
-          // Header
+          // ── Header ─────────────────────────────────────────────────
           Container(
-            padding: EdgeInsets.all(isMobile ? 12 : 16),
+            padding: EdgeInsets.fromLTRB(20, isWide ? 20 : 14, 20, isWide ? 20 : 14),
             decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  cs.primary,
+                  cs.primary.withOpacity(0.85),
+                ],
+              ),
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Panel de Administración',
-                        style: TextStyle(
-                          fontSize: isMobile ? 20 : 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.admin_panel_settings,
-                            size: 16,
-                            color: Colors.orange,
-                          ),
-                          const SizedBox(width: 4),
-                          Flexible(
-                            child: Text(
-                              widget.currentUser.name,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Tab Navigation - Scroll horizontal si es necesario
-          Container(
-            padding: EdgeInsets.all(isMobile ? 8 : 16),
-            color: Colors.grey.shade100,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: isMobile
-                  ? Row(
-                      children: [
-                        _buildMobileTab(
-                          AdminTab.users,
-                          Icons.people,
-                          'Usuarios',
-                        ),
-                        const SizedBox(width: 8),
-                        _buildMobileTab(
-                          AdminTab.catalogs,
-                          Icons.library_books,
-                          'Catálogos',
-                        ),
-                        const SizedBox(width: 8),
-                        _buildMobileTab(
-                          AdminTab.statistics,
-                          Icons.bar_chart,
-                          'Estadísticas',
-                        ),
-                        const SizedBox(width: 8),
-                        _buildMobileTab(
-                          AdminTab.backups,
-                          Icons.backup,
-                          'Backups',
-                        ),
-                      ],
-                    )
-                  : SegmentedButton<AdminTab>(
-                      segments: const [
-                        ButtonSegment(
-                          value: AdminTab.users,
-                          label: Text('Usuarios'),
-                          icon: Icon(Icons.people),
-                        ),
-                        ButtonSegment(
-                          value: AdminTab.catalogs,
-                          label: Text('Catálogos'),
-                          icon: Icon(Icons.library_books),
-                        ),
-                        ButtonSegment(
-                          value: AdminTab.statistics,
-                          label: Text('Estadísticas'),
-                          icon: Icon(Icons.bar_chart),
-                        ),
-                        ButtonSegment(
-                          value: AdminTab.backups,
-                          label: Text('Backups'),
-                          icon: Icon(Icons.backup),
-                        ),
-                      ],
-                      selected: {_selectedTab},
-                      onSelectionChanged: (Set<AdminTab> newSelection) {
-                        setState(() {
-                          _selectedTab = newSelection.first;
-                        });
-                      },
+            child: SafeArea(
+              bottom: false,
+              child: Row(
+                children: [
+                  Container(
+                    width: isWide ? 44 : 36,
+                    height: isWide ? 44 : 36,
+                    decoration: BoxDecoration(
+                      color: cs.onPrimary.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
                     ),
+                    child: Icon(Icons.admin_panel_settings_rounded,
+                        size: isWide ? 24 : 20, color: cs.onPrimary),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Panel de Administración',
+                          style: GoogleFonts.inter(
+                            fontSize: isWide ? 20 : 17,
+                            fontWeight: FontWeight.w700,
+                            color: cs.onPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          widget.currentUser.name,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: cs.onPrimary.withOpacity(0.75),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          // Content
-          Expanded(child: _buildTabContent()),
+
+          // ── Tab bar ────────────────────────────────────────────────
+          Container(
+            color: cs.surfaceContainerLow,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: isWide
+                ? SegmentedButton<AdminTab>(
+                    segments: _tabs.map((t) => ButtonSegment<AdminTab>(
+                      value: t.tab,
+                      label: Text(t.label,
+                          style: GoogleFonts.inter(fontSize: 13)),
+                      icon: Icon(t.icon, size: 18),
+                    )).toList(),
+                    selected: {_selectedTab},
+                    onSelectionChanged: (s) =>
+                        setState(() => _selectedTab = s.first),
+                  )
+                : SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: _tabs.map((t) {
+                        final sel = _selectedTab == t.tab;
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: FilterChip(
+                            avatar: Icon(t.icon,
+                                size: 16,
+                                color: sel
+                                    ? cs.onPrimaryContainer
+                                    : cs.onSurface.withOpacity(0.6)),
+                            label: Text(t.label,
+                                style: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    fontWeight: sel
+                                        ? FontWeight.w600
+                                        : FontWeight.w400)),
+                            selected: sel,
+                            onSelected: (_) =>
+                                setState(() => _selectedTab = t.tab),
+                            showCheckmark: false,
+                            selectedColor: cs.primaryContainer,
+                            side: BorderSide(
+                                color: sel
+                                    ? cs.primary
+                                    : cs.outlineVariant),
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+          ),
+
+          Divider(height: 1, color: cs.outlineVariant),
+
+          // ── Contenido ──────────────────────────────────────────────
+          Expanded(child: _buildContent()),
         ],
       ),
     );
   }
 
-  Widget _buildMobileTab(AdminTab tab, IconData icon, String label) {
-    final isSelected = _selectedTab == tab;
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedTab = tab;
-        });
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? Theme.of(context).colorScheme.primary
-              : Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isSelected
-                ? Theme.of(context).colorScheme.primary
-                : Colors.grey.shade300,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 18,
-              color: isSelected
-                  ? Colors.white
-                  : Theme.of(context).colorScheme.onSurface,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                color: isSelected
-                    ? Colors.white
-                    : Theme.of(context).colorScheme.onSurface,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTabContent() {
-    switch (_selectedTab) {
-      case AdminTab.users:
-        return const AdminUsersListView();
-      case AdminTab.catalogs:
-        return const AdminCatalogsListView();
-      case AdminTab.statistics:
-        return const AdminStatisticsView();
-      case AdminTab.backups:
-        return const AdminBackupsView();
-    }
+  Widget _buildContent() {
+    return switch (_selectedTab) {
+      AdminTab.users      => const AdminUsersListView(),
+      AdminTab.catalogs   => const AdminCatalogsListView(),
+      AdminTab.statistics => const AdminStatisticsView(),
+      AdminTab.backups    => const AdminBackupsView(),
+    };
   }
 }

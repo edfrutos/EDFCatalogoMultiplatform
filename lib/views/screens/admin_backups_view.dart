@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart' as file_picker;
 import 'package:file_selector/file_selector.dart' as fs;
@@ -11,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../viewmodels/backup_viewmodel.dart';
 import '../../models/backup_info.dart';
+import '../../utils/app_theme.dart';
 import '../../utils/logger.dart';
 
 class AdminBackupsView extends StatefulWidget {
@@ -195,136 +197,130 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
   Widget build(BuildContext context) {
     return Consumer<BackupViewModel>(
       builder: (context, viewModel, _) {
+        final cs = Theme.of(context).colorScheme;
         return Column(
           children: [
-            // Header con botones de acción
+            // ── Header ──────────────────────────────────────────────
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
               decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+                color: cs.surfaceContainerLow,
+                border: Border(
+                    bottom: BorderSide(color: cs.outlineVariant)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Título
                   Row(
                     children: [
-                      const Icon(Icons.backup, color: Colors.blue),
+                      Icon(Icons.cloud_upload_rounded,
+                          color: cs.primary, size: 22),
                       const SizedBox(width: 8),
-                      const Expanded(
+                      Expanded(
                         child: Text(
                           'Gestión de Backups',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: GoogleFonts.inter(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 12),
-                  // Botones de acción - scroll horizontal si es necesario
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
-                        // Backups Google Drive — solo en plataformas nativas
                         if (!kIsWeb) ...[
-                          // Botón crear backup de catálogos
-                          ElevatedButton.icon(
+                          FilledButton.icon(
                             onPressed: viewModel.isLoading
                                 ? null
                                 : () => _createBackup(
-                                    context,
-                                    viewModel,
-                                    BackupType.catalogs,
-                                  ),
-                            icon: const Icon(Icons.add, size: 18),
+                                    context, viewModel, BackupType.catalogs),
+                            icon: const Icon(Icons.add_rounded, size: 18),
                             label: const Text('Catálogos'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue,
-                              foregroundColor: Colors.white,
+                            style: FilledButton.styleFrom(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
+                                  horizontal: 14, vertical: 10),
                             ),
                           ),
                           const SizedBox(width: 8),
-                          // Botón crear backup de usuarios
-                          ElevatedButton.icon(
+                          FilledButton.icon(
                             onPressed: viewModel.isLoading
                                 ? null
                                 : () => _createBackup(
-                                    context,
-                                    viewModel,
-                                    BackupType.users,
-                                  ),
-                            icon: const Icon(Icons.add, size: 18),
+                                    context, viewModel, BackupType.users),
+                            icon: const Icon(Icons.add_rounded, size: 18),
                             label: const Text('Usuarios'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
-                              foregroundColor: Colors.white,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: cs.tertiary,
+                              foregroundColor: cs.onTertiary,
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
+                                  horizontal: 14, vertical: 10),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          FilledButton.icon(
+                            onPressed: viewModel.isLoading
+                                ? null
+                                : () => _createProjectBackup(
+                                    context, viewModel),
+                            icon: const Icon(Icons.folder_copy_rounded,
+                                size: 18),
+                            label: const Text('Proyecto'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: cs.secondary,
+                              foregroundColor: cs.onSecondary,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 10),
                             ),
                           ),
                         ],
                         if (kIsWeb)
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 4),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
                             child: Text(
                               'Los backups de Google Drive solo están disponibles en la app de escritorio.',
-                              style: TextStyle(color: Colors.grey, fontSize: 13),
+                              style: GoogleFonts.inter(
+                                  color: cs.onSurface.withOpacity(0.5),
+                                  fontSize: 13),
                             ),
                           ),
-                        // Botón crear backup del proyecto — solo en plataformas nativas
-                        if (!kIsWeb) ...[
-                          const SizedBox(width: 8),
-                          ElevatedButton.icon(
-                            onPressed: viewModel.isLoading
-                                ? null
-                                : () => _createProjectBackup(context, viewModel),
-                            icon: const Icon(Icons.folder_copy, size: 18),
-                            label: const Text('Proyecto'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.orange,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
-                            ),
-                          ),
-                        ],
                       ],
                     ),
                   ),
                 ],
               ),
             ),
-            // Mensajes de éxito/error
+            // ── Mensajes de estado ───────────────────────────────────
             if (viewModel.successMessage != null)
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                color: Colors.green.shade50,
+                margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: cs.tertiaryContainer,
+                  borderRadius:
+                      BorderRadius.circular(AppTheme.radiusMedium),
+                ),
                 child: Row(
                   children: [
-                    const Icon(Icons.check_circle, color: Colors.green),
+                    Icon(Icons.check_circle_rounded,
+                        color: cs.onTertiaryContainer, size: 18),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(
-                        viewModel.successMessage!,
-                        style: const TextStyle(color: Colors.green),
-                      ),
+                      child: Text(viewModel.successMessage!,
+                          style: GoogleFonts.inter(
+                              fontSize: 13,
+                              color: cs.onTertiaryContainer)),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.close, size: 20),
-                      onPressed: () => viewModel.clearMessages(),
+                      icon: Icon(Icons.close_rounded,
+                          size: 16, color: cs.onTertiaryContainer),
+                      onPressed: viewModel.clearMessages,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
                     ),
                   ],
                 ),
@@ -332,21 +328,31 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
             if (viewModel.errorMessage != null)
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                color: Colors.red.shade50,
+                margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: cs.errorContainer,
+                  borderRadius:
+                      BorderRadius.circular(AppTheme.radiusMedium),
+                ),
                 child: Row(
                   children: [
-                    const Icon(Icons.error, color: Colors.red),
+                    Icon(Icons.error_rounded,
+                        color: cs.onErrorContainer, size: 18),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(
-                        viewModel.errorMessage!,
-                        style: const TextStyle(color: Colors.red),
-                      ),
+                      child: Text(viewModel.errorMessage!,
+                          style: GoogleFonts.inter(
+                              fontSize: 13,
+                              color: cs.onErrorContainer)),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.close, size: 20),
-                      onPressed: () => viewModel.clearMessages(),
+                      icon: Icon(Icons.close_rounded,
+                          size: 16, color: cs.onErrorContainer),
+                      onPressed: viewModel.clearMessages,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
                     ),
                   ],
                 ),
@@ -405,16 +411,16 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.cloud_off, size: 64, color: Colors.grey.shade400),
+            Icon(Icons.cloud_off, size: 64, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.35)),
             const SizedBox(height: 16),
             const Text(
               'Backups disponibles solo en la app de escritorio',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
+              style: GoogleFonts.inter(fontSize: 16, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
             ),
             const SizedBox(height: 8),
             const Text(
               'Descarga la app macOS para gestionar backups en Google Drive.',
-              style: TextStyle(fontSize: 13, color: Colors.grey),
+              style: GoogleFonts.inter(fontSize: 13, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
               textAlign: TextAlign.center,
             ),
           ],
@@ -436,12 +442,12 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                   ? Icons.library_books_outlined
                   : Icons.people_outline,
               size: 64,
-              color: Colors.grey,
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
             ),
             const SizedBox(height: 16),
             Text(
               'No hay backups de ${type == BackupType.catalogs ? 'catálogos' : 'usuarios'}',
-              style: const TextStyle(fontSize: 16, color: Colors.grey),
+              style: GoogleFonts.inter(fontSize: 16, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
             ),
           ],
         ),
@@ -460,18 +466,20 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
             child: ListTile(
               leading: CircleAvatar(
                 backgroundColor: type == BackupType.catalogs
-                    ? Colors.blue
-                    : Colors.green,
+                    ? Theme.of(context).colorScheme.primaryContainer
+                    : Theme.of(context).colorScheme.tertiaryContainer,
                 child: Icon(
                   type == BackupType.catalogs
-                      ? Icons.library_books
-                      : Icons.people,
-                  color: Colors.white,
+                      ? Icons.library_books_rounded
+                      : Icons.people_rounded,
+                  color: type == BackupType.catalogs
+                      ? Theme.of(context).colorScheme.onPrimaryContainer
+                      : Theme.of(context).colorScheme.onTertiaryContainer,
                 ),
               ),
               title: Text(
                 backup.fileName,
-                style: const TextStyle(fontWeight: FontWeight.bold),
+                style: GoogleFonts.inter(fontWeight: FontWeight.w600),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 2,
               ),
@@ -505,9 +513,9 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                     value: 'restore',
                     child: Row(
                       children: [
-                        Icon(Icons.restore, size: 20, color: Colors.blue),
+                        Icon(Icons.restore, size: 20, color: Theme.of(context).colorScheme.primary),
                         SizedBox(width: 8),
-                        Text('Restaurar', style: TextStyle(color: Colors.blue)),
+                        Text('Restaurar', style: TextStyle(color: Theme.of(context).colorScheme.primary)),
                       ],
                     ),
                   ),
@@ -525,9 +533,9 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                     value: 'delete',
                     child: Row(
                       children: [
-                        Icon(Icons.delete, size: 20, color: Colors.red),
+                        Icon(Icons.delete, size: 20, color: Theme.of(context).colorScheme.error),
                         SizedBox(width: 8),
-                        Text('Eliminar', style: TextStyle(color: Colors.red)),
+                        Text('Eliminar', style: TextStyle(color: Theme.of(context).colorScheme.error)),
                       ],
                     ),
                   ),
@@ -560,7 +568,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
             onPressed: () => Navigator.of(context).pop(false),
             child: const Text('Cancelar'),
           ),
-          ElevatedButton(
+          FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Crear Backup'),
           ),
@@ -610,7 +618,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Error: No se encontró el ID del archivo'),
-          backgroundColor: Colors.red,
+          backgroundColor: Theme.of(context).colorScheme.error,
         ),
       );
       return;
@@ -628,11 +636,11 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
             onPressed: () => Navigator.of(context).pop(false),
             child: const Text('Cancelar'),
           ),
-          ElevatedButton(
+          FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
             ),
             child: const Text('Eliminar'),
           ),
@@ -655,7 +663,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Error: No se encontró el ID del archivo'),
-          backgroundColor: Colors.red,
+          backgroundColor: Theme.of(context).colorScheme.error,
         ),
       );
       return;
@@ -679,12 +687,12 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
             if (type == BackupType.catalogs)
               const Text(
                 '⚠️ Se crearán nuevos catálogos en la base de datos. Los catálogos existentes no serán modificados.',
-                style: TextStyle(color: Colors.orange),
+                style: GoogleFonts.inter(color: Theme.of(context).colorScheme.error),
               )
             else
               const Text(
                 '⚠️ Se crearán nuevos usuarios en la base de datos. Los usuarios existentes (por email) no serán restaurados.',
-                style: TextStyle(color: Colors.orange),
+                style: GoogleFonts.inter(color: Theme.of(context).colorScheme.secondary),
               ),
           ],
         ),
@@ -693,11 +701,11 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
             onPressed: () => Navigator.of(context).pop(false),
             child: const Text('Cancelar'),
           ),
-          ElevatedButton(
+          FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
             ),
             child: const Text('Restaurar'),
           ),
@@ -741,7 +749,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(viewModel.successMessage!),
-              backgroundColor: Colors.green,
+              backgroundColor: Theme.of(context).colorScheme.tertiary,
               duration: const Duration(seconds: 5),
             ),
           );
@@ -756,7 +764,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error al restaurar backup: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
       }
@@ -786,7 +794,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
             if (Platform.isIOS)
               const Text(
                 'Puedes acceder a este archivo desde la aplicación Archivos en tu iPhone.',
-                style: TextStyle(fontStyle: FontStyle.italic, fontSize: 12),
+                style: GoogleFonts.inter(fontStyle: FontStyle.italic, fontSize: 12),
               ),
           ],
         ),
@@ -830,7 +838,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('❌ Error: No se encontró el ID del archivo'),
-            backgroundColor: Colors.red,
+            backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
       }
@@ -857,7 +865,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                 const SizedBox(height: 16),
                 const Text(
                   'Este backup contiene datos en formato JSON.',
-                  style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                  style: GoogleFonts.inter(fontSize: 12, fontStyle: FontStyle.italic),
                 ),
               ],
             ),
@@ -867,7 +875,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
               onPressed: () => Navigator.of(context).pop(false),
               child: const Text('Cerrar'),
             ),
-            ElevatedButton.icon(
+            FilledButton.icon(
               onPressed: () => Navigator.of(context).pop(true),
               icon: const Icon(Icons.download, size: 18),
               label: const Text('Descargar'),
@@ -916,7 +924,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('❌ ${viewModel.errorMessage}'),
-              backgroundColor: Colors.red,
+              backgroundColor: Theme.of(context).colorScheme.error,
               duration: const Duration(seconds: 5),
             ),
           );
@@ -929,7 +937,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('✅ Backup descargado correctamente'),
-            backgroundColor: Colors.green,
+            backgroundColor: Theme.of(context).colorScheme.tertiary,
             duration: Duration(seconds: 3),
           ),
         );
@@ -1042,7 +1050,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text('❌ No se pudo guardar el archivo${saveError != null ? ': $saveError' : ''}'),
-                backgroundColor: Colors.red,
+                backgroundColor: Theme.of(context).colorScheme.error,
                 duration: const Duration(seconds: 8),
               ),
             );
@@ -1056,7 +1064,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('❌ Error al descargar el backup: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: Theme.of(context).colorScheme.error,
             duration: const Duration(seconds: 5),
           ),
         );
@@ -1083,7 +1091,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
             onPressed: () => Navigator.of(context).pop(false),
             child: const Text('Cancelar'),
           ),
-          ElevatedButton(
+          FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Crear Backup'),
           ),
@@ -1107,7 +1115,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
               const SizedBox(height: 8),
               const Text(
                 'Esto puede tardar varios minutos',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
+                style: GoogleFonts.inter(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
               ),
             ],
           ),
@@ -1142,7 +1150,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(viewModel.successMessage!),
-              backgroundColor: Colors.green,
+              backgroundColor: Theme.of(context).colorScheme.tertiary,
               duration: const Duration(seconds: 5),
             ),
           );
@@ -1188,7 +1196,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                 child: AlertDialog(
                   title: Row(
                     children: [
-                      Icon(Icons.warning, color: Colors.orange, size: 28),
+                      Icon(Icons.warning, color: Theme.of(context).colorScheme.secondary, size: 28),
                       const SizedBox(width: 12),
                       const Expanded(
                         child: Text(
@@ -1217,17 +1225,17 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                       },
                       child: const Text('Cancelar'),
                     ),
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.folder_open),
+                    FilledButton.icon(
+                      icon: const Icon(Icons.folder_open_rounded),
                       onPressed: () {
                         Navigator.of(
                           dialogContext,
                           rootNavigator: true,
                         ).pop(true);
                       },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.orange,
-                        foregroundColor: Colors.white,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Theme.of(context).colorScheme.secondary,
+                        foregroundColor: Theme.of(context).colorScheme.onSecondary,
                       ),
                       label: FittedBox(
                         fit: BoxFit.scaleDown,
@@ -1265,7 +1273,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                         const SizedBox(height: 8),
                         const Text(
                           'Esto puede tardar varios minutos',
-                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                          style: GoogleFonts.inter(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
                         ),
                       ],
                     ),
@@ -1294,7 +1302,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(viewModel.successMessage!),
-                        backgroundColor: Colors.green,
+                        backgroundColor: Theme.of(context).colorScheme.tertiary,
                         duration: const Duration(seconds: 5),
                       ),
                     );
@@ -1304,7 +1312,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(viewModel.errorMessage!),
-                        backgroundColor: Colors.red,
+                        backgroundColor: Theme.of(context).colorScheme.error,
                         duration: const Duration(seconds: 5),
                       ),
                     );
@@ -1326,7 +1334,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(viewModel.errorMessage!),
-                backgroundColor: Colors.red,
+                backgroundColor: Theme.of(context).colorScheme.error,
                 duration: const Duration(seconds: 5),
               ),
             );
@@ -1346,16 +1354,16 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.cloud_off, size: 64, color: Colors.grey.shade400),
+            Icon(Icons.cloud_off, size: 64, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.35)),
             const SizedBox(height: 16),
             const Text(
               'Backups disponibles solo en la app de escritorio',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
+              style: GoogleFonts.inter(fontSize: 16, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
             ),
             const SizedBox(height: 8),
             const Text(
               'Descarga la app macOS para gestionar backups en Google Drive.',
-              style: TextStyle(fontSize: 13, color: Colors.grey),
+              style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
               textAlign: TextAlign.center,
             ),
           ],
@@ -1375,12 +1383,12 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
             const Icon(
               Icons.folder_copy_outlined,
               size: 64,
-              color: Colors.grey,
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
             ),
             const SizedBox(height: 16),
             const Text(
               'No hay backups del proyecto',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
+              style: TextStyle(fontSize: 16, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
             ),
           ],
         ),
@@ -1398,8 +1406,8 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
             margin: const EdgeInsets.only(bottom: 12),
             child: ListTile(
               leading: const CircleAvatar(
-                backgroundColor: Colors.orange,
-                child: Icon(Icons.folder_copy, color: Colors.white),
+                backgroundColor: Theme.of(context).colorScheme.secondary,
+                child: Icon(Icons.folder_copy_rounded, color: Theme.of(context).colorScheme.onSecondary),
               ),
               title: Text(
                 backup.fileName,
@@ -1423,7 +1431,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                   if (backup.isGoogleDrive)
                     const Text(
                       '📍 Google Drive',
-                      style: TextStyle(fontSize: 11, color: Colors.blue),
+                      style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.primary),
                     ),
                 ],
               ),
@@ -1442,9 +1450,9 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                     value: 'restore',
                     child: Row(
                       children: [
-                        Icon(Icons.restore, size: 20, color: Colors.blue),
+                        Icon(Icons.restore, size: 20, color: Theme.of(context).colorScheme.primary),
                         SizedBox(width: 8),
-                        Text('Restaurar', style: TextStyle(color: Colors.blue)),
+                        Text('Restaurar', style: TextStyle(color: Theme.of(context).colorScheme.primary)),
                       ],
                     ),
                   ),
@@ -1462,9 +1470,9 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                     value: 'delete',
                     child: Row(
                       children: [
-                        Icon(Icons.delete, size: 20, color: Colors.red),
+                        Icon(Icons.delete, size: 20, color: Theme.of(context).colorScheme.error),
                         SizedBox(width: 8),
-                        Text('Eliminar', style: TextStyle(color: Colors.red)),
+                        Text('Eliminar', style: TextStyle(color: Theme.of(context).colorScheme.error)),
                       ],
                     ),
                   ),
@@ -1503,7 +1511,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
               if (backup.isGoogleDrive)
                 const Text(
                   '📍 Google Drive',
-                  style: TextStyle(color: Colors.blue),
+                  style: TextStyle(color: Theme.of(context).colorScheme.primary),
                 ),
               const SizedBox(height: 16),
               const Text(
@@ -1518,7 +1526,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
             onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('Cerrar'),
           ),
-          ElevatedButton.icon(
+          FilledButton.icon(
             onPressed: () {
               Navigator.of(dialogContext).pop();
               // Usar outerContext (no dialogContext) para que context.mounted
@@ -1544,7 +1552,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('❌ Error: No se encontró el ID del archivo'),
-            backgroundColor: Colors.red,
+            backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
       }
@@ -1585,7 +1593,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('❌ ${viewModel.errorMessage}'),
-              backgroundColor: Colors.red,
+              backgroundColor: Theme.of(context).colorScheme.error,
               duration: const Duration(seconds: 5),
             ),
           );
@@ -1603,7 +1611,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('❌ El archivo descargado está vacío'),
-              backgroundColor: Colors.red,
+              backgroundColor: Theme.of(context).colorScheme.error,
             ),
           );
         }
@@ -1664,7 +1672,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('❌ No se pudo guardar el archivo en disco${saveError != null ? ': $saveError' : ''}'),
-            backgroundColor: Colors.red,
+            backgroundColor: Theme.of(context).colorScheme.error,
             duration: const Duration(seconds: 8),
           ),
         );
@@ -1675,7 +1683,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('❌ Error al descargar el backup: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: Theme.of(context).colorScheme.error,
             duration: const Duration(seconds: 5),
           ),
         );
@@ -1703,9 +1711,9 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
             onPressed: () => Navigator.of(context).pop(false),
             child: const Text('Cancelar'),
           ),
-          ElevatedButton(
+          FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.secondary),
             child: const Text('Restaurar'),
           ),
         ],
@@ -1749,7 +1757,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('❌ Error: No se pudo descargar el backup'),
-              backgroundColor: Colors.red,
+              backgroundColor: Theme.of(context).colorScheme.error,
               duration: Duration(seconds: 5),
             ),
           );
@@ -1782,7 +1790,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                   Text(
                     '⚠️ Asegúrate de hacer una copia de seguridad del proyecto actual antes de restaurar.',
                     style: TextStyle(
-                      color: Colors.orange,
+                      color: Theme.of(context).colorScheme.secondary,
                       fontStyle: FontStyle.italic,
                     ),
                   ),
@@ -1805,7 +1813,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('❌ Error al restaurar el backup: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: Theme.of(context).colorScheme.error,
             duration: const Duration(seconds: 5),
           ),
         );
@@ -1833,9 +1841,9 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
             onPressed: () => Navigator.of(context).pop(false),
             child: const Text('Cancelar'),
           ),
-          ElevatedButton(
+          FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
             child: const Text('Eliminar'),
           ),
         ],
@@ -1879,7 +1887,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('❌ ${viewModel.errorMessage}'),
-              backgroundColor: Colors.red,
+              backgroundColor: Theme.of(context).colorScheme.error,
               duration: const Duration(seconds: 5),
             ),
           );
@@ -1889,7 +1897,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('✅ ${viewModel.successMessage}'),
-              backgroundColor: Colors.green,
+              backgroundColor: Theme.of(context).colorScheme.tertiary,
               duration: const Duration(seconds: 5),
             ),
           );
@@ -1905,7 +1913,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('❌ Error al eliminar el backup: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: Theme.of(context).colorScheme.error,
             duration: const Duration(seconds: 5),
           ),
         );

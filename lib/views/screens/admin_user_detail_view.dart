@@ -1,19 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart' as file_picker;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:io' if (dart.library.html) 'package:edfcatalogomultiplatform/utils/io_stub.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../models/user.dart';
+import '../../models/file_type.dart';
+import '../../utils/app_theme.dart';
 import '../../viewmodels/admin_viewmodel.dart';
 import '../../services/s3_service.dart';
 import '../../services/api_service.dart';
-import '../../models/file_type.dart';
 import 'admin_user_catalogs_view.dart';
 
 class AdminUserDetailView extends StatefulWidget {
   final User user;
-
   const AdminUserDetailView({super.key, required this.user});
 
   @override
@@ -21,52 +22,58 @@ class AdminUserDetailView extends StatefulWidget {
 }
 
 class _AdminUserDetailViewState extends State<AdminUserDetailView> {
-  late TextEditingController _emailController;
-  late TextEditingController _usernameController;
-  late TextEditingController _nameController;
-  late TextEditingController _fullNameController;
-  late TextEditingController _phoneController;
-  late TextEditingController _companyController;
-  late TextEditingController _addressController;
-  late TextEditingController _occupationController;
+  late TextEditingController _emailCtrl;
+  late TextEditingController _usernameCtrl;
+  late TextEditingController _nameCtrl;
+  late TextEditingController _fullNameCtrl;
+  late TextEditingController _phoneCtrl;
+  late TextEditingController _companyCtrl;
+  late TextEditingController _addressCtrl;
+  late TextEditingController _occupationCtrl;
 
   late bool _isAdmin;
   late bool _isActive;
   bool _isEditing = false;
+  bool _isSaving = false;
 
-  // Foto de perfil (PlatformFile funciona en web y nativo)
   file_picker.PlatformFile? _selectedPlatformFile;
   bool _isUploadingImage = false;
   bool _shouldRemoveImage = false;
-
-  // URL pre-firmada para mostrar la imagen desde S3
   String? _presignedImageUrl;
 
   @override
   void initState() {
     super.initState();
-    _initializeControllers();
+    _initControllers();
     _loadPresignedUrl(widget.user.profileImageUrl);
   }
 
-  void _initializeControllers() {
-    _emailController = TextEditingController(text: widget.user.email);
-    _usernameController = TextEditingController(text: widget.user.username);
-    _nameController = TextEditingController(text: widget.user.name);
-    _fullNameController = TextEditingController(
-      text: widget.user.fullName ?? '',
-    );
-    _phoneController = TextEditingController(text: widget.user.phone ?? '');
-    _companyController = TextEditingController(text: widget.user.company ?? '');
-    _addressController = TextEditingController(text: widget.user.address ?? '');
-    _occupationController = TextEditingController(
-      text: widget.user.occupation ?? '',
-    );
+  void _initControllers() {
+    _emailCtrl = TextEditingController(text: widget.user.email);
+    _usernameCtrl = TextEditingController(text: widget.user.username);
+    _nameCtrl = TextEditingController(text: widget.user.name);
+    _fullNameCtrl = TextEditingController(text: widget.user.fullName ?? '');
+    _phoneCtrl = TextEditingController(text: widget.user.phone ?? '');
+    _companyCtrl = TextEditingController(text: widget.user.company ?? '');
+    _addressCtrl = TextEditingController(text: widget.user.address ?? '');
+    _occupationCtrl = TextEditingController(text: widget.user.occupation ?? '');
     _isAdmin = widget.user.isAdmin;
     _isActive = widget.user.isActive ?? true;
   }
 
-  /// Genera una URL pre-firmada para mostrar la imagen desde S3
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    _usernameCtrl.dispose();
+    _nameCtrl.dispose();
+    _fullNameCtrl.dispose();
+    _phoneCtrl.dispose();
+    _companyCtrl.dispose();
+    _addressCtrl.dispose();
+    _occupationCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadPresignedUrl(String? rawUrl) async {
     if (rawUrl == null) {
       if (mounted) setState(() => _presignedImageUrl = null);
@@ -74,62 +81,38 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
     }
     try {
       final uri = await S3Service().getPresignedUrl(key: rawUrl);
-      if (mounted) {
-        setState(() => _presignedImageUrl = uri.toString());
-      }
-    } catch (e) {
-      print('❌ Error generando URL pre-firmada: $e');
-    }
+      if (mounted) setState(() => _presignedImageUrl = uri.toString());
+    } catch (_) {}
   }
 
-  @override
-  void dispose() {
-    _emailController.dispose();
-    _usernameController.dispose();
-    _nameController.dispose();
-    _fullNameController.dispose();
-    _phoneController.dispose();
-    _companyController.dispose();
-    _addressController.dispose();
-    _occupationController.dispose();
-    super.dispose();
-  }
-
-  bool get _hasChanges {
-    return _emailController.text != widget.user.email ||
-        _usernameController.text != widget.user.username ||
-        _nameController.text != widget.user.name ||
-        _fullNameController.text != (widget.user.fullName ?? '') ||
-        _phoneController.text != (widget.user.phone ?? '') ||
-        _companyController.text != (widget.user.company ?? '') ||
-        _addressController.text != (widget.user.address ?? '') ||
-        _occupationController.text != (widget.user.occupation ?? '') ||
-        _isAdmin != widget.user.isAdmin ||
-        _isActive != (widget.user.isActive ?? true) ||
-        _selectedPlatformFile != null ||
-        _shouldRemoveImage;
-  }
+  bool get _hasChanges =>
+      _emailCtrl.text != widget.user.email ||
+      _usernameCtrl.text != widget.user.username ||
+      _nameCtrl.text != widget.user.name ||
+      _fullNameCtrl.text != (widget.user.fullName ?? '') ||
+      _phoneCtrl.text != (widget.user.phone ?? '') ||
+      _companyCtrl.text != (widget.user.company ?? '') ||
+      _addressCtrl.text != (widget.user.address ?? '') ||
+      _occupationCtrl.text != (widget.user.occupation ?? '') ||
+      _isAdmin != widget.user.isAdmin ||
+      _isActive != (widget.user.isActive ?? true) ||
+      _selectedPlatformFile != null ||
+      _shouldRemoveImage;
 
   Future<void> _handleSave() async {
     if (!_hasChanges) {
-      setState(() {
-        _isEditing = false;
-      });
+      setState(() => _isEditing = false);
       return;
     }
 
-    final viewModel = context.read<AdminViewModel>();
-
+    setState(() => _isSaving = true);
+    final vm = context.read<AdminViewModel>();
     String? profileImageUrl = widget.user.profileImageUrl;
 
-    // Si se debe eliminar la imagen, establecer como null
     if (_shouldRemoveImage && _selectedPlatformFile == null) {
       profileImageUrl = null;
-    }
-    // Subir imagen si hay una nueva seleccionada
-    else if (_selectedPlatformFile != null) {
+    } else if (_selectedPlatformFile != null) {
       setState(() => _isUploadingImage = true);
-
       try {
         final pf = _selectedPlatformFile!;
         if (kIsWeb) {
@@ -147,76 +130,57 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
             fileType: FileType.image,
           );
         }
-        print('✅ Imagen de perfil subida: $profileImageUrl');
       } catch (e) {
-        setState(() => _isUploadingImage = false);
+        setState(() { _isUploadingImage = false; _isSaving = false; });
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error al subir imagen: $e'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Error al subir imagen: $e'),
+            behavior: SnackBarBehavior.floating,
+          ));
         }
         return;
       }
-
       setState(() => _isUploadingImage = false);
     }
 
-    final updatedUser = User(
+    final updated = User(
       id: widget.user.id,
-      email: _emailController.text.trim(),
-      username: _usernameController.text.trim(),
-      name: _nameController.text.trim(),
+      email: _emailCtrl.text.trim(),
+      username: _usernameCtrl.text.trim(),
+      name: _nameCtrl.text.trim(),
       isAdmin: _isAdmin,
-      fullName: _fullNameController.text.trim().isEmpty
-          ? null
-          : _fullNameController.text.trim(),
-      phone: _phoneController.text.trim().isEmpty
-          ? null
-          : _phoneController.text.trim(),
-      company: _companyController.text.trim().isEmpty
-          ? null
-          : _companyController.text.trim(),
-      address: _addressController.text.trim().isEmpty
-          ? null
-          : _addressController.text.trim(),
-      occupation: _occupationController.text.trim().isEmpty
-          ? null
-          : _occupationController.text.trim(),
+      fullName: _fullNameCtrl.text.trim().isEmpty ? null : _fullNameCtrl.text.trim(),
+      phone: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
+      company: _companyCtrl.text.trim().isEmpty ? null : _companyCtrl.text.trim(),
+      address: _addressCtrl.text.trim().isEmpty ? null : _addressCtrl.text.trim(),
+      occupation: _occupationCtrl.text.trim().isEmpty ? null : _occupationCtrl.text.trim(),
       isActive: _isActive,
       profileImageUrl: profileImageUrl,
       createdAt: widget.user.createdAt,
       lastLoginAt: widget.user.lastLoginAt,
     );
 
-    await viewModel.updateUser(updatedUser);
-
-    // Recargar URL pre-firmada con la nueva imagen
+    await vm.updateUser(updated);
     await _loadPresignedUrl(profileImageUrl);
 
-    // Limpiar archivo seleccionado y flags después de guardar
-    setState(() {
-      _selectedPlatformFile = null;
-      _shouldRemoveImage = false;
-      _isEditing = false;
-    });
+    if (mounted) {
+      setState(() {
+        _selectedPlatformFile = null;
+        _shouldRemoveImage = false;
+        _isEditing = false;
+        _isSaving = false;
+      });
+    }
   }
 
-  /// Seleccionar foto de perfil usando file_picker
   Future<void> _selectProfileImage() async {
     try {
-      file_picker.FilePickerResult? result = await file_picker
-          .FilePicker
-          .platform
-          .pickFiles(
-            type: file_picker.FileType.custom,
-            allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'],
-            allowMultiple: false,
-            withData: true,
-          );
-
+      final result = await file_picker.FilePicker.platform.pickFiles(
+        type: file_picker.FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'],
+        allowMultiple: false,
+        withData: true,
+      );
       if (result != null && result.files.isNotEmpty) {
         final pf = result.files.single;
         if (kIsWeb ? pf.bytes != null : pf.path != null) {
@@ -224,434 +188,645 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
             _selectedPlatformFile = pf;
             _shouldRemoveImage = false;
           });
-          print('✅ Imagen seleccionada: ${pf.name}');
         }
-      } else {
-        print('⚠️ No se seleccionó ninguna imagen');
       }
     } catch (e) {
-      print('❌ Error al seleccionar imagen: $e');
       if (mounted) {
-        final isLinux = !kIsWeb && Platform.isLinux;
-        final errorMessage = isLinux && e.toString().contains('zenity')
-            ? 'Error: zenity no está disponible. En Docker, el selector de archivos puede no funcionar. Por favor, reconstruye la imagen Docker o usa la aplicación fuera de Docker.'
-            : 'Error al seleccionar imagen: $e';
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Error al seleccionar imagen: $e'),
+          behavior: SnackBarBehavior.floating,
+        ));
       }
     }
   }
 
-  /// Eliminar foto de perfil
-  void _removeProfileImage() {
-    setState(() {
-      _selectedPlatformFile = null;
-      _shouldRemoveImage = true;
-      _presignedImageUrl = null;
-    });
+  void _removeProfileImage() => setState(() {
+        _selectedPlatformFile = null;
+        _shouldRemoveImage = true;
+        _presignedImageUrl = null;
+      });
+
+  ImageProvider? _getAvatarImage() {
+    if (_selectedPlatformFile != null) {
+      if (kIsWeb && _selectedPlatformFile!.bytes != null) {
+        return MemoryImage(_selectedPlatformFile!.bytes!);
+      } else if (!kIsWeb && _selectedPlatformFile!.path != null) {
+        return FileImage(File(_selectedPlatformFile!.path!) as dynamic)
+            as ImageProvider;
+      }
+    }
+    if (_presignedImageUrl != null && !_shouldRemoveImage) {
+      return CachedNetworkImageProvider(_presignedImageUrl!);
+    }
+    return null;
+  }
+
+  String _initials() {
+    final n = widget.user.name.trim();
+    if (n.isEmpty) return 'U';
+    final parts = n.split(' ');
+    if (parts.length >= 2) return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    return n[0].toUpperCase();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Detalles del Usuario'),
-            Text(
-              widget.user.email,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.normal,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          if (_isEditing)
-            TextButton(
-              onPressed: () {
-                _initializeControllers();
-                setState(() {
-                  _isEditing = false;
-                  _selectedPlatformFile = null;
-                  _shouldRemoveImage = false;
-                });
-              },
-              child: const Text('Cancelar'),
-            ),
-          IconButton(
-            icon: Icon(_isEditing ? Icons.save : Icons.edit),
-            onPressed: _isEditing
-                ? _handleSave
-                : () {
-                    setState(() {
-                      _isEditing = true;
-                    });
-                  },
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            // Avatar con foto de perfil
-            Center(
-              child: Column(
-                children: [
-                  Stack(
-                    children: [
-                      // Imagen de perfil o placeholder
-                      CircleAvatar(
-                        radius: 50,
-                        backgroundColor: Colors.blue.shade100,
-                        backgroundImage: _selectedPlatformFile != null
-                            ? (kIsWeb
-                                ? MemoryImage(_selectedPlatformFile!.bytes!)
-                                : FileImage(File(_selectedPlatformFile!.path!) as dynamic))
-                                  as ImageProvider
-                            : (_presignedImageUrl != null && !_shouldRemoveImage)
-                            ? CachedNetworkImageProvider(_presignedImageUrl!)
-                            : null,
-                        child: _selectedPlatformFile == null &&
-                                (_presignedImageUrl == null || _shouldRemoveImage)
-                            ? Text(
-                                widget.user.name.isNotEmpty
-                                    ? widget.user.name[0].toUpperCase()
-                                    : 'U',
-                                style: const TextStyle(
-                                  fontSize: 40,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              )
-                            : null,
-                      ),
-                      // Botón de editar foto (solo en modo edición)
-                      if (_isEditing)
-                        Positioned(
-                          bottom: 0,
-                          right: 0,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.blue,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 3),
-                            ),
-                            child: IconButton(
-                              icon: const Icon(
-                                Icons.camera_alt,
-                                color: Colors.white,
-                                size: 20,
-                              ),
-                              onPressed: _isUploadingImage
-                                  ? null
-                                  : _selectProfileImage,
-                              tooltip: 'Cambiar foto',
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  // Botones de acción (solo en modo edición)
-                  if (_isEditing) ...[
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        ElevatedButton.icon(
-                          onPressed: _isUploadingImage
-                              ? null
-                              : _selectProfileImage,
-                          icon: const Icon(Icons.photo_library, size: 18),
-                          label: const Text('Seleccionar Foto'),
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 8,
-                            ),
-                          ),
-                        ),
-                        if ((_selectedPlatformFile != null ||
-                                widget.user.profileImageUrl != null) &&
-                            !_isUploadingImage) ...[
-                          const SizedBox(width: 12),
-                          OutlinedButton.icon(
-                            onPressed: _removeProfileImage,
-                            icon: const Icon(Icons.delete, size: 18),
-                            label: const Text('Eliminar'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.red,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 8,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    // Indicador de carga de imagen
-                    if (_isUploadingImage) ...[
-                      const SizedBox(height: 12),
-                      const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                          SizedBox(width: 8),
-                          Text(
-                            'Subiendo imagen...',
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            // Edit/View Toggle
-            SegmentedButton<bool>(
-              segments: const [
-                ButtonSegment(value: false, label: Text('Ver')),
-                ButtonSegment(value: true, label: Text('Editar')),
+    final cs = Theme.of(context).colorScheme;
+    final isWide = MediaQuery.of(context).size.width > 700;
+
+    return Consumer<AdminViewModel>(
+      builder: (context, vm, _) {
+        return Scaffold(
+          appBar: AppBar(
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Detalles del usuario',
+                    style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
+                Text(widget.user.email,
+                    style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                        color: cs.onSurface.withOpacity(0.6))),
               ],
-              selected: {_isEditing},
-              onSelectionChanged: (Set<bool> selection) {
-                setState(() {
-                  _isEditing = selection.first;
-                });
-              },
             ),
-            const SizedBox(height: 24),
-            // Form Fields
-            if (_isEditing) ...[
-              _buildEditableSection('Rol', Icons.admin_panel_settings, [
-                SegmentedButton<bool>(
-                  segments: const [
-                    ButtonSegment(value: false, label: Text('Usuario Normal')),
-                    ButtonSegment(value: true, label: Text('Administrador')),
-                  ],
-                  selected: {_isAdmin},
-                  onSelectionChanged: (Set<bool> selection) {
-                    setState(() {
-                      _isAdmin = selection.first;
-                    });
-                  },
+            actions: [
+              if (_isEditing)
+                TextButton.icon(
+                  onPressed: _isSaving
+                      ? null
+                      : () {
+                          _initControllers();
+                          setState(() {
+                            _isEditing = false;
+                            _selectedPlatformFile = null;
+                            _shouldRemoveImage = false;
+                          });
+                        },
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                  label: const Text('Cancelar'),
                 ),
-              ]),
-              const SizedBox(height: 16),
-              _buildEditableSection('Estado', Icons.circle, [
-                SwitchListTile(
-                  title: const Text('Usuario Activo'),
-                  value: _isActive,
-                  onChanged: (value) {
-                    setState(() {
-                      _isActive = value;
-                    });
-                  },
+              if (!_isEditing)
+                IconButton(
+                  icon: const Icon(Icons.edit_rounded),
+                  tooltip: 'Editar',
+                  onPressed: () => setState(() => _isEditing = true),
                 ),
-              ]),
-            ] else ...[
-              _buildReadOnlySection('Rol', Icons.admin_panel_settings, [
-                Chip(
-                  label: Text(_isAdmin ? 'Administrador' : 'Usuario Normal'),
-                  avatar: Icon(
-                    _isAdmin ? Icons.admin_panel_settings : Icons.person,
-                  ),
-                ),
-              ]),
-              const SizedBox(height: 16),
-              _buildReadOnlySection('Estado', Icons.circle, [
-                Chip(
-                  label: Text(_isActive ? 'Activo' : 'Inactivo'),
-                  avatar: Icon(
-                    _isActive ? Icons.check_circle : Icons.circle_notifications,
-                  ),
-                ),
-              ]),
+              const SizedBox(width: 8),
             ],
-            const SizedBox(height: 16),
-            _buildTextField(
-              'Email',
-              Icons.email,
-              _emailController,
-              enabled: _isEditing,
-            ),
-            const SizedBox(height: 16),
-            _buildTextField(
-              'Usuario',
-              Icons.person,
-              _usernameController,
-              enabled: _isEditing,
-            ),
-            const SizedBox(height: 16),
-            _buildTextField(
-              'Nombre',
-              Icons.badge,
-              _nameController,
-              enabled: _isEditing,
-            ),
-            const SizedBox(height: 16),
-            _buildTextField(
-              'Nombre Completo',
-              Icons.account_box,
-              _fullNameController,
-              enabled: _isEditing,
-              optional: true,
-            ),
-            const SizedBox(height: 16),
-            _buildTextField(
-              'Teléfono',
-              Icons.phone,
-              _phoneController,
-              enabled: _isEditing,
-              optional: true,
-              keyboardType: TextInputType.phone,
-            ),
-            const SizedBox(height: 16),
-            _buildTextField(
-              'Empresa',
-              Icons.business,
-              _companyController,
-              enabled: _isEditing,
-              optional: true,
-            ),
-            const SizedBox(height: 16),
-            _buildTextField(
-              'Ocupación',
-              Icons.work,
-              _occupationController,
-              enabled: _isEditing,
-              optional: true,
-            ),
-            const SizedBox(height: 16),
-            _buildTextField(
-              'Dirección',
-              Icons.location_on,
-              _addressController,
-              enabled: _isEditing,
-              optional: true,
-              maxLines: 3,
-            ),
-            const SizedBox(height: 24),
-            // ── Sección catálogos ──────────────────────────────────────────
-            OutlinedButton.icon(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => AdminUserCatalogsView(user: widget.user),
+          ),
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 640),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // ── Avatar ────────────────────────────────────────────
+                    Center(
+                      child: Column(
+                        children: [
+                          Stack(
+                            children: [
+                              CircleAvatar(
+                                radius: 52,
+                                backgroundColor: cs.primaryContainer,
+                                backgroundImage: _getAvatarImage(),
+                                child: _getAvatarImage() == null
+                                    ? Text(_initials(),
+                                        style: GoogleFonts.inter(
+                                            fontSize: 36,
+                                            fontWeight: FontWeight.w700,
+                                            color: cs.onPrimaryContainer))
+                                    : null,
+                              ),
+                              if (_isEditing)
+                                Positioned(
+                                  bottom: 0,
+                                  right: 0,
+                                  child: GestureDetector(
+                                    onTap: _isUploadingImage
+                                        ? null
+                                        : _selectProfileImage,
+                                    child: Container(
+                                      width: 36,
+                                      height: 36,
+                                      decoration: BoxDecoration(
+                                        color: cs.primary,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                            color: cs.surface, width: 3),
+                                      ),
+                                      child: Icon(Icons.camera_alt_rounded,
+                                          size: 18, color: cs.onPrimary),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Text(widget.user.name,
+                              style: GoogleFonts.inter(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w700)),
+                          const SizedBox(height: 4),
+                          Text(widget.user.email,
+                              style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  color: cs.onSurface.withOpacity(0.55))),
+                          const SizedBox(height: 10),
+                          // Badges
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (widget.user.isAdmin)
+                                _Chip(
+                                    label: 'Admin',
+                                    icon: Icons.admin_panel_settings_rounded,
+                                    bg: cs.tertiaryContainer,
+                                    fg: cs.onTertiaryContainer),
+                              if (!(widget.user.isActive ?? true))
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 6),
+                                  child: _Chip(
+                                      label: 'Inactivo',
+                                      icon: Icons.block_rounded,
+                                      bg: cs.errorContainer,
+                                      fg: cs.onErrorContainer),
+                                ),
+                            ],
+                          ),
+                          // Botón quitar foto
+                          if (_isEditing &&
+                              (_selectedPlatformFile != null ||
+                                  (widget.user.profileImageUrl != null &&
+                                      !_shouldRemoveImage))) ...[
+                            const SizedBox(height: 10),
+                            OutlinedButton.icon(
+                              onPressed: _removeProfileImage,
+                              icon: Icon(Icons.delete_rounded,
+                                  size: 16, color: cs.error),
+                              label: Text('Quitar foto',
+                                  style: GoogleFonts.inter(color: cs.error)),
+                              style: OutlinedButton.styleFrom(
+                                  side: BorderSide(color: cs.error)),
+                            ),
+                          ],
+                          if (_isUploadingImage) ...[
+                            const SizedBox(height: 10),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: cs.primary)),
+                                const SizedBox(width: 8),
+                                Text('Subiendo imagen...',
+                                    style: GoogleFonts.inter(fontSize: 12)),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+
+                    // ── Rol y estado ──────────────────────────────────────
+                    _SectionCard(
+                      title: 'Rol y estado',
+                      icon: Icons.verified_user_rounded,
+                      cs: cs,
+                      child: Column(
+                        children: [
+                          // Rol
+                          Row(children: [
+                            Icon(Icons.admin_panel_settings_rounded,
+                                size: 18,
+                                color: cs.onSurface.withOpacity(0.5)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                                child: Text('Rol',
+                                    style: GoogleFonts.inter(
+                                        fontSize: 13,
+                                        color: cs.onSurface.withOpacity(0.6)))),
+                          ]),
+                          const SizedBox(height: 8),
+                          _isEditing
+                              ? SegmentedButton<bool>(
+                                  segments: const [
+                                    ButtonSegment(
+                                        value: false,
+                                        label: Text('Usuario'),
+                                        icon: Icon(Icons.person_rounded,
+                                            size: 16)),
+                                    ButtonSegment(
+                                        value: true,
+                                        label: Text('Administrador'),
+                                        icon: Icon(
+                                            Icons.admin_panel_settings_rounded,
+                                            size: 16)),
+                                  ],
+                                  selected: {_isAdmin},
+                                  onSelectionChanged: (s) =>
+                                      setState(() => _isAdmin = s.first),
+                                )
+                              : Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: _Chip(
+                                    label: _isAdmin
+                                        ? 'Administrador'
+                                        : 'Usuario normal',
+                                    icon: _isAdmin
+                                        ? Icons.admin_panel_settings_rounded
+                                        : Icons.person_rounded,
+                                    bg: _isAdmin
+                                        ? cs.tertiaryContainer
+                                        : cs.secondaryContainer,
+                                    fg: _isAdmin
+                                        ? cs.onTertiaryContainer
+                                        : cs.onSecondaryContainer,
+                                  ),
+                                ),
+                          const SizedBox(height: 14),
+                          // Estado activo
+                          _isEditing
+                              ? SwitchListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: Text('Usuario activo',
+                                      style: GoogleFonts.inter(fontSize: 14)),
+                                  subtitle: Text(
+                                      _isActive
+                                          ? 'Puede iniciar sesión'
+                                          : 'No puede iniciar sesión',
+                                      style: GoogleFonts.inter(fontSize: 12)),
+                                  value: _isActive,
+                                  onChanged: (v) =>
+                                      setState(() => _isActive = v),
+                                )
+                              : Row(
+                                  children: [
+                                    Icon(
+                                        _isActive
+                                            ? Icons.check_circle_rounded
+                                            : Icons.block_rounded,
+                                        size: 18,
+                                        color: _isActive
+                                            ? Colors.green
+                                            : cs.error),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      _isActive
+                                          ? 'Cuenta activa'
+                                          : 'Cuenta inactiva',
+                                      style: GoogleFonts.inter(
+                                          fontSize: 13,
+                                          color: _isActive
+                                              ? Colors.green
+                                              : cs.error),
+                                    ),
+                                  ],
+                                ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // ── Información de cuenta ─────────────────────────────
+                    _SectionCard(
+                      title: 'Información de cuenta',
+                      icon: Icons.manage_accounts_rounded,
+                      cs: cs,
+                      child: isWide
+                          ? Column(
+                              children: [
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                        child: _Field(
+                                            label: 'Email',
+                                            icon: Icons.email_rounded,
+                                            ctrl: _emailCtrl,
+                                            enabled: _isEditing,
+                                            keyboardType:
+                                                TextInputType.emailAddress,
+                                            cs: cs)),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                        child: _Field(
+                                            label: 'Usuario',
+                                            icon: Icons.alternate_email_rounded,
+                                            ctrl: _usernameCtrl,
+                                            enabled: _isEditing,
+                                            cs: cs)),
+                                  ],
+                                ),
+                                const SizedBox(height: 14),
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                        child: _Field(
+                                            label: 'Nombre',
+                                            icon: Icons.badge_rounded,
+                                            ctrl: _nameCtrl,
+                                            enabled: _isEditing,
+                                            cs: cs)),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                        child: _Field(
+                                            label: 'Nombre completo',
+                                            icon: Icons.account_box_rounded,
+                                            ctrl: _fullNameCtrl,
+                                            enabled: _isEditing,
+                                            optional: true,
+                                            cs: cs)),
+                                  ],
+                                ),
+                              ],
+                            )
+                          : Column(
+                              children: [
+                                _Field(
+                                    label: 'Email',
+                                    icon: Icons.email_rounded,
+                                    ctrl: _emailCtrl,
+                                    enabled: _isEditing,
+                                    keyboardType: TextInputType.emailAddress,
+                                    cs: cs),
+                                const SizedBox(height: 14),
+                                _Field(
+                                    label: 'Usuario',
+                                    icon: Icons.alternate_email_rounded,
+                                    ctrl: _usernameCtrl,
+                                    enabled: _isEditing,
+                                    cs: cs),
+                                const SizedBox(height: 14),
+                                _Field(
+                                    label: 'Nombre',
+                                    icon: Icons.badge_rounded,
+                                    ctrl: _nameCtrl,
+                                    enabled: _isEditing,
+                                    cs: cs),
+                                const SizedBox(height: 14),
+                                _Field(
+                                    label: 'Nombre completo',
+                                    icon: Icons.account_box_rounded,
+                                    ctrl: _fullNameCtrl,
+                                    enabled: _isEditing,
+                                    optional: true,
+                                    cs: cs),
+                              ],
+                            ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // ── Datos de contacto ─────────────────────────────────
+                    _SectionCard(
+                      title: 'Datos de contacto',
+                      icon: Icons.contact_phone_rounded,
+                      cs: cs,
+                      child: Column(
+                        children: [
+                          if (isWide)
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                    child: _Field(
+                                        label: 'Teléfono',
+                                        icon: Icons.phone_rounded,
+                                        ctrl: _phoneCtrl,
+                                        enabled: _isEditing,
+                                        optional: true,
+                                        keyboardType: TextInputType.phone,
+                                        cs: cs)),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                    child: _Field(
+                                        label: 'Ocupación',
+                                        icon: Icons.work_rounded,
+                                        ctrl: _occupationCtrl,
+                                        enabled: _isEditing,
+                                        optional: true,
+                                        cs: cs)),
+                              ],
+                            )
+                          else ...[
+                            _Field(
+                                label: 'Teléfono',
+                                icon: Icons.phone_rounded,
+                                ctrl: _phoneCtrl,
+                                enabled: _isEditing,
+                                optional: true,
+                                keyboardType: TextInputType.phone,
+                                cs: cs),
+                            const SizedBox(height: 14),
+                            _Field(
+                                label: 'Ocupación',
+                                icon: Icons.work_rounded,
+                                ctrl: _occupationCtrl,
+                                enabled: _isEditing,
+                                optional: true,
+                                cs: cs),
+                          ],
+                          const SizedBox(height: 14),
+                          _Field(
+                              label: 'Empresa',
+                              icon: Icons.business_rounded,
+                              ctrl: _companyCtrl,
+                              enabled: _isEditing,
+                              optional: true,
+                              cs: cs),
+                          const SizedBox(height: 14),
+                          _Field(
+                              label: 'Dirección',
+                              icon: Icons.location_on_rounded,
+                              ctrl: _addressCtrl,
+                              enabled: _isEditing,
+                              optional: true,
+                              maxLines: 2,
+                              cs: cs),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // ── Catálogos del usuario ─────────────────────────────
+                    OutlinedButton.icon(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              AdminUserCatalogsView(user: widget.user),
+                        ),
+                      ),
+                      icon: const Icon(Icons.library_books_rounded),
+                      label: const Text('Ver catálogos del usuario'),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 48),
+                        shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.radiusMedium),
+                        ),
+                      ),
+                    ),
+
+                    // ── Guardar ────────────────────────────────────────────
+                    if (_isEditing) ...[
+                      const SizedBox(height: 20),
+                      FilledButton.icon(
+                        onPressed: (_isSaving || _isUploadingImage)
+                            ? null
+                            : _handleSave,
+                        icon: _isSaving
+                            ? SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: cs.onPrimary))
+                            : const Icon(Icons.save_rounded),
+                        label: Text(_isSaving
+                            ? 'Guardando...'
+                            : 'Guardar cambios'),
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(double.infinity, 52),
+                          shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusMedium),
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 32),
+                  ],
                 ),
               ),
-              icon: const Icon(Icons.table_chart_outlined),
-              label: const Text('Ver catálogos del usuario'),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 48),
-              ),
             ),
-          ],
-        ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ── Widgets internos ──────────────────────────────────────────────────────────
+
+class _SectionCard extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final Widget child;
+  final ColorScheme cs;
+
+  const _SectionCard({
+    required this.title,
+    required this.icon,
+    required this.child,
+    required this.cs,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
+        border: Border.all(color: cs.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 18, color: cs.primary),
+              const SizedBox(width: 8),
+              Text(title,
+                  style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurface)),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Divider(height: 1, color: cs.outlineVariant),
+          const SizedBox(height: 14),
+          child,
+        ],
       ),
     );
   }
+}
 
-  Widget _buildTextField(
-    String label,
-    IconData icon,
-    TextEditingController controller, {
-    bool enabled = true,
-    bool optional = false,
-    TextInputType? keyboardType,
-    int maxLines = 1,
-  }) {
+class _Field extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final TextEditingController ctrl;
+  final bool enabled;
+  final bool optional;
+  final TextInputType? keyboardType;
+  final int maxLines;
+  final ColorScheme cs;
+
+  const _Field({
+    required this.label,
+    required this.icon,
+    required this.ctrl,
+    required this.cs,
+    this.enabled = true,
+    this.optional = false,
+    this.keyboardType,
+    this.maxLines = 1,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return TextField(
-      controller: controller,
+      controller: ctrl,
       enabled: enabled,
       keyboardType: keyboardType,
       maxLines: maxLines,
       decoration: InputDecoration(
-        labelText: '$label${optional ? ' (Opcional)' : ''}',
-        prefixIcon: Icon(icon),
-        border: const OutlineInputBorder(),
+        labelText: optional ? '$label (opcional)' : label,
+        prefixIcon: Icon(icon, size: 18),
       ),
     );
   }
+}
 
-  Widget _buildEditableSection(
-    String title,
-    IconData icon,
-    List<Widget> children,
-  ) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ...children,
-        ],
-      ),
-    );
-  }
+class _Chip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color bg;
+  final Color fg;
 
-  Widget _buildReadOnlySection(
-    String title,
-    IconData icon,
-    List<Widget> children,
-  ) {
+  const _Chip({
+    required this.label,
+    required this.icon,
+    required this.bg,
+    required this.fg,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+          color: bg,
+          borderRadius: BorderRadius.circular(AppTheme.radiusFull)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              Icon(icon, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ...children,
+          Icon(icon, size: 14, color: fg),
+          const SizedBox(width: 5),
+          Text(label,
+              style: GoogleFonts.inter(
+                  fontSize: 12, fontWeight: FontWeight.w600, color: fg)),
         ],
       ),
     );
