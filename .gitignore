@@ -77,6 +77,9 @@ android/.idea/
 *.xcconfig.bak2
 *.xcconfig.tmp
 
+# Runtime logs (generados por scripts de desarrollo)
+.api_dev.log
+
 # Python scripts temporales (si se quieren ignorar descomenta)
 # migrate_catalogs.py
 # migrate_users.py

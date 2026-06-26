@@ -244,7 +244,7 @@ api/
 
 | Herramienta | Verificación |
 
-|------------|-------------|º
+|------------|-------------|
 | Flutter SDK | `flutter --version` |
 | Dart SDK (incluido en Flutter) | `dart --version` |
 | Google Chrome | debe estar instalado |
@@ -300,16 +300,14 @@ Si se necesita controlar cada proceso por separado:
 # Verifica que arranca: curl http://localhost:8089/api/health
 
 # Terminal 2 — Flutter Web
-flutter run -d chrome \
-  --web-port 8080 \
-  --web-renderer canvaskit
-# O con renderer HTML (más rápido en dev, menos fiel):
-# flutter run -d chrome --web-renderer html
+flutter run -d chrome --web-port 8080
 ```
 
 > `--web-port` fija el puerto de Flutter Web. Si se usa un puerto distinto del
 > esperado en `API_CORS_ORIGIN`, el navegador bloqueará las peticiones por CORS.
 > Asegúrate de que `API_CORS_ORIGIN=http://localhost:<web-port>` en `.env`.
+>
+> **Nota**: `--web-renderer` se eliminó en Flutter 3.22+. Ya no es necesario especificarlo.
 
 #### Solo la API (debug aislado)
 
@@ -341,6 +339,8 @@ curl -X POST http://localhost:8089/api/auth/login \
 | `Failed to connect to MongoDB` | `MONGO_URI` incorrecto o red | Verificar URI y que el cluster permite la IP actual |
 | Pantalla en blanco en Chrome | Error en build JS | Abrir DevTools → Console para ver el error real |
 | `.env` no se carga | Script ejecutado desde subdirectorio | Ejecutar siempre desde la raíz: `./scripts/dev_web.sh` |
+| Pantalla en blanco en iPhone/iPad | `flutter run` inyecta WebSocket de debug (`ws://127.0.0.1:PORT`); desde el móvil, `127.0.0.1` apunta al propio móvil → conexión falla | Usar `./scripts/dev_tailscale.sh` (build release, sin WebSocket). Ver §6.3 |
+| `502 Bad Gateway` en Tailscale `:8444` | API Dart no está corriendo | `./scripts/run_api_dev.sh` o `tmux attach -t edf` → ventana `api` |
 
 ### 6.2 Docker para producción
 
@@ -357,11 +357,87 @@ contiene credenciales — las variables de entorno en web se leen del asset `.en
 que se bundlea en `build/web/assets/`.
 
 ```bash
-docker compose -f docker/docker-compose.web.yml up -d --build
+docker-compose -f docker/docker-compose.web.yml up -d --build
 ```
 
 Puerto web por defecto: `80/443` (Caddy con HTTPS automático).
 El servidor API escucha en `8089` internamente; Caddy hace el proxy.
+
+### 6.3 Tailscale — acceso remoto desde iPhone/iPad
+
+`dev_tailscale.sh` expone la app en la red Tailscale (HTTPS automático, sin abrir puertos en el router).
+
+#### Por qué no funciona `flutter run` desde el móvil
+
+En modo desarrollo, Flutter inyecta un WebSocket de debug que intenta conectar a `ws://127.0.0.1:<PUERTO>`. Desde un iPhone, `127.0.0.1` apunta al propio iPhone → el WebSocket falla → la app se queda en blanco. La solución es un **build release** (`flutter build web --release`), que no contiene ningún WebSocket de debug.
+
+#### Arquitectura de puertos
+
+```
+iPhone/iPad
+  │
+  │  HTTPS (Tailscale TLS automático)
+  ├─── :8443  ──▶  python3 http.server :56001  ──▶  build/web/ (Flutter release)
+  └─── :8444  ──▶  dart run api/ :8089          ──▶  MongoDB Atlas / S3
+```
+
+**Por qué dos puertos HTTPS en lugar de path routing:**
+Tailscale Serve con `--set-path /api` elimina el prefijo `/api` al hacer el proxy:
+`https://.../api/auth/login` → backend recibe `/auth/login` → 404.
+Con un puerto HTTPS dedicado (`:8444`) el path llega intacto al backend Dart.
+
+#### Detección de entorno en `lib/utils/env_config.dart`
+
+```dart
+static String get apiBaseUrl {
+  if (kIsWeb) {
+    final pageHost = Uri.base.host;
+    final isLocal = pageHost == 'localhost' ||
+        pageHost == '127.0.0.1' ||
+        pageHost == '0.0.0.0' ||  // Python http.server bind address
+        pageHost == '';
+
+    if (!isLocal) {
+      // Acceso remoto: misma IP/host que la página web, pero puerto 8444
+      const apiPort = String.fromEnvironment('TAILSCALE_API_PORT', defaultValue: '8444');
+      return '${Uri.base.scheme}://${Uri.base.host}:$apiPort';
+    }
+    // Local: usar API_BASE_URL del .env
+    return getEnvVariable('API_BASE_URL');
+  }
+  return getEnvVariable('API_BASE_URL');
+}
+```
+
+#### Uso
+
+```bash
+# Arranque completo (build + API + web + Tailscale)
+./scripts/dev_tailscale.sh
+
+# La URL de acceso se muestra al final. También:
+tailscale serve status
+
+# Reconectar a los procesos
+tmux attach -t edf       # Ctrl+B 0 → API  |  Ctrl+B 1 → Web
+tmux kill-session -t edf # Parar todo
+
+# Rebuild tras cambios de código
+# Opción A — desde terminal:
+flutter build web --release  # luego el servidor Python ya sirve el nuevo build
+
+# Opción B — desde tmux:
+# Ctrl+B 1 → ventana web → Ctrl+C → flecha↑ → Enter
+```
+
+#### Variables `.env` relevantes
+
+```dotenv
+API_PORT=8089          # Puerto interno de la API Dart
+WEB_PORT=56001         # Puerto del servidor Python (ficheros estáticos)
+HTTPS_PORT=8443        # Puerto HTTPS Tailscale para la app web
+API_HTTPS_PORT=8444    # Puerto HTTPS Tailscale para la API
+```
 
 ---
 
@@ -418,9 +494,10 @@ Afecta a: `profile_view.dart`, `admin_user_detail_view.dart`, `add_edit_row_dial
 ## 9. Herramientas y scripts
 
 | Script | Propósito |
+
 |--------|-----------|
 | `scripts/dev_web.sh` | Arranca API Dart (puerto 8089) + Flutter Web en Chrome en paralelo. Ctrl+C mata ambos |
-| `scripts/dev_tailscale.sh` | Igual que `dev_web.sh` pero en sesión **tmux** persistente. Flutter corre en modo `web-server` headless (puerto 56001) para acceso via Tailscale Serve. `tmux attach -t edf` para reconectar |
+| `scripts/dev_tailscale.sh` | Acceso remoto desde iPhone/iPad via Tailscale. Hace un **build release** (sin WebSocket de debug), sirve los ficheros estáticos con Python en el puerto 56001, arranca la API Dart en 8089 y configura dos puertos HTTPS en Tailscale Serve (8443 → web, 8444 → API). Todo en sesión **tmux** persistente. `tmux attach -t edf` para reconectar. Ver §6.3 |
 | `scripts/run_api_dev.sh` | Solo la API Dart (para debug aislado) |
 | `scripts/build_macos_dmg.sh` | Build release macOS → firma ad-hoc → DMG con hdiutil |
 | `scripts/build_linux_release.sh` | Build de release para Linux en local |

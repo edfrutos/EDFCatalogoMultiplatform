@@ -61,10 +61,26 @@ flutter run -d chrome             # Terminal 2: Flutter Web
 
 > Si usas un puerto distinto para Flutter, actualiza `API_CORS_ORIGIN=http://localhost:<puerto>` en `.env`.
 
+### Web — acceso remoto desde iPhone/iPad (Tailscale)
+
+Expone la app en tu red Tailscale con HTTPS automático, sin abrir puertos en el router.
+
+```bash
+./scripts/dev_tailscale.sh
+# Build release + API Dart + servidor estático Python + configura Tailscale Serve
+# Muestra la URL al final: https://<hostname>.ts.net:8443
+```
+
+Puertos Tailscale: `:8443` → app web · `:8444` → API Dart.
+Reconectar: `tmux attach -t edf` · Parar: `tmux kill-session -t edf`.
+
+> Requiere Tailscale instalado y conectado en el Mac y en el iPhone.
+> Ver §6.3 de [`docs/arquitectura.md`](docs/arquitectura.md) para detalles técnicos.
+
 ### macOS — distribuible (DMG)
 
 ```bash
-./scripts/build_macos_dmg.shgitr 
+./scripts/build_macos_dmg.sh
 # → dist/EDFCatalogo-<version>.dmg  (firma ad-hoc, sin Developer ID)
 ```
 
