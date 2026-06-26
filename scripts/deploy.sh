@@ -30,6 +30,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 SERVER="root@208.76.221.20"
+SSH_PORT="2222"
 WEBROOT="/var/www/vhosts/efjdefrutos.com/edfcat.efjdefrutos.com/httpdocs"
 SERVER_REPO="/opt/edfcatalogo"
 SKIP_API="${SKIP_API:-0}"
@@ -54,6 +55,7 @@ info "Build completado ✅"
 step "Sincronizando build/web/ → $SERVER:$WEBROOT ..."
 rsync -avz --delete \
   --exclude=".DS_Store" \
+  -e "ssh -p $SSH_PORT" \
   "$PROJECT_ROOT/build/web/" \
   "$SERVER:$WEBROOT/"
 info "Ficheros web sincronizados ✅"
@@ -63,7 +65,7 @@ if [ "$SKIP_API" = "1" ]; then
   warn "SKIP_API=1 — saltando actualización de la API"
 else
   step "Actualizando repo y reiniciando API en el servidor..."
-  ssh "$SERVER" bash <<EOF
+  ssh -p "$SSH_PORT" "$SERVER" bash <<EOF
     set -e
     cd "$SERVER_REPO"
     git pull --ff-only
