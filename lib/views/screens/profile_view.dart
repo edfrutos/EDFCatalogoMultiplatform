@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart' as file_picker;
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'dart:io' if (dart.library.html) 'package:edfcatalogomultiplatform/utils/io_stub.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import '../../utils/app_theme.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../services/mongo_service.dart';
 import '../../services/s3_service.dart';
@@ -33,8 +35,6 @@ class _ProfileViewState extends State<ProfileView> {
   bool _isUploadingImage = false;
   String? _errorMessage;
   String? _successMessage;
-
-  // URL pre-firmada para mostrar la imagen de perfil
   String? _presignedImageUrl;
 
   @override
@@ -67,7 +67,6 @@ class _ProfileViewState extends State<ProfileView> {
     super.dispose();
   }
 
-  /// Genera una URL pre-firmada para mostrar la imagen desde S3
   Future<void> _loadPresignedUrl(String? rawUrl) async {
     if (rawUrl == null) {
       if (mounted) setState(() => _presignedImageUrl = null);
@@ -75,9 +74,7 @@ class _ProfileViewState extends State<ProfileView> {
     }
     try {
       final uri = await S3Service().getPresignedUrl(key: rawUrl);
-      if (mounted) {
-        setState(() => _presignedImageUrl = uri.toString());
-      }
+      if (mounted) setState(() => _presignedImageUrl = uri.toString());
     } catch (e) {
       print('❌ Error generando URL pre-firmada: $e');
     }
@@ -85,34 +82,23 @@ class _ProfileViewState extends State<ProfileView> {
 
   Future<void> _handleSave() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() {
-      _isSaving = true;
-      _errorMessage = null;
-      _successMessage = null;
-    });
+    setState(() { _isSaving = true; _errorMessage = null; _successMessage = null; });
 
     try {
       final authViewModel = context.read<AuthViewModel>();
       final user = authViewModel.currentUser;
 
       if (user == null) {
-        setState(() {
-          _errorMessage = 'No hay usuario autenticado';
-          _isSaving = false;
-        });
+        setState(() { _errorMessage = 'No hay usuario autenticado'; _isSaving = false; });
         return;
       }
 
       String? profileImageUrl = user.profileImageUrl;
 
-      // Si se debe eliminar la imagen, establecer como null
       if (_shouldRemoveImage && _selectedPlatformFile == null) {
         profileImageUrl = null;
-      }
-      // Subir imagen si hay una nueva seleccionada
-      else if (_selectedPlatformFile != null) {
+      } else if (_selectedPlatformFile != null) {
         setState(() => _isUploadingImage = true);
-
         try {
           final pf = _selectedPlatformFile!;
           if (kIsWeb) {
@@ -139,7 +125,6 @@ class _ProfileViewState extends State<ProfileView> {
           });
           return;
         }
-
         setState(() => _isUploadingImage = false);
       }
 
@@ -156,15 +141,10 @@ class _ProfileViewState extends State<ProfileView> {
           'Address': _addressController.text.trim(),
         if (_occupationController.text.trim().isNotEmpty)
           'Occupation': _occupationController.text.trim(),
-        // Actualizar URL de imagen de perfil (puede ser null si se eliminó)
         'ProfileImageUrl': profileImageUrl,
       };
       await MongoService().updateUser(user.id, updates);
-
-      // Recargar usuario actualizado
       await authViewModel.reloadCurrentUser();
-
-      // Recargar URL pre-firmada con la nueva imagen
       await _loadPresignedUrl(profileImageUrl);
 
       setState(() {
@@ -172,18 +152,11 @@ class _ProfileViewState extends State<ProfileView> {
         _errorMessage = null;
         _isSaving = false;
       });
-
-      // Limpiar archivo seleccionado y flags después de guardar
       _selectedPlatformFile = null;
       _shouldRemoveImage = false;
 
-      // Limpiar mensaje de éxito después de 3 segundos
       Future.delayed(const Duration(seconds: 3), () {
-        if (mounted) {
-          setState(() {
-            _successMessage = null;
-          });
-        }
+        if (mounted) setState(() => _successMessage = null);
       });
     } catch (e) {
       setState(() {
@@ -195,18 +168,14 @@ class _ProfileViewState extends State<ProfileView> {
     }
   }
 
-  /// Seleccionar foto de perfil usando file_picker (mejor para desktop)
   Future<void> _selectProfileImage() async {
     try {
-      file_picker.FilePickerResult? result = await file_picker
-          .FilePicker
-          .platform
-          .pickFiles(
-            type: file_picker.FileType.custom,
-            allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'],
-            allowMultiple: false,
-            withData: true,
-          );
+      file_picker.FilePickerResult? result = await file_picker.FilePicker.platform.pickFiles(
+        type: file_picker.FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'],
+        allowMultiple: false,
+        withData: true,
+      );
 
       if (result != null && result.files.isNotEmpty) {
         final pf = result.files.single;
@@ -216,26 +185,20 @@ class _ProfileViewState extends State<ProfileView> {
             _shouldRemoveImage = false;
             _errorMessage = null;
           });
-          print('✅ Imagen seleccionada: ${pf.name}');
         }
-      } else {
-        print('⚠️ No se seleccionó ninguna imagen');
       }
     } catch (e) {
-      print('❌ Error al seleccionar imagen: $e');
       final isLinux = !kIsWeb && Platform.isLinux;
-      final errorMessage = isLinux && e.toString().contains('zenity')
-          ? 'Error: zenity no está disponible. En Docker, el selector de archivos puede no funcionar. Por favor, reconstruye la imagen Docker o usa la aplicación fuera de Docker.'
+      final msg = isLinux && e.toString().contains('zenity')
+          ? 'Error: zenity no disponible. El selector de archivos puede no funcionar en Docker.'
           : 'Error al seleccionar imagen: $e';
-
-      setState(() {
-        _errorMessage = errorMessage;
-      });
+      setState(() => _errorMessage = msg);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: Colors.red,
+            content: Text(msg),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Theme.of(context).colorScheme.error,
             duration: const Duration(seconds: 5),
           ),
         );
@@ -243,7 +206,6 @@ class _ProfileViewState extends State<ProfileView> {
     }
   }
 
-  /// Eliminar foto de perfil
   void _removeProfileImage() {
     setState(() {
       _selectedPlatformFile = null;
@@ -252,317 +214,560 @@ class _ProfileViewState extends State<ProfileView> {
     });
   }
 
+  // Devuelve el ImageProvider correcto según el estado de la imagen
+  ImageProvider? _getAvatarImage() {
+    if (_selectedPlatformFile != null) {
+      if (kIsWeb && _selectedPlatformFile!.bytes != null) {
+        return MemoryImage(_selectedPlatformFile!.bytes!);
+      } else if (!kIsWeb && _selectedPlatformFile!.path != null) {
+        return FileImage(File(_selectedPlatformFile!.path!));
+      }
+    }
+    if (!_shouldRemoveImage && _presignedImageUrl != null) {
+      return NetworkImage(_presignedImageUrl!);
+    }
+    return null;
+  }
+
+  String _getInitials(String name) {
+    final parts = name.trim().split(' ');
+    if (parts.isEmpty || name.isEmpty) return '?';
+    if (parts.length == 1) return parts[0][0].toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<AuthViewModel>(
       builder: (context, authViewModel, _) {
         final user = authViewModel.currentUser;
-
         if (user == null) {
           return const Center(child: Text('No hay usuario autenticado'));
         }
 
+        final cs = Theme.of(context).colorScheme;
+        final avatarImage = _getAvatarImage();
+        final isWide = MediaQuery.of(context).size.width > 800;
+
         return Scaffold(
           appBar: Navigator.canPop(context)
               ? AppBar(
-                  leading: IconButton(
-                    icon: const Icon(Icons.arrow_back),
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                    },
-                    tooltip: 'Volver',
-                  ),
-                  title: const Text('Perfil de Usuario'),
-                  centerTitle: true,
+                  title: Text('Mi perfil',
+                      style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+                  centerTitle: false,
                 )
               : null,
           body: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Foto de perfil
-                  Center(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 720),
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Form(
+                    key: _formKey,
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Stack(
-                          children: [
-                            // Imagen de perfil o placeholder
-                            CircleAvatar(
-                              radius: 60,
-                              backgroundColor: Colors.grey[300],
-                              backgroundImage: _selectedPlatformFile != null
-                                  ? (kIsWeb
-                                      ? MemoryImage(_selectedPlatformFile!.bytes!)
-                                      : FileImage(File(_selectedPlatformFile!.path!) as dynamic))
-                                        as ImageProvider
-                                  : (_presignedImageUrl != null &&
-                                        !_shouldRemoveImage)
-                                  ? CachedNetworkImageProvider(
-                                      _presignedImageUrl!,
-                                    )
-                                  : null,
-                              child:
-                                  _selectedPlatformFile == null &&
-                                      (_presignedImageUrl == null ||
-                                          _shouldRemoveImage)
-                                  ? Text(
-                                      user.name.isNotEmpty
-                                          ? user.name[0].toUpperCase()
-                                          : 'U',
-                                      style: const TextStyle(
-                                        fontSize: 50,
-                                        color: Colors.grey,
-                                      ),
-                                    )
-                                  : null,
-                            ),
-                            // Botón de editar foto
-                            Positioned(
-                              bottom: 0,
-                              right: 0,
-                              child: Container(
+                        // ── Avatar hero ───────────────────────────────────
+                        Center(
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              // Círculo avatar
+                              Container(
+                                width: 108,
+                                height: 108,
                                 decoration: BoxDecoration(
-                                  color: Colors.blue,
                                   shape: BoxShape.circle,
+                                  color: cs.primaryContainer,
                                   border: Border.all(
-                                    color: Colors.white,
-                                    width: 3,
-                                  ),
+                                      color: cs.outline.withOpacity(0.2),
+                                      width: 2),
+                                  image: avatarImage != null
+                                      ? DecorationImage(
+                                          image: avatarImage,
+                                          fit: BoxFit.cover)
+                                      : null,
                                 ),
-                                child: IconButton(
-                                  icon: const Icon(
-                                    Icons.camera_alt,
-                                    color: Colors.white,
-                                    size: 20,
-                                  ),
-                                  onPressed: _isUploadingImage
-                                      ? null
-                                      : _selectProfileImage,
-                                  tooltip: 'Cambiar foto',
-                                ),
+                                child: avatarImage == null
+                                    ? Center(
+                                        child: Text(
+                                          _getInitials(user.name),
+                                          style: GoogleFonts.inter(
+                                            fontSize: 36,
+                                            fontWeight: FontWeight.w700,
+                                            color: cs.onPrimaryContainer,
+                                          ),
+                                        ),
+                                      )
+                                    : null,
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        // Botones de acción
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            ElevatedButton.icon(
-                              onPressed: _isUploadingImage
-                                  ? null
-                                  : _selectProfileImage,
-                              icon: const Icon(Icons.photo_library, size: 18),
-                              label: const Text('Seleccionar Foto'),
-                              style: ElevatedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 8,
-                                ),
-                              ),
-                            ),
-                            if ((_selectedPlatformFile != null ||
-                                    user.profileImageUrl != null) &&
-                                !_isUploadingImage) ...[
-                              const SizedBox(width: 12),
-                              OutlinedButton.icon(
-                                onPressed: _removeProfileImage,
-                                icon: const Icon(Icons.delete, size: 18),
-                                label: const Text('Eliminar'),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: Colors.red,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 8,
+                              // Botón de edición superpuesto
+                              Positioned(
+                                bottom: 0,
+                                right: -4,
+                                child: GestureDetector(
+                                  onTap: _selectProfileImage,
+                                  child: Container(
+                                    width: 36,
+                                    height: 36,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: cs.primary,
+                                      border: Border.all(
+                                          color: cs.surface, width: 2),
+                                    ),
+                                    child: Icon(Icons.camera_alt_rounded,
+                                        size: 18, color: cs.onPrimary),
                                   ),
                                 ),
                               ),
                             ],
+                          ),
+                        ),
+
+                        // Nombre y rol
+                        const SizedBox(height: 16),
+                        Center(
+                          child: Column(
+                            children: [
+                              Text(
+                                user.name,
+                                style: GoogleFonts.inter(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w700,
+                                    color: cs.onSurface),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                user.email,
+                                style: GoogleFonts.inter(
+                                    fontSize: 14,
+                                    color: cs.onSurface.withOpacity(0.55)),
+                              ),
+                              if (user.role != null) ...[
+                                const SizedBox(height: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: cs.tertiaryContainer,
+                                    borderRadius: BorderRadius.circular(
+                                        AppTheme.radiusFull),
+                                  ),
+                                  child: Text(
+                                    user.role!,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: cs.onTertiaryContainer,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+
+                        // Botones de imagen
+                        const SizedBox(height: 16),
+                        Center(
+                          child: Wrap(
+                            spacing: 8,
+                            alignment: WrapAlignment.center,
+                            children: [
+                              OutlinedButton.icon(
+                                onPressed: _isUploadingImage
+                                    ? null
+                                    : _selectProfileImage,
+                                icon: const Icon(Icons.photo_camera_rounded,
+                                    size: 16),
+                                label: Text(
+                                  _selectedPlatformFile != null
+                                      ? 'Cambiar foto'
+                                      : 'Cambiar foto',
+                                  style: GoogleFonts.inter(fontSize: 13),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 14, vertical: 8),
+                                ),
+                              ),
+                              if ((_selectedPlatformFile != null ||
+                                      _presignedImageUrl != null) &&
+                                  !_shouldRemoveImage &&
+                                  !_isUploadingImage)
+                                OutlinedButton.icon(
+                                  onPressed: _removeProfileImage,
+                                  icon: const Icon(Icons.delete_rounded,
+                                      size: 16),
+                                  label: Text('Eliminar',
+                                      style: GoogleFonts.inter(fontSize: 13)),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: cs.error,
+                                    side: BorderSide(color: cs.error),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 14, vertical: 8),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+
+                        if (_isUploadingImage) ...[
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: cs.primary),
+                              ),
+                              const SizedBox(width: 10),
+                              Text('Subiendo imagen...',
+                                  style: GoogleFonts.inter(
+                                      fontSize: 13,
+                                      color: cs.onSurface.withOpacity(0.6))),
+                            ],
+                          ),
+                        ],
+
+                        const SizedBox(height: 28),
+
+                        // ── Información básica ──────────────────────────
+                        _SectionCard(
+                          title: 'Información básica',
+                          icon: Icons.person_rounded,
+                          cs: cs,
+                          children: [
+                            // Email (no editable)
+                            TextFormField(
+                              initialValue: user.email,
+                              decoration: InputDecoration(
+                                labelText: 'Email',
+                                prefixIcon: const Icon(Icons.email_rounded),
+                                filled: true,
+                                fillColor: cs.surfaceContainerHighest
+                                    .withOpacity(0.5),
+                              ),
+                              enabled: false,
+                            ),
+                            const SizedBox(height: 14),
+                            isWide
+                                ? Row(
+                                    children: [
+                                      Expanded(
+                                        child: _buildField(
+                                          controller: _usernameController,
+                                          label: 'Nombre de usuario *',
+                                          icon: Icons.alternate_email_rounded,
+                                          hint: 'Ej: juanp',
+                                          autocorrect: false,
+                                          validator: (v) => (v == null ||
+                                                  v.isEmpty)
+                                              ? 'Obligatorio'
+                                              : null,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 14),
+                                      Expanded(
+                                        child: _buildField(
+                                          controller: _nameController,
+                                          label: 'Nombre para mostrar *',
+                                          icon: Icons.badge_rounded,
+                                          hint: 'Ej: Juan',
+                                          validator: (v) => (v == null ||
+                                                  v.isEmpty)
+                                              ? 'Obligatorio'
+                                              : null,
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                : Column(
+                                    children: [
+                                      _buildField(
+                                        controller: _usernameController,
+                                        label: 'Nombre de usuario *',
+                                        icon: Icons.alternate_email_rounded,
+                                        hint: 'Ej: juanp',
+                                        autocorrect: false,
+                                        validator: (v) =>
+                                            (v == null || v.isEmpty)
+                                                ? 'Obligatorio'
+                                                : null,
+                                      ),
+                                      const SizedBox(height: 14),
+                                      _buildField(
+                                        controller: _nameController,
+                                        label: 'Nombre para mostrar *',
+                                        icon: Icons.badge_rounded,
+                                        hint: 'Ej: Juan',
+                                        validator: (v) =>
+                                            (v == null || v.isEmpty)
+                                                ? 'Obligatorio'
+                                                : null,
+                                      ),
+                                    ],
+                                  ),
                           ],
                         ),
-                        // Indicador de carga de imagen
-                        if (_isUploadingImage)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 16),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const SizedBox(
+
+                        const SizedBox(height: 16),
+
+                        // ── Información adicional ───────────────────────
+                        _SectionCard(
+                          title: 'Información adicional',
+                          icon: Icons.info_outline_rounded,
+                          cs: cs,
+                          children: [
+                            _buildField(
+                              controller: _fullNameController,
+                              label: 'Nombre y apellidos completos',
+                              icon: Icons.account_box_rounded,
+                              hint: 'Ej: Juan Pérez García',
+                            ),
+                            const SizedBox(height: 14),
+                            isWide
+                                ? Row(
+                                    children: [
+                                      Expanded(
+                                        child: _buildField(
+                                          controller: _phoneController,
+                                          label: 'Teléfono',
+                                          icon: Icons.phone_rounded,
+                                          hint: 'Ej: +34 600 000 000',
+                                          keyboardType: TextInputType.phone,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 14),
+                                      Expanded(
+                                        child: _buildField(
+                                          controller: _occupationController,
+                                          label: 'Ocupación',
+                                          icon: Icons.work_rounded,
+                                          hint: 'Ej: Desarrollador',
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                : Column(
+                                    children: [
+                                      _buildField(
+                                        controller: _phoneController,
+                                        label: 'Teléfono',
+                                        icon: Icons.phone_rounded,
+                                        hint: 'Ej: +34 600 000 000',
+                                        keyboardType: TextInputType.phone,
+                                      ),
+                                      const SizedBox(height: 14),
+                                      _buildField(
+                                        controller: _occupationController,
+                                        label: 'Ocupación',
+                                        icon: Icons.work_rounded,
+                                        hint: 'Ej: Desarrollador',
+                                      ),
+                                    ],
+                                  ),
+                            const SizedBox(height: 14),
+                            _buildField(
+                              controller: _companyController,
+                              label: 'Empresa',
+                              icon: Icons.business_rounded,
+                              hint: 'Ej: Mi Empresa S.L.',
+                            ),
+                            const SizedBox(height: 14),
+                            _buildField(
+                              controller: _addressController,
+                              label: 'Dirección postal',
+                              icon: Icons.location_on_rounded,
+                              maxLines: 3,
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 24),
+
+                        // ── Mensajes de estado ──────────────────────────
+                        if (_errorMessage != null) ...[
+                          _StatusBanner(
+                            message: _errorMessage!,
+                            isError: true,
+                            cs: cs,
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        if (_successMessage != null) ...[
+                          _StatusBanner(
+                            message: _successMessage!,
+                            isError: false,
+                            cs: cs,
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+
+                        // ── Botón guardar ───────────────────────────────
+                        FilledButton(
+                          onPressed: _isSaving ? null : _handleSave,
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(
+                                  AppTheme.radiusMedium),
+                            ),
+                          ),
+                          child: _isSaving
+                              ? SizedBox(
                                   width: 20,
                                   height: 20,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
+                                    color: cs.onPrimary,
                                   ),
+                                )
+                              : Text(
+                                  'Guardar cambios',
+                                  style: GoogleFonts.inter(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 15),
                                 ),
-                                const SizedBox(width: 12),
-                                const Text('Subiendo imagen...'),
-                              ],
-                            ),
-                          ),
+                        ),
+                        const SizedBox(height: 32),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  const Divider(),
-                  const SizedBox(height: 24),
-                  // Información básica
-                  const Text(
-                    'Información Básica',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  // Email (no editable)
-                  TextFormField(
-                    initialValue: user.email,
-                    decoration: const InputDecoration(
-                      labelText: 'Email *',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.email),
-                    ),
-                    enabled: false,
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _usernameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Nombre de Usuario *',
-                      hintText: 'Ej: juanp',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.person),
-                    ),
-                    autocorrect: false,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'El nombre de usuario es obligatorio';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Nombre para Mostrar *',
-                      hintText: 'Ej: Juan',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.badge),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'El nombre es obligatorio';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 32),
-                  const Divider(),
-                  const SizedBox(height: 24),
-                  // Información adicional
-                  const Text(
-                    'Información Adicional (Opcional)',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _fullNameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Nombre y Apellidos Completos',
-                      hintText: 'Ej: Juan Pérez García',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.account_box),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _phoneController,
-                    decoration: const InputDecoration(
-                      labelText: 'Teléfono',
-                      hintText: 'Ej: +34 600 000 000',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.phone),
-                    ),
-                    keyboardType: TextInputType.phone,
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _companyController,
-                    decoration: const InputDecoration(
-                      labelText: 'Empresa',
-                      hintText: 'Ej: Mi Empresa S.L.',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.business),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _occupationController,
-                    decoration: const InputDecoration(
-                      labelText: 'Ocupación',
-                      hintText: 'Ej: Desarrollador',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.work),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _addressController,
-                    decoration: const InputDecoration(
-                      labelText: 'Dirección Postal',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.location_on),
-                    ),
-                    maxLines: 3,
-                  ),
-                  const SizedBox(height: 32),
-                  // Mensajes
-                  if (_errorMessage != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: Text(
-                        _errorMessage!,
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                    ),
-                  if (_successMessage != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: Text(
-                        _successMessage!,
-                        style: const TextStyle(color: Colors.green),
-                      ),
-                    ),
-                  // Botón guardar
-                  ElevatedButton(
-                    onPressed: _isSaving ? null : _handleSave,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                    child: _isSaving
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Guardar Cambios'),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
         );
       },
+    );
+  }
+
+  Widget _buildField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    String? hint,
+    int maxLines = 1,
+    bool autocorrect = true,
+    TextInputType? keyboardType,
+    String? Function(String?)? validator,
+  }) {
+    return TextFormField(
+      controller: controller,
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        prefixIcon: Icon(icon),
+      ),
+      autocorrect: autocorrect,
+      maxLines: maxLines,
+      keyboardType: keyboardType,
+      validator: validator,
+    );
+  }
+}
+
+// ── Tarjeta de sección ────────────────────────────────────────────────────────
+class _SectionCard extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final ColorScheme cs;
+  final List<Widget> children;
+
+  const _SectionCard({
+    required this.title,
+    required this.icon,
+    required this.cs,
+    required this.children,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
+        border: Border.all(color: cs.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Encabezado de sección
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+            child: Row(
+              children: [
+                Icon(icon, size: 18, color: cs.primary),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: cs.primary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Divider(height: 1, color: cs.outlineVariant),
+          // Contenido
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: children,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Banner de estado (error / éxito) ─────────────────────────────────────────
+class _StatusBanner extends StatelessWidget {
+  final String message;
+  final bool isError;
+  final ColorScheme cs;
+
+  const _StatusBanner({
+    required this.message,
+    required this.isError,
+    required this.cs,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = isError ? cs.errorContainer : cs.tertiaryContainer;
+    final fg = isError ? cs.onErrorContainer : cs.onTertiaryContainer;
+    final icon = isError ? Icons.error_rounded : Icons.check_circle_rounded;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: fg, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: GoogleFonts.inter(
+                  fontSize: 13, color: fg, fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

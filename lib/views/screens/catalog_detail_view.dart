@@ -1,8 +1,10 @@
 import 'dart:io' if (dart.library.html) 'package:edfcatalogomultiplatform/utils/io_stub.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../models/catalog.dart';
+import '../../utils/app_theme.dart';
 import '../../viewmodels/catalog_detail_viewmodel.dart';
 import '../../services/export_service.dart';
 import '../../services/pagination_service.dart';
@@ -32,25 +34,27 @@ class _CatalogDetailViewState extends State<CatalogDetailView> {
     String format,
   ) async {
     try {
-      // Exportar según el formato usando el nuevo método que abre el diálogo de directorio
       String? filePath;
 
-      // Mostrar diálogo de carga mientras se selecciona el directorio
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => AlertDialog(
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircularProgressIndicator(),
-              const SizedBox(height: 16),
-              Text(
-                'Seleccionando directorio para exportar ${format.toUpperCase()}...',
-              ),
-            ],
-          ),
-        ),
+        builder: (context) {
+          final cs = Theme.of(context).colorScheme;
+          return AlertDialog(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(color: cs.primary),
+                const SizedBox(height: 16),
+                Text(
+                  'Seleccionando directorio para exportar ${format.toUpperCase()}...',
+                  style: GoogleFonts.inter(),
+                ),
+              ],
+            ),
+          );
+        },
       );
 
       if (format == 'csv') {
@@ -62,32 +66,28 @@ class _CatalogDetailViewState extends State<CatalogDetailView> {
       }
 
       if (context.mounted) {
-        Navigator.of(context).pop(); // Cerrar loading
+        Navigator.of(context).pop();
 
         if (filePath == null) {
-          // Usuario canceló la selección de directorio
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+            SnackBar(
               content: Row(
                 children: [
-                  Icon(Icons.info_outline, color: Colors.white),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Exportación cancelada',
-                      style: TextStyle(fontSize: 14),
-                    ),
-                  ),
+                  const Icon(Icons.info_outline_rounded, color: Colors.white),
+                  const SizedBox(width: 8),
+                  const Expanded(child: Text('Exportación cancelada')),
                 ],
               ),
               backgroundColor: Colors.orange,
-              duration: Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMedium)),
+              duration: const Duration(seconds: 2),
             ),
           );
           return;
         }
 
-        // Exportación exitosa
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Column(
@@ -96,7 +96,7 @@ class _CatalogDetailViewState extends State<CatalogDetailView> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.check_circle, color: Colors.white),
+                    const Icon(Icons.check_circle_rounded, color: Colors.white),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -124,19 +124,19 @@ class _CatalogDetailViewState extends State<CatalogDetailView> {
                   ),
               ],
             ),
-            backgroundColor: Colors.green,
+            backgroundColor: Colors.green.shade700,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppTheme.radiusMedium)),
             duration: const Duration(seconds: 5),
             action: SnackBarAction(
-              label: 'Abrir ubicación',
+              label: 'Abrir',
               textColor: Colors.white,
               onPressed: () {
-                // Abrir el directorio en Finder (macOS)
                 if (Platform.isMacOS && filePath != null) {
                   final fileName = filePath.split('/').last;
                   final directory = filePath.substring(
-                    0,
-                    filePath.length - fileName.length - 1,
-                  );
+                      0, filePath.length - fileName.length - 1);
                   Process.run('open', [directory]);
                 }
               },
@@ -146,22 +146,20 @@ class _CatalogDetailViewState extends State<CatalogDetailView> {
       }
     } catch (e) {
       if (context.mounted) {
-        Navigator.of(context).pop(); // Cerrar loading si aún está abierto
+        Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
               children: [
-                const Icon(Icons.error, color: Colors.white),
+                const Icon(Icons.error_rounded, color: Colors.white),
                 const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Error al exportar: ${e.toString()}',
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                ),
+                Expanded(child: Text('Error al exportar: ${e.toString()}')),
               ],
             ),
-            backgroundColor: Colors.red,
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppTheme.radiusMedium)),
             duration: const Duration(seconds: 4),
           ),
         );
@@ -175,314 +173,203 @@ class _CatalogDetailViewState extends State<CatalogDetailView> {
       create: (_) => CatalogDetailViewModel(catalog: widget.catalog),
       child: Consumer<CatalogDetailViewModel>(
         builder: (context, viewModel, _) {
+          final cs = Theme.of(context).colorScheme;
+
           return Scaffold(
             appBar: AppBar(
-              title: Text(viewModel.catalog.name),
+              title: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    viewModel.catalog.name,
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 18,
+                    ),
+                  ),
+                  if (viewModel.totalRows > 0)
+                    Text(
+                      '${viewModel.totalRows} fila${viewModel.totalRows != 1 ? 's' : ''}',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: cs.onSurface.withOpacity(0.55),
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                ],
+              ),
               actions: [
-                // Botón de exportar
+                // Exportar
                 PopupMenuButton<String>(
-                  icon: const Icon(Icons.download),
+                  icon: const Icon(Icons.download_rounded),
                   tooltip: 'Exportar',
+                  shape: RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(AppTheme.radiusMedium)),
                   onSelected: (value) =>
                       _handleExport(context, viewModel.catalog, value),
                   itemBuilder: (context) => [
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: 'csv',
                       child: Row(
                         children: [
-                          Icon(Icons.table_chart, size: 20),
-                          SizedBox(width: 8),
-                          Text('Exportar a CSV'),
+                          Icon(Icons.table_chart_rounded,
+                              size: 20, color: cs.primary),
+                          const SizedBox(width: 12),
+                          const Text('Exportar a CSV'),
                         ],
                       ),
                     ),
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: 'excel',
                       child: Row(
                         children: [
-                          Icon(Icons.schema, size: 20),
-                          SizedBox(width: 8),
-                          Text('Exportar a Excel'),
+                          Icon(Icons.grid_on_rounded,
+                              size: 20, color: cs.primary),
+                          const SizedBox(width: 12),
+                          const Text('Exportar a Excel'),
                         ],
                       ),
                     ),
                   ],
                 ),
+                // Editar / Confirmar edición
                 IconButton(
-                  icon: Icon(viewModel.isEditing ? Icons.check : Icons.edit),
-                  onPressed: () {
-                    viewModel.toggleEditing();
-                  },
+                  icon: Icon(
+                    viewModel.isEditing
+                        ? Icons.check_rounded
+                        : Icons.edit_rounded,
+                    color: viewModel.isEditing ? cs.primary : null,
+                  ),
+                  onPressed: viewModel.toggleEditing,
                   tooltip: viewModel.isEditing ? 'Terminar edición' : 'Editar',
                 ),
+                // Añadir fila (solo en modo edición)
                 if (viewModel.isEditing)
                   IconButton(
-                    icon: const Icon(Icons.add),
-                    onPressed: () {
-                      viewModel.showAddRowSheet();
-                    },
+                    icon: const Icon(Icons.add_rounded),
+                    onPressed: viewModel.showAddRowSheet,
                     tooltip: 'Añadir fila',
                   ),
+                const SizedBox(width: 4),
               ],
             ),
             body: Stack(
               children: [
                 Column(
                   children: [
-                    // Descripción
+                    // Descripción del catálogo
                     if (viewModel.catalog.description.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.all(16.0),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
+                        color: cs.surfaceContainerLow,
                         child: Text(
                           viewModel.catalog.description,
-                          style: Theme.of(context).textTheme.bodyLarge,
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            color: cs.onSurface.withOpacity(0.75),
+                            height: 1.5,
+                          ),
                         ),
                       ),
-                    if (viewModel.catalog.description.isNotEmpty)
-                      const Divider(),
-                    // Cabecera de columnas con ordenamiento
+
+                    // Cabecera de columnas
                     if (viewModel.catalog.columns.isNotEmpty)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 8,
-                          horizontal: 16,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          border: Border(
-                            bottom: BorderSide(color: Colors.grey.shade300),
-                          ),
-                        ),
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: [
-                              ...viewModel.catalog.columns.map((column) {
-                                final isSorted =
-                                    viewModel.sortedColumn == column;
-                                return _SortableColumnHeader(
-                                  title: column,
-                                  isSorted: isSorted,
-                                  sortDirection: isSorted
-                                      ? viewModel.sortDirection
-                                      : SortDirection.none,
-                                  onTap: () {
-                                    viewModel.toggleSort(column);
-                                  },
-                                );
-                              }),
-                              InkWell(
-                                onTap: () => _showAllFilesModal(
-                                  context,
-                                  viewModel.catalog,
-                                ),
-                                borderRadius: BorderRadius.circular(8),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 8,
-                                    horizontal: 12,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.blue.shade50,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Text(
-                                        'Archivos',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Icon(
-                                        Icons.open_in_new,
-                                        size: 14,
-                                        color: Colors.blue.shade700,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                      _ColumnHeaderBar(
+                        columns: viewModel.catalog.columns,
+                        sortedColumn: viewModel.sortedColumn,
+                        sortDirection: viewModel.sortDirection,
+                        onColumnTap: viewModel.toggleSort,
+                        onFilesTap: () =>
+                            _showAllFilesModal(context, viewModel.catalog),
                       ),
-                    // Contenido
+
+                    // Contenido principal
                     Expanded(
                       child: viewModel.isLoading
-                          ? const Center(child: CircularProgressIndicator())
+                          ? Center(
+                              child: CircularProgressIndicator(
+                                  color: cs.primary))
                           : viewModel.errorMessage != null
-                          ? Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    'Error al cargar filas',
-                                    style: TextStyle(
-                                      color: Colors.red,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    viewModel.errorMessage!,
-                                    style: const TextStyle(color: Colors.grey),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  ElevatedButton(
-                                    onPressed: () => viewModel.reloadCatalog(),
-                                    child: const Text('Reintentar'),
-                                  ),
-                                ],
-                              ),
-                            )
-                          : viewModel.totalRows == 0
-                          ? Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Icon(
-                                    Icons.inbox_outlined,
-                                    size: 64,
-                                    color: Colors.grey,
-                                  ),
-                                  const SizedBox(height: 16),
-                                  const Text(
-                                    'No hay filas disponibles',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  const Text(
-                                    'Añade nuevas filas para comenzar',
-                                    style: TextStyle(color: Colors.grey),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  if (viewModel.isEditing)
-                                    ElevatedButton.icon(
-                                      onPressed: () {
-                                        viewModel.showAddRowSheet();
-                                      },
-                                      icon: const Icon(Icons.add),
-                                      label: const Text('Añadir fila'),
-                                    ),
-                                ],
-                              ),
-                            )
-                          : Column(
-                              children: [
-                                // Información de paginación de filas
-                                if (viewModel.totalRows >
-                                    viewModel.itemsPerPage)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 8,
-                                    ),
-                                    color: Colors.grey.shade100,
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
+                              ? _ErrorState(
+                                  message: viewModel.errorMessage!,
+                                  onRetry: viewModel.reloadCatalog,
+                                )
+                              : viewModel.totalRows == 0
+                                  ? _EmptyState(
+                                      isEditing: viewModel.isEditing,
+                                      onAdd: viewModel.showAddRowSheet,
+                                    )
+                                  : Column(
                                       children: [
-                                        Text(
-                                          '${viewModel.rowsRange} filas',
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.grey,
+                                        // Paginación
+                                        if (viewModel.totalRows >
+                                            viewModel.itemsPerPage)
+                                          _PaginationBar(
+                                            rowsRange: viewModel.rowsRange,
+                                            currentPage: viewModel.currentPage,
+                                            totalPages: viewModel.totalPages,
+                                            onPrevious:
+                                                PaginationService.hasPreviousPage(
+                                                        viewModel.currentPage)
+                                                    ? viewModel.previousPage
+                                                    : null,
+                                            onNext:
+                                                PaginationService.hasNextPage(
+                                                        viewModel.currentPage,
+                                                        viewModel.totalPages)
+                                                    ? viewModel.nextPage
+                                                    : null,
                                           ),
-                                        ),
-                                        Row(
-                                          children: [
-                                            IconButton(
-                                              icon: const Icon(
-                                                Icons.chevron_left,
-                                              ),
-                                              onPressed:
-                                                  PaginationService.hasPreviousPage(
-                                                    viewModel.currentPage,
-                                                  )
-                                                  ? () =>
-                                                        viewModel.previousPage()
-                                                  : null,
-                                              tooltip: 'Página anterior',
-                                            ),
-                                            Text(
-                                              'Página ${viewModel.currentPage} de ${viewModel.totalPages}',
-                                              style: const TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                            IconButton(
-                                              icon: const Icon(
-                                                Icons.chevron_right,
-                                              ),
-                                              onPressed:
-                                                  PaginationService.hasNextPage(
-                                                    viewModel.currentPage,
-                                                    viewModel.totalPages,
-                                                  )
-                                                  ? () => viewModel.nextPage()
-                                                  : null,
-                                              tooltip: 'Página siguiente',
-                                            ),
-                                          ],
+                                        // Lista de filas
+                                        Expanded(
+                                          child: ListView.builder(
+                                            padding: const EdgeInsets.all(16),
+                                            itemCount: viewModel.rows.length,
+                                            itemBuilder: (context, index) {
+                                              final row =
+                                                  viewModel.rows[index];
+                                              return _CatalogRowCard(
+                                                row: row,
+                                                columns:
+                                                    viewModel.catalog.columns,
+                                                index: index,
+                                                isEditing: viewModel.isEditing,
+                                                onEdit: () =>
+                                                    _showEditRowDialog(
+                                                        context,
+                                                        viewModel,
+                                                        index,
+                                                        row),
+                                                onDelete: () =>
+                                                    _showDeleteConfirmation(
+                                                        context,
+                                                        viewModel,
+                                                        index),
+                                                onFileTap: (url, fileName) {
+                                                  Navigator.of(context).push(
+                                                    MaterialPageRoute(
+                                                      builder: (_) =>
+                                                          FileViewerView(
+                                                              url: url,
+                                                              fileName:
+                                                                  fileName),
+                                                    ),
+                                                  );
+                                                },
+                                              );
+                                            },
+                                          ),
                                         ),
                                       ],
                                     ),
-                                  ),
-                                // Lista de filas
-                                Expanded(
-                                  child: ListView.builder(
-                                    padding: const EdgeInsets.all(16),
-                                    itemCount: viewModel.rows.length,
-                                    itemBuilder: (context, index) {
-                                      final row = viewModel.rows[index];
-                                      return _CatalogRowCard(
-                                        row: row,
-                                        columns: viewModel.catalog.columns,
-                                        index: index,
-                                        isEditing: viewModel.isEditing,
-                                        onEdit: () {
-                                          _showEditRowDialog(
-                                            context,
-                                            viewModel,
-                                            index,
-                                            row,
-                                          );
-                                        },
-                                        onDelete: () {
-                                          _showDeleteConfirmation(
-                                            context,
-                                            viewModel,
-                                            index,
-                                          );
-                                        },
-                                        onFileTap: (url, fileName) {
-                                          Navigator.of(context).push(
-                                            MaterialPageRoute(
-                                              builder: (context) =>
-                                                  FileViewerView(
-                                                    url: url,
-                                                    fileName: fileName,
-                                                  ),
-                                            ),
-                                          );
-                                        },
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
                     ),
                   ],
                 ),
-                // Diálogo para añadir/editar fila
+
+                // Overlay de añadir fila
                 if (viewModel.showingAddRowSheet)
                   AddEditRowDialog(
                     catalog: viewModel.catalog,
@@ -490,9 +377,7 @@ class _CatalogDetailViewState extends State<CatalogDetailView> {
                       viewModel.addRow(data, files);
                       viewModel.hideAddRowSheet();
                     },
-                    onCancel: () {
-                      viewModel.hideAddRowSheet();
-                    },
+                    onCancel: viewModel.hideAddRowSheet,
                   ),
               ],
             ),
@@ -510,16 +395,14 @@ class _CatalogDetailViewState extends State<CatalogDetailView> {
   ) {
     showDialog(
       context: context,
-      builder: (context) => AddEditRowDialog(
+      builder: (_) => AddEditRowDialog(
         catalog: viewModel.catalog,
         row: row,
         onSave: (data, files) {
           viewModel.updateRow(index, data, files);
           Navigator.of(context).pop();
         },
-        onCancel: () {
-          Navigator.of(context).pop();
-        },
+        onCancel: () => Navigator.of(context).pop(),
       ),
     );
   }
@@ -529,10 +412,13 @@ class _CatalogDetailViewState extends State<CatalogDetailView> {
     CatalogDetailViewModel viewModel,
     int index,
   ) {
+    final cs = Theme.of(context).colorScheme;
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Eliminar fila'),
+      builder: (_) => AlertDialog(
+        icon: Icon(Icons.delete_rounded, color: cs.error, size: 28),
+        title: Text('Eliminar fila',
+            style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
         content: const Text(
           '¿Estás seguro de que quieres eliminar esta fila? Esta acción no se puede deshacer.',
         ),
@@ -541,12 +427,12 @@ class _CatalogDetailViewState extends State<CatalogDetailView> {
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('Cancelar'),
           ),
-          TextButton(
+          FilledButton(
             onPressed: () {
               viewModel.deleteRow(index);
               Navigator.of(context).pop();
             },
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            style: FilledButton.styleFrom(backgroundColor: cs.error),
             child: const Text('Eliminar'),
           ),
         ],
@@ -555,63 +441,94 @@ class _CatalogDetailViewState extends State<CatalogDetailView> {
   }
 }
 
-class _SortableColumnHeader extends StatelessWidget {
-  final String title;
-  final bool isSorted;
+// ── Barra de cabeceras de columna ─────────────────────────────────────────────
+class _ColumnHeaderBar extends StatelessWidget {
+  final List<String> columns;
+  final String? sortedColumn;
   final SortDirection sortDirection;
-  final VoidCallback onTap;
+  final ValueChanged<String> onColumnTap;
+  final VoidCallback onFilesTap;
 
-  const _SortableColumnHeader({
-    required this.title,
-    required this.isSorted,
+  const _ColumnHeaderBar({
+    required this.columns,
+    required this.sortedColumn,
     required this.sortDirection,
-    required this.onTap,
+    required this.onColumnTap,
+    required this.onFilesTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    IconData? icon;
-    Color? color;
-
-    switch (sortDirection) {
-      case SortDirection.ascending:
-        icon = Icons.arrow_upward;
-        color = Colors.blue;
-        break;
-      case SortDirection.descending:
-        icon = Icons.arrow_downward;
-        color = Colors.blue;
-        break;
-      case SortDirection.none:
-        icon = Icons.unfold_more;
-        color = Colors.grey;
-        break;
-    }
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-        decoration: BoxDecoration(
-          color: isSorted ? Colors.blue.shade50 : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isSorted ? Colors.blue.shade300 : Colors.grey.shade300,
-          ),
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        border: Border(
+          bottom: BorderSide(color: cs.outlineVariant),
         ),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
         child: Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              title,
-              style: TextStyle(
-                fontWeight: isSorted ? FontWeight.bold : FontWeight.normal,
-                color: isSorted ? Colors.blue.shade700 : null,
-              ),
+            ...columns.map((col) {
+              final isSorted = sortedColumn == col;
+              IconData sortIcon;
+              if (!isSorted) {
+                sortIcon = Icons.unfold_more_rounded;
+              } else if (sortDirection == SortDirection.ascending) {
+                sortIcon = Icons.arrow_upward_rounded;
+              } else {
+                sortIcon = Icons.arrow_downward_rounded;
+              }
+
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: FilterChip(
+                  label: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(col,
+                          style: GoogleFonts.inter(
+                              fontWeight: isSorted
+                                  ? FontWeight.w600
+                                  : FontWeight.w500,
+                              fontSize: 13)),
+                      const SizedBox(width: 4),
+                      Icon(sortIcon, size: 14,
+                          color: isSorted
+                              ? cs.primary
+                              : cs.onSurface.withOpacity(0.45)),
+                    ],
+                  ),
+                  selected: isSorted,
+                  onSelected: (_) => onColumnTap(col),
+                  showCheckmark: false,
+                  side: BorderSide(
+                    color: isSorted ? cs.primary : cs.outlineVariant,
+                  ),
+                  backgroundColor: cs.surfaceContainerLowest,
+                  selectedColor: cs.primaryContainer,
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              );
+            }),
+            // Botón "Archivos"
+            ActionChip(
+              avatar: Icon(Icons.folder_open_rounded,
+                  size: 16, color: cs.primary),
+              label: Text('Archivos',
+                  style: GoogleFonts.inter(
+                      fontSize: 13, fontWeight: FontWeight.w500)),
+              onPressed: onFilesTap,
+              side: BorderSide(color: cs.primary.withOpacity(0.4)),
+              backgroundColor: cs.primaryContainer.withOpacity(0.35),
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-            const SizedBox(width: 4),
-            Icon(icon, size: 16, color: color),
           ],
         ),
       ),
@@ -619,6 +536,195 @@ class _SortableColumnHeader extends StatelessWidget {
   }
 }
 
+// ── Barra de paginación ───────────────────────────────────────────────────────
+class _PaginationBar extends StatelessWidget {
+  final String rowsRange;
+  final int currentPage;
+  final int totalPages;
+  final VoidCallback? onPrevious;
+  final VoidCallback? onNext;
+
+  const _PaginationBar({
+    required this.rowsRange,
+    required this.currentPage,
+    required this.totalPages,
+    this.onPrevious,
+    this.onNext,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainer,
+        border: Border(bottom: BorderSide(color: cs.outlineVariant)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            rowsRange,
+            style: GoogleFonts.inter(
+                fontSize: 12, color: cs.onSurface.withOpacity(0.6)),
+          ),
+          Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.chevron_left_rounded, size: 20),
+                onPressed: onPrevious,
+                tooltip: 'Página anterior',
+                iconSize: 20,
+                constraints:
+                    const BoxConstraints(minWidth: 32, minHeight: 32),
+                padding: EdgeInsets.zero,
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer,
+                  borderRadius:
+                      BorderRadius.circular(AppTheme.radiusFull),
+                ),
+                child: Text(
+                  '$currentPage / $totalPages',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: cs.onPrimaryContainer,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.chevron_right_rounded, size: 20),
+                onPressed: onNext,
+                tooltip: 'Página siguiente',
+                iconSize: 20,
+                constraints:
+                    const BoxConstraints(minWidth: 32, minHeight: 32),
+                padding: EdgeInsets.zero,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Estado vacío ──────────────────────────────────────────────────────────────
+class _EmptyState extends StatelessWidget {
+  final bool isEditing;
+  final VoidCallback onAdd;
+
+  const _EmptyState({required this.isEditing, required this.onAdd});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(48),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
+              ),
+              child: Icon(Icons.table_rows_rounded,
+                  size: 36, color: cs.onSurface.withOpacity(0.4)),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Sin filas todavía',
+              style: GoogleFonts.inter(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: cs.onSurface),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Añade nuevas filas para comenzar a gestionar el catálogo.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                  fontSize: 14, color: cs.onSurface.withOpacity(0.55)),
+            ),
+            if (isEditing) ...[
+              const SizedBox(height: 24),
+              FilledButton.icon(
+                onPressed: onAdd,
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('Añadir primera fila'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Estado de error ───────────────────────────────────────────────────────────
+class _ErrorState extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+
+  const _ErrorState({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(48),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: cs.errorContainer,
+                borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
+              ),
+              child: Icon(Icons.error_outline_rounded,
+                  size: 36, color: cs.onErrorContainer),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Error al cargar filas',
+              style: GoogleFonts.inter(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: cs.onSurface),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                  fontSize: 13, color: cs.onSurface.withOpacity(0.6)),
+            ),
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Reintentar'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Tarjeta de fila de catálogo ───────────────────────────────────────────────
 class _CatalogRowCard extends StatelessWidget {
   final CatalogRow row;
   final List<String> columns;
@@ -638,203 +744,156 @@ class _CatalogRowCard extends StatelessWidget {
     required this.onFileTap,
   });
 
-  Widget _buildFileChips() {
-    // Debug: verificar archivos de la fila
+  Widget _buildFileChips(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    // Debug logs mantenidos del original
     print('📋 Mostrando archivos de fila:');
     print('   image: ${row.files.image}');
     print('   images (${row.files.images.length}): ${row.files.images}');
     print('   document: ${row.files.document}');
-    print(
-      '   documents (${row.files.documents.length}): ${row.files.documents}',
-    );
+    print('   documents (${row.files.documents.length}): ${row.files.documents}');
     print('   multimedia: ${row.files.multimedia}');
-    print(
-      '   multimediaFiles (${row.files.multimediaFiles.length}): ${row.files.multimediaFiles}',
-    );
+    print('   multimediaFiles (${row.files.multimediaFiles.length}): ${row.files.multimediaFiles}');
 
-    // Construir listas separadas por tipo
     final imageChips = <Widget>[];
     final documentChips = <Widget>[];
     final multimediaChips = <Widget>[];
 
-    // Agregar imagen singular
-    if (row.files.image != null && row.files.image!.isNotEmpty) {
-      final url = row.files.image!;
+    void addChip(
+        List<Widget> list, String url, String fallback, IconData icon) {
       final title = row.files.fileTitles[url] ?? '';
-      final displayTitle = title.isEmpty ? 'Imagen' : title;
-      imageChips.add(
-        _FileChip(
-          label: displayTitle,
-          icon: Icons.image,
-          showTypeIcon: true,
-          fileType: 'Imagen',
-          onTap: () => onFileTap(url, displayTitle),
-        ),
-      );
+      final label = title.isEmpty ? fallback : title;
+      list.add(_FileChip(
+        label: label,
+        icon: icon,
+        onTap: () => onFileTap(url, label),
+        cs: cs,
+      ));
     }
 
-    // Agregar imágenes múltiples
+    if (row.files.image != null && row.files.image!.isNotEmpty) {
+      addChip(imageChips, row.files.image!, 'Imagen', Icons.image_rounded);
+    }
     for (final url in row.files.images) {
       if (url.isNotEmpty) {
-        final title = row.files.fileTitles[url] ?? '';
-        final displayTitle = title.isEmpty ? 'Imagen' : title;
-        imageChips.add(
-          _FileChip(
-            label: displayTitle,
-            icon: Icons.image,
-            showTypeIcon: true,
-            fileType: 'Imagen',
-            onTap: () => onFileTap(url, displayTitle),
-          ),
-        );
+        addChip(imageChips, url, 'Imagen', Icons.image_rounded);
       }
     }
-
-    // Agregar documento singular
     if (row.files.document != null && row.files.document!.isNotEmpty) {
-      final url = row.files.document!;
-      final title = row.files.fileTitles[url] ?? '';
-      final displayTitle = title.isEmpty ? 'Documento' : title;
-      documentChips.add(
-        _FileChip(
-          label: displayTitle,
-          icon: Icons.description,
-          showTypeIcon: true,
-          fileType: 'Documento',
-          onTap: () => onFileTap(url, displayTitle),
-        ),
-      );
+      addChip(documentChips, row.files.document!, 'Documento',
+          Icons.description_rounded);
     }
-
-    // Agregar documentos múltiples
     for (final url in row.files.documents) {
       if (url.isNotEmpty) {
-        final title = row.files.fileTitles[url] ?? '';
-        final displayTitle = title.isEmpty ? 'Documento' : title;
-        documentChips.add(
-          _FileChip(
-            label: displayTitle,
-            icon: Icons.description,
-            showTypeIcon: true,
-            fileType: 'Documento',
-            onTap: () => onFileTap(url, displayTitle),
-          ),
-        );
+        addChip(documentChips, url, 'Documento', Icons.description_rounded);
       }
     }
-
-    // Agregar multimedia singular
     if (row.files.multimedia != null && row.files.multimedia!.isNotEmpty) {
-      final url = row.files.multimedia!;
-      final title = row.files.fileTitles[url] ?? '';
-      final displayTitle = title.isEmpty ? 'Multimedia' : title;
-      multimediaChips.add(
-        _FileChip(
-          label: displayTitle,
-          icon: Icons.videocam,
-          showTypeIcon: true,
-          fileType: 'Multimedia',
-          onTap: () => onFileTap(url, displayTitle),
-        ),
-      );
+      addChip(multimediaChips, row.files.multimedia!, 'Multimedia',
+          Icons.videocam_rounded);
     }
-
-    // Agregar multimedia múltiple
     for (final url in row.files.multimediaFiles) {
       if (url.isNotEmpty) {
-        final title = row.files.fileTitles[url] ?? '';
-        final displayTitle = title.isEmpty ? 'Multimedia' : title;
-        multimediaChips.add(
-          _FileChip(
-            label: displayTitle,
-            icon: Icons.videocam,
-            showTypeIcon: true,
-            fileType: 'Multimedia',
-            onTap: () => onFileTap(url, displayTitle),
-          ),
-        );
+        addChip(multimediaChips, url, 'Multimedia', Icons.videocam_rounded);
       }
     }
 
-    final totalChips =
+    final total =
         imageChips.length + documentChips.length + multimediaChips.length;
-    print('   🎨 Total de chips a mostrar: $totalChips');
+    print('   🎨 Total de chips a mostrar: $total');
+    if (total == 0) return const SizedBox.shrink();
 
-    if (totalChips == 0) {
-      return const SizedBox.shrink();
-    }
-
-    // Construir lista de secciones con separadores usando Column
     final sections = <Widget>[];
-
-    // Sección de imágenes
     if (imageChips.isNotEmpty) {
-      sections.add(Wrap(spacing: 8, runSpacing: 8, children: imageChips));
+      sections.add(Wrap(spacing: 8, runSpacing: 6, children: imageChips));
     }
-
-    // Separador entre imágenes y documentos
     if (imageChips.isNotEmpty && documentChips.isNotEmpty) {
-      sections.add(const SizedBox(height: 12));
+      sections.add(const SizedBox(height: 8));
     }
-
-    // Sección de documentos
     if (documentChips.isNotEmpty) {
-      sections.add(Wrap(spacing: 8, runSpacing: 8, children: documentChips));
+      sections.add(Wrap(spacing: 8, runSpacing: 6, children: documentChips));
     }
-
-    // Separador entre documentos y multimedia
     if (documentChips.isNotEmpty && multimediaChips.isNotEmpty) {
-      sections.add(const SizedBox(height: 12));
+      sections.add(const SizedBox(height: 8));
     }
-
-    // Sección de multimedia
     if (multimediaChips.isNotEmpty) {
-      sections.add(Wrap(spacing: 8, runSpacing: 8, children: multimediaChips));
+      sections
+          .add(Wrap(spacing: 8, runSpacing: 6, children: multimediaChips));
     }
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: sections,
-      ),
-    );
+    return Column(
+        crossAxisAlignment: CrossAxisAlignment.start, children: sections);
   }
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
     return Card(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: 10),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Número de fila + datos + botones de acción
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Índice
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerHighest,
+                    borderRadius:
+                        BorderRadius.circular(AppTheme.radiusSmall),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '${index + 1}',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurface.withOpacity(0.55),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                // Campos de datos
                 Expanded(
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
-                      children: columns.map((column) {
-                        final value = row.data[column] ?? '';
+                      children: columns.map((col) {
+                        final value = row.data[col] ?? '';
                         return Container(
-                          margin: const EdgeInsets.only(right: 16),
-                          constraints: const BoxConstraints(minWidth: 100),
+                          margin: const EdgeInsets.only(right: 20),
+                          constraints: const BoxConstraints(minWidth: 80),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                column,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.grey,
+                                col,
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color: cs.onSurface.withOpacity(0.5),
+                                  letterSpacing: 0.3,
                                 ),
                               ),
-                              const SizedBox(height: 4),
-                              Text(value, style: const TextStyle(fontSize: 14)),
+                              const SizedBox(height: 3),
+                              Text(
+                                value.isEmpty ? '—' : value,
+                                style: GoogleFonts.inter(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w400,
+                                  color: value.isEmpty
+                                      ? cs.onSurface.withOpacity(0.3)
+                                      : cs.onSurface,
+                                ),
+                              ),
                             ],
                           ),
                         );
@@ -842,51 +901,53 @@ class _CatalogRowCard extends StatelessWidget {
                     ),
                   ),
                 ),
+                // Botones edición
                 if (isEditing) ...[
+                  const SizedBox(width: 8),
                   IconButton(
-                    icon: const Icon(Icons.edit, size: 20),
-                    color: Colors.blue,
+                    icon: const Icon(Icons.edit_rounded, size: 18),
+                    color: cs.primary,
                     onPressed: onEdit,
+                    tooltip: 'Editar fila',
+                    constraints: const BoxConstraints(
+                        minWidth: 32, minHeight: 32),
+                    padding: EdgeInsets.zero,
+                    style: IconButton.styleFrom(
+                      backgroundColor: cs.primaryContainer.withOpacity(0.5),
+                    ),
                   ),
+                  const SizedBox(width: 6),
                   IconButton(
-                    icon: const Icon(Icons.delete, size: 20),
-                    color: Colors.red,
+                    icon: const Icon(Icons.delete_rounded, size: 18),
+                    color: cs.error,
                     onPressed: onDelete,
+                    tooltip: 'Eliminar fila',
+                    constraints: const BoxConstraints(
+                        minWidth: 32, minHeight: 32),
+                    padding: EdgeInsets.zero,
+                    style: IconButton.styleFrom(
+                      backgroundColor: cs.errorContainer.withOpacity(0.5),
+                    ),
                   ),
                 ],
               ],
             ),
-            // Archivos
-            Builder(
-              builder: (context) {
-                final hasFiles = row.files.hasAnyFiles;
-                print(
-                  '🔍 Verificando archivos para fila $index: hasAnyFiles=$hasFiles',
-                );
-                if (!hasFiles) {
-                  print(
-                    '   ⚠️ Fila $index NO tiene archivos o hasAnyFiles retorna false',
-                  );
-                  print('     image: ${row.files.image}');
-                  print('     images: ${row.files.images}');
-                  print('     document: ${row.files.document}');
-                  print('     documents: ${row.files.documents}');
-                  print('     multimedia: ${row.files.multimedia}');
-                  print('     multimediaFiles: ${row.files.multimediaFiles}');
-                }
-                if (hasFiles) {
-                  return Column(
-                    children: [
-                      const SizedBox(height: 8),
-                      const Divider(),
-                      const SizedBox(height: 8),
-                      _buildFileChips(),
-                    ],
-                  );
-                }
-                return const SizedBox.shrink();
-              },
-            ),
+            // Archivos adjuntos
+            Builder(builder: (context) {
+              final hasFiles = row.files.hasAnyFiles;
+              print(
+                  '🔍 Verificando archivos para fila $index: hasAnyFiles=$hasFiles');
+              if (!hasFiles) return const SizedBox.shrink();
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 10),
+                  Divider(color: cs.outlineVariant, height: 1),
+                  const SizedBox(height: 10),
+                  _buildFileChips(context),
+                ],
+              );
+            }),
           ],
         ),
       ),
@@ -894,82 +955,49 @@ class _CatalogRowCard extends StatelessWidget {
   }
 }
 
+// ── Chip de archivo ───────────────────────────────────────────────────────────
 class _FileChip extends StatelessWidget {
   final String label;
   final IconData icon;
   final VoidCallback onTap;
-  final bool showTypeIcon;
-  final String? fileType;
+  final ColorScheme cs;
 
   const _FileChip({
     required this.label,
     required this.icon,
     required this.onTap,
-    this.showTypeIcon = false,
-    this.fileType,
+    required this.cs,
   });
-
-  IconData _getTypeIcon() {
-    switch (fileType) {
-      case 'Imagen':
-        return Icons.image;
-      case 'Documento':
-        return Icons.description;
-      case 'Multimedia':
-        return Icons.videocam;
-      default:
-        return icon;
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Chip(
-        avatar: showTypeIcon
-            ? Icon(_getTypeIcon(), size: 18, color: Colors.blue)
-            : Icon(icon, size: 18, color: Colors.blue),
-        label: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Flexible(
-              child: Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            if (showTypeIcon && fileType != null) ...[
-              const SizedBox(width: 4),
-              Icon(_getTypeIcon(), size: 14, color: Colors.grey.shade600),
-            ],
-          ],
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    return AssistChip(
+      avatar: Icon(icon, size: 16, color: cs.primary),
+      label: Text(
+        label,
+        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500),
+        overflow: TextOverflow.ellipsis,
       ),
+      onPressed: onTap,
+      side: BorderSide(color: cs.primary.withOpacity(0.3)),
+      backgroundColor: cs.primaryContainer.withOpacity(0.25),
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
     );
   }
 }
 
-/// Clase auxiliar para representar un archivo en el modal
+// ── Clase auxiliar para el modal de archivos ──────────────────────────────────
 class _FileItem {
   final String url;
   final String title;
   final int rowNumber;
-
   _FileItem({required this.url, required this.title, required this.rowNumber});
 }
 
-/// Modal que primero muestra la lista de filas y luego los archivos de la fila seleccionada
+// ── Modal de archivos (lista de filas → archivos de fila) ─────────────────────
 class _FilesModalDialog extends StatefulWidget {
   final Catalog catalog;
-
   const _FilesModalDialog({required this.catalog});
 
   @override
@@ -980,29 +1008,21 @@ class _FilesModalDialogState extends State<_FilesModalDialog> {
   CatalogRow? _selectedRow;
   int? _selectedRowIndex;
 
-  void _selectRow(CatalogRow row, int index) {
-    setState(() {
-      _selectedRow = row;
-      _selectedRowIndex = index;
-    });
-  }
-
-  void _goBack() {
-    setState(() {
-      _selectedRow = null;
-      _selectedRowIndex = null;
-    });
-  }
+  void _selectRow(CatalogRow row, int index) =>
+      setState(() { _selectedRow = row; _selectedRowIndex = index; });
+  void _goBack() =>
+      setState(() { _selectedRow = null; _selectedRowIndex = null; });
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isNarrow = MediaQuery.of(context).size.width < 600;
+
     return Dialog(
       child: Container(
         width: MediaQuery.of(context).size.width * 0.8,
         height: MediaQuery.of(context).size.height * 0.8,
-        padding: EdgeInsets.all(
-          MediaQuery.of(context).size.width < 600 ? 12 : 16,
-        ),
+        padding: EdgeInsets.all(isNarrow ? 12 : 20),
         child: Column(
           children: [
             // Encabezado
@@ -1010,41 +1030,40 @@ class _FilesModalDialogState extends State<_FilesModalDialog> {
               children: [
                 if (_selectedRow != null)
                   IconButton(
-                    icon: const Icon(Icons.arrow_back),
+                    icon: const Icon(Icons.arrow_back_rounded),
                     onPressed: _goBack,
-                    tooltip: 'Volver a la lista de filas',
+                    tooltip: 'Volver',
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                   ),
+                if (_selectedRow != null) const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     _selectedRow != null
-                        ? 'Archivos de la Fila ${_selectedRowIndex! + 1}'
-                        : 'Seleccionar Fila',
-                    style: TextStyle(
-                      fontSize: MediaQuery.of(context).size.width < 600
-                          ? 16
-                          : 20,
-                      fontWeight: FontWeight.bold,
-                    ),
+                        ? 'Archivos · Fila ${_selectedRowIndex! + 1}'
+                        : 'Seleccionar fila',
+                    style: GoogleFonts.inter(
+                        fontSize: isNarrow ? 16 : 20,
+                        fontWeight: FontWeight.w600),
                     overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.close),
+                  icon: const Icon(Icons.close_rounded),
                   onPressed: () => Navigator.of(context).pop(),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                 ),
               ],
             ),
-            const Divider(),
+            const SizedBox(height: 4),
+            Divider(color: cs.outlineVariant),
+            const SizedBox(height: 4),
             // Contenido
             Expanded(
               child: _selectedRow == null
-                  ? _buildRowsList()
-                  : _buildRowFiles(_selectedRow!),
+                  ? _buildRowsList(context, cs)
+                  : _buildRowFiles(context, cs, _selectedRow!),
             ),
           ],
         ),
@@ -1052,81 +1071,86 @@ class _FilesModalDialogState extends State<_FilesModalDialog> {
     );
   }
 
-  Widget _buildRowsList() {
+  Widget _buildRowsList(BuildContext context, ColorScheme cs) {
     if (widget.catalog.rows.isEmpty) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.inbox_outlined, size: 64, color: Colors.grey),
-            SizedBox(height: 16),
-            Text(
-              'No hay filas en este catálogo',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
-            ),
+            Icon(Icons.inbox_rounded, size: 56,
+                color: cs.onSurface.withOpacity(0.3)),
+            const SizedBox(height: 16),
+            Text('No hay filas en este catálogo',
+                style: GoogleFonts.inter(
+                    fontSize: 15, color: cs.onSurface.withOpacity(0.55))),
           ],
         ),
       );
     }
 
-    return ListView.builder(
+    return ListView.separated(
       itemCount: widget.catalog.rows.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 4),
       itemBuilder: (context, index) {
         final row = widget.catalog.rows[index];
         final hasFiles = row.files.hasAnyFiles;
         final fileCount = _getFileCount(row.files);
 
-        return Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: hasFiles ? Colors.blue : Colors.grey,
-              child: Text(
-                '${index + 1}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
+        return ListTile(
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppTheme.radiusMedium)),
+          tileColor: cs.surfaceContainerLow,
+          leading: CircleAvatar(
+            backgroundColor: hasFiles ? cs.primaryContainer : cs.surfaceContainerHighest,
+            child: Text(
+              '${index + 1}',
+              style: GoogleFonts.inter(
+                fontWeight: FontWeight.w700,
+                color: hasFiles ? cs.onPrimaryContainer : cs.onSurface.withOpacity(0.4),
+                fontSize: 13,
               ),
             ),
-            title: Text(
-              'Fila ${index + 1}',
-              style: const TextStyle(fontWeight: FontWeight.w500),
-            ),
-            subtitle: Text(
-              hasFiles
-                  ? '$fileCount archivo${fileCount > 1 ? 's' : ''}'
-                  : 'Sin archivos',
-              style: TextStyle(
-                color: hasFiles ? Colors.green : Colors.grey,
-                fontWeight: hasFiles ? FontWeight.w500 : FontWeight.normal,
-              ),
-            ),
-            trailing: hasFiles
-                ? Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (row.files.image != null ||
-                          row.files.images.isNotEmpty)
-                        Icon(Icons.image, color: Colors.blue, size: 20),
-                      if (row.files.document != null ||
-                          row.files.documents.isNotEmpty) ...[
-                        const SizedBox(width: 4),
-                        Icon(Icons.description, color: Colors.orange, size: 20),
-                      ],
-                      if (row.files.multimedia != null ||
-                          row.files.multimediaFiles.isNotEmpty) ...[
-                        const SizedBox(width: 4),
-                        Icon(Icons.videocam, color: Colors.red, size: 20),
-                      ],
-                      const SizedBox(width: 8),
-                      const Icon(Icons.chevron_right),
-                    ],
-                  )
-                : const Icon(Icons.chevron_right),
-            enabled: hasFiles,
-            onTap: hasFiles ? () => _selectRow(row, index) : null,
           ),
+          title: Text('Fila ${index + 1}',
+              style: GoogleFonts.inter(fontWeight: FontWeight.w500)),
+          subtitle: Text(
+            hasFiles
+                ? '$fileCount archivo${fileCount > 1 ? 's' : ''}'
+                : 'Sin archivos',
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              color: hasFiles
+                  ? cs.primary
+                  : cs.onSurface.withOpacity(0.4),
+            ),
+          ),
+          trailing: hasFiles
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (row.files.image != null || row.files.images.isNotEmpty)
+                      Icon(Icons.image_rounded, color: cs.primary, size: 18),
+                    if (row.files.document != null ||
+                        row.files.documents.isNotEmpty) ...[
+                      const SizedBox(width: 4),
+                      Icon(Icons.description_rounded,
+                          color: cs.tertiary, size: 18),
+                    ],
+                    if (row.files.multimedia != null ||
+                        row.files.multimediaFiles.isNotEmpty) ...[
+                      const SizedBox(width: 4),
+                      Icon(Icons.videocam_rounded,
+                          color: cs.error, size: 18),
+                    ],
+                    const SizedBox(width: 8),
+                    Icon(Icons.chevron_right_rounded,
+                        color: cs.onSurface.withOpacity(0.4)),
+                  ],
+                )
+              : Icon(Icons.chevron_right_rounded,
+                  color: cs.onSurface.withOpacity(0.2)),
+          enabled: hasFiles,
+          onTap: hasFiles ? () => _selectRow(row, index) : null,
         );
       },
     );
@@ -1143,101 +1167,53 @@ class _FilesModalDialogState extends State<_FilesModalDialog> {
     return count;
   }
 
-  Widget _buildRowFiles(CatalogRow row) {
-    // Recopilar archivos de la fila por categorías
+  Widget _buildRowFiles(
+      BuildContext context, ColorScheme cs, CatalogRow row) {
     final imageFiles = <_FileItem>[];
     final documentFiles = <_FileItem>[];
     final multimediaFiles = <_FileItem>[];
 
-    // Imágenes
-    if (row.files.image != null && row.files.image!.isNotEmpty) {
-      final url = row.files.image!;
+    void addItem(List<_FileItem> list, String url, String fallback) {
       final title = row.files.fileTitles[url] ?? '';
-      imageFiles.add(
-        _FileItem(
-          url: url,
-          title: title.isEmpty ? 'Imagen' : title,
-          rowNumber: _selectedRowIndex! + 1,
-        ),
-      );
+      list.add(_FileItem(
+        url: url,
+        title: title.isEmpty ? fallback : title,
+        rowNumber: _selectedRowIndex! + 1,
+      ));
+    }
+
+    if (row.files.image != null && row.files.image!.isNotEmpty) {
+      addItem(imageFiles, row.files.image!, 'Imagen');
     }
     for (final url in row.files.images) {
-      if (url.isNotEmpty) {
-        final title = row.files.fileTitles[url] ?? '';
-        imageFiles.add(
-          _FileItem(
-            url: url,
-            title: title.isEmpty ? 'Imagen' : title,
-            rowNumber: _selectedRowIndex! + 1,
-          ),
-        );
-      }
+      if (url.isNotEmpty) addItem(imageFiles, url, 'Imagen');
     }
-
-    // Documentos
     if (row.files.document != null && row.files.document!.isNotEmpty) {
-      final url = row.files.document!;
-      final title = row.files.fileTitles[url] ?? '';
-      documentFiles.add(
-        _FileItem(
-          url: url,
-          title: title.isEmpty ? 'Documento' : title,
-          rowNumber: _selectedRowIndex! + 1,
-        ),
-      );
+      addItem(documentFiles, row.files.document!, 'Documento');
     }
     for (final url in row.files.documents) {
-      if (url.isNotEmpty) {
-        final title = row.files.fileTitles[url] ?? '';
-        documentFiles.add(
-          _FileItem(
-            url: url,
-            title: title.isEmpty ? 'Documento' : title,
-            rowNumber: _selectedRowIndex! + 1,
-          ),
-        );
-      }
+      if (url.isNotEmpty) addItem(documentFiles, url, 'Documento');
     }
-
-    // Multimedia
     if (row.files.multimedia != null && row.files.multimedia!.isNotEmpty) {
-      final url = row.files.multimedia!;
-      final title = row.files.fileTitles[url] ?? '';
-      multimediaFiles.add(
-        _FileItem(
-          url: url,
-          title: title.isEmpty ? 'Multimedia' : title,
-          rowNumber: _selectedRowIndex! + 1,
-        ),
-      );
+      addItem(multimediaFiles, row.files.multimedia!, 'Multimedia');
     }
     for (final url in row.files.multimediaFiles) {
-      if (url.isNotEmpty) {
-        final title = row.files.fileTitles[url] ?? '';
-        multimediaFiles.add(
-          _FileItem(
-            url: url,
-            title: title.isEmpty ? 'Multimedia' : title,
-            rowNumber: _selectedRowIndex! + 1,
-          ),
-        );
-      }
+      if (url.isNotEmpty) addItem(multimediaFiles, url, 'Multimedia');
     }
 
-    // Si no hay archivos, mostrar mensaje
     if (imageFiles.isEmpty &&
         documentFiles.isEmpty &&
         multimediaFiles.isEmpty) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.folder_open, size: 64, color: Colors.grey),
-            SizedBox(height: 16),
-            Text(
-              'Esta fila no tiene archivos',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
-            ),
+            Icon(Icons.folder_open_rounded, size: 56,
+                color: cs.onSurface.withOpacity(0.3)),
+            const SizedBox(height: 16),
+            Text('Esta fila no tiene archivos',
+                style: GoogleFonts.inter(
+                    fontSize: 15, color: cs.onSurface.withOpacity(0.55))),
           ],
         ),
       );
@@ -1247,41 +1223,37 @@ class _FilesModalDialogState extends State<_FilesModalDialog> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Sección de imágenes
-          if (imageFiles.isNotEmpty) ...[
+          if (imageFiles.isNotEmpty)
             _FileCategorySection(
               title: 'Imágenes',
-              icon: Icons.image,
-              iconColor: Colors.blue,
+              icon: Icons.image_rounded,
+              iconColor: cs.primary,
               files: imageFiles,
-              onFileTap: (file) =>
-                  _openFileViewer(context, file.url, file.title),
+              cs: cs,
+              onFileTap: (f) => _openFileViewer(context, f.url, f.title),
             ),
-            const SizedBox(height: 24),
-          ],
-          // Sección de documentos
-          if (documentFiles.isNotEmpty) ...[
+          if (imageFiles.isNotEmpty && documentFiles.isNotEmpty)
+            const SizedBox(height: 20),
+          if (documentFiles.isNotEmpty)
             _FileCategorySection(
               title: 'Documentos',
-              icon: Icons.description,
-              iconColor: Colors.orange,
+              icon: Icons.description_rounded,
+              iconColor: cs.tertiary,
               files: documentFiles,
-              onFileTap: (file) =>
-                  _openFileViewer(context, file.url, file.title),
+              cs: cs,
+              onFileTap: (f) => _openFileViewer(context, f.url, f.title),
             ),
-            const SizedBox(height: 24),
-          ],
-          // Sección de multimedia
-          if (multimediaFiles.isNotEmpty) ...[
+          if (documentFiles.isNotEmpty && multimediaFiles.isNotEmpty)
+            const SizedBox(height: 20),
+          if (multimediaFiles.isNotEmpty)
             _FileCategorySection(
               title: 'Multimedia',
-              icon: Icons.videocam,
-              iconColor: Colors.red,
+              icon: Icons.videocam_rounded,
+              iconColor: cs.error,
               files: multimediaFiles,
-              onFileTap: (file) =>
-                  _openFileViewer(context, file.url, file.title),
+              cs: cs,
+              onFileTap: (f) => _openFileViewer(context, f.url, f.title),
             ),
-          ],
         ],
       ),
     );
@@ -1290,18 +1262,19 @@ class _FilesModalDialogState extends State<_FilesModalDialog> {
   void _openFileViewer(BuildContext context, String url, String fileName) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => FileViewerView(url: url, fileName: fileName),
-      ),
+          builder: (_) =>
+              FileViewerView(url: url, fileName: fileName)),
     );
   }
 }
 
-/// Widget para mostrar una sección de archivos por categoría
+// ── Sección de categoría de archivos en el modal ──────────────────────────────
 class _FileCategorySection extends StatelessWidget {
   final String title;
   final IconData icon;
   final Color iconColor;
   final List<_FileItem> files;
+  final ColorScheme cs;
   final Function(_FileItem) onFileTap;
 
   const _FileCategorySection({
@@ -1309,6 +1282,7 @@ class _FileCategorySection extends StatelessWidget {
     required this.icon,
     required this.iconColor,
     required this.files,
+    required this.cs,
     required this.onFileTap,
   });
 
@@ -1317,46 +1291,49 @@ class _FileCategorySection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Encabezado de la categoría
         Row(
           children: [
-            Icon(icon, color: iconColor, size: 24),
+            Icon(icon, color: iconColor, size: 20),
             const SizedBox(width: 8),
-            Text(
-              title,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
+            Text(title,
+                style: GoogleFonts.inter(
+                    fontSize: 16, fontWeight: FontWeight.w600)),
             const SizedBox(width: 8),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: iconColor.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(12),
+                color: iconColor.withOpacity(0.15),
+                borderRadius:
+                    BorderRadius.circular(AppTheme.radiusFull),
               ),
-              child: Text(
-                '${files.length}',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: iconColor,
-                ),
-              ),
+              child: Text('${files.length}',
+                  style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: iconColor)),
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        // Lista de archivos
+        const SizedBox(height: 10),
         ...files.map(
-          (file) => Card(
-            margin: const EdgeInsets.only(bottom: 8),
+          (file) => Container(
+            margin: const EdgeInsets.only(bottom: 6),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+            ),
             child: ListTile(
-              leading: Icon(icon, color: iconColor),
-              title: Text(
-                file.title,
-                style: const TextStyle(fontWeight: FontWeight.w500),
-              ),
-              subtitle: Text('Fila ${file.rowNumber}'),
-              trailing: const Icon(Icons.chevron_right),
+              shape: RoundedRectangleBorder(
+                  borderRadius:
+                      BorderRadius.circular(AppTheme.radiusMedium)),
+              leading: Icon(icon, color: iconColor, size: 20),
+              title: Text(file.title,
+                  style: GoogleFonts.inter(fontWeight: FontWeight.w500)),
+              subtitle: Text('Fila ${file.rowNumber}',
+                  style: GoogleFonts.inter(fontSize: 12)),
+              trailing: Icon(Icons.chevron_right_rounded,
+                  color: cs.onSurface.withOpacity(0.4)),
               onTap: () => onFileTap(file),
             ),
           ),
