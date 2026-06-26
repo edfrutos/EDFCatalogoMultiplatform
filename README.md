@@ -84,7 +84,18 @@ Reconectar: `tmux attach -t edf` · Parar: `tmux kill-session -t edf`.
 # → dist/EDFCatalogo-<version>.dmg  (firma ad-hoc, sin Developer ID)
 ```
 
-### Web — producción (Docker)
+### Web — producción (VPS + Plesk)
+
+Desplegado en `https://edfcat.efjdefrutos.com` (Vultr + Plesk/Nginx + Docker API).
+
+```bash
+# Despliegue desde el Mac (build + rsync + restart API)
+./scripts/deploy.sh
+```
+
+Ver §6.2.1 de [`docs/arquitectura.md`](docs/arquitectura.md) para el setup completo.
+
+### Web — producción self-contained (Docker + Caddy)
 
 ```bash
 docker compose -f docker/docker-compose.web.yml up -d --build

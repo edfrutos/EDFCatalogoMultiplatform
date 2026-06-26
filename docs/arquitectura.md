@@ -342,19 +342,14 @@ curl -X POST http://localhost:8089/api/auth/login \
 | Pantalla en blanco en iPhone/iPad | `flutter run` inyecta WebSocket de debug (`ws://127.0.0.1:PORT`); desde el móvil, `127.0.0.1` apunta al propio móvil → conexión falla | Usar `./scripts/dev_tailscale.sh` (build release, sin WebSocket). Ver §6.3 |
 | `502 Bad Gateway` en Tailscale `:8444` | API Dart no está corriendo | `./scripts/run_api_dev.sh` o `tmux attach -t edf` → ventana `api` |
 
-### 6.2 Docker para producción
+### 6.2 Docker para producción (self-contained con Caddy)
 
 ```sh
 docker/
-├── Dockerfile.api          # Imagen Dart slim para el servidor API
+├── Dockerfile.api          # Imagen Dart AOT (FROM scratch)
 ├── Caddyfile.web           # Reverse proxy: Flutter Web (/) + API (/api/)
 └── docker-compose.web.yml  # Servicios: caddy + api
 ```
-
-El `.env` se inyecta durante la build de Flutter con `--mount=type=secret` y
-**no queda** en ninguna capa de la imagen final. El binario web resultante no
-contiene credenciales — las variables de entorno en web se leen del asset `.env`
-que se bundlea en `build/web/assets/`.
 
 ```bash
 docker-compose -f docker/docker-compose.web.yml up -d --build
@@ -362,6 +357,57 @@ docker-compose -f docker/docker-compose.web.yml up -d --build
 
 Puerto web por defecto: `80/443` (Caddy con HTTPS automático).
 El servidor API escucha en `8089` internamente; Caddy hace el proxy.
+
+### 6.2.1 VPS con Plesk/Nginx como proxy inverso
+
+Producción en `https://edfcat.efjdefrutos.com` (Vultr, Ubuntu, Plesk).
+Nginx/Plesk gestiona SSL (Let's Encrypt) y sirve directamente los ficheros estáticos.
+Docker solo corre el contenedor de la API.
+
+```
+Internet → Plesk/Nginx :443 (SSL)
+              │
+              ├── /       → webroot Plesk (ficheros Flutter estáticos)
+              └── /api/   → localhost:8089 (Docker, API Dart)
+```
+
+**Archivos:**
+- `docker/docker-compose.prod.yml` — solo la API Dart en `127.0.0.1:8089`
+- `scripts/deploy.sh` — build Flutter local → rsync al servidor → restart API
+
+**Primer despliegue en el servidor (una vez):**
+```bash
+ssh -p 2222 root@208.76.221.20
+git clone <repo> /opt/edfcatalogo
+cd /opt/edfcatalogo && cp .env.example .env  # rellenar producción
+docker compose -f docker/docker-compose.prod.yml up -d --build
+```
+
+**Directivas adicionales de Nginx en Plesk** (`edfcat.efjdefrutos.com`):
+```nginx
+location / {
+    try_files $uri $uri/ /index.html;
+}
+
+location /api/ {
+    proxy_pass http://127.0.0.1:8089;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+> **Nota**: el webroot de Plesk apunta al raíz del dominio
+> (`/var/www/vhosts/efjdefrutos.com/edfcat.efjdefrutos.com/`),
+> **no** al subdirectorio `httpdocs/`. El `rsync` de `deploy.sh` apunta
+> al raíz del dominio para que Nginx encuentre los ficheros correctamente.
+> `try_files $uri $uri/ /index.html` es necesario para el router de Flutter (SPA).
+
+**Despliegues posteriores desde el Mac:**
+```bash
+./scripts/deploy.sh
+```
 
 ### 6.3 Tailscale — acceso remoto desde iPhone/iPad
 
