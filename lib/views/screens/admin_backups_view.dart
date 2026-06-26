@@ -1380,7 +1380,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               Icons.folder_copy_outlined,
               size: 64,
               color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
@@ -1405,7 +1405,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
           return Card(
             margin: const EdgeInsets.only(bottom: 12),
             child: ListTile(
-              leading: const CircleAvatar(
+              leading: CircleAvatar(
                 backgroundColor: Theme.of(context).colorScheme.secondary,
                 child: Icon(Icons.folder_copy_rounded, color: Theme.of(context).colorScheme.onSecondary),
               ),
