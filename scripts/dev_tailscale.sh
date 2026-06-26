@@ -1,24 +1,27 @@
 #!/usr/bin/env bash
 # =============================================================================
-# dev_tailscale.sh — Arranca API + Flutter Web y configura Tailscale Serve
+# dev_tailscale.sh — Build release + API Dart + Tailscale Serve
 #
-# Secuencia completa con un solo comando:
-#   1. Arranca API Dart en puerto $API_PORT (por defecto 8089)
-#   2. Arranca Flutter Web headless en puerto $WEB_PORT (por defecto 56001)
+# Usa un build de release (no flutter run) porque el modo dev inyecta un
+# WebSocket de debug que falla cuando el cliente no es localhost.
+#
+# Secuencia:
+#   1. Arranca API Dart en tmux (ventana "api")
+#   2. Construye Flutter Web --release y lo sirve con Python HTTP server
+#      en tmux (ventana "web")
 #   3. Configura Tailscale Serve:
-#        /     → Flutter Web (puerto 56001)   — acceso al frontend
-#        /api  → API Dart   (puerto 8089)     — llamadas de la app
-#   4. Muestra la URL HTTPS de Tailscale para abrir en cualquier dispositivo
+#        /     → puerto 56001 (Flutter Web estático)
+#        /api  → puerto 8089  (API Dart)
+#   4. Muestra la URL HTTPS de Tailscale
+#
+# Para actualizar la app después de cambios en el código:
+#   tmux attach -t edf  →  ventana "web"  →  Ctrl+C  →  flecha arriba  →  Enter
 #
 # Uso:
-#   chmod +x scripts/dev_tailscale.sh
-#   ./scripts/dev_tailscale.sh
+#   chmod +x scripts/dev_tailscale.sh && ./scripts/dev_tailscale.sh
 #
-# Reconectar a la sesión tmux después de cerrar la terminal:
-#   tmux attach -t edf
-#
-# Ver ventanas: Ctrl+B  W  (dentro de tmux)
-# Detener todo: tmux kill-session -t edf
+# Reconectar: tmux attach -t edf
+# Detener:    tmux kill-session -t edf
 # =============================================================================
 
 set -euo pipefail
@@ -36,10 +39,11 @@ warning() { echo -e "${YELLOW}⚠ $*${NC}"; }
 step()    { echo -e "${CYAN}── $*${NC}"; }
 
 # ── Requisitos ────────────────────────────────────────────────────────────────
-command -v tmux      >/dev/null 2>&1 || { echo "tmux no encontrado. Instala: brew install tmux"; exit 1; }
+command -v tmux      >/dev/null 2>&1 || { echo "tmux no encontrado: brew install tmux"; exit 1; }
 command -v tailscale >/dev/null 2>&1 || { echo "tailscale no encontrado."; exit 1; }
 command -v flutter   >/dev/null 2>&1 || { echo "flutter no encontrado."; exit 1; }
 command -v dart      >/dev/null 2>&1 || { echo "dart no encontrado."; exit 1; }
+command -v python3   >/dev/null 2>&1 || { echo "python3 no encontrado."; exit 1; }
 
 echo ""
 echo -e "${BOLD}════════════════════════════════════════════${NC}"
@@ -55,7 +59,7 @@ if [ -f "$PROJECT_ROOT/.env" ]; then
   source "$PROJECT_ROOT/.env"
   set +o allexport
 else
-  warning ".env no encontrado — asegúrate de tener MONGO_URI, MONGO_DB y API_JWT_SECRET"
+  warning ".env no encontrado"
 fi
 
 # ── Instalar dependencias API si faltan ───────────────────────────────────────
@@ -64,6 +68,14 @@ if [ ! -d "$PROJECT_ROOT/api/.dart_tool" ]; then
   (cd "$PROJECT_ROOT/api" && dart pub get)
 fi
 
+# ── Build Flutter Web release ─────────────────────────────────────────────────
+# Release build: sin WebSocket de debug, sin hot reload.
+# Los dispositivos remotos (iPhone, iPad) no pueden conectar al WebSocket de
+# debug que inyecta "flutter run", lo que deja la app en blanco.
+step "Construyendo Flutter Web (release)..."
+(cd "$PROJECT_ROOT" && flutter build web --release)
+info "Build completado ✅"
+
 # ── Matar sesión tmux anterior si existe ─────────────────────────────────────
 if tmux has-session -t "$SESSION" 2>/dev/null; then
   warning "Sesión tmux '$SESSION' ya existe — reiniciando..."
@@ -71,78 +83,61 @@ if tmux has-session -t "$SESSION" 2>/dev/null; then
   sleep 1
 fi
 
-# ── Crear sesión tmux con dos ventanas ───────────────────────────────────────
+# ── Crear sesión tmux ─────────────────────────────────────────────────────────
 step "Creando sesión tmux '$SESSION'..."
 
 # Ventana 0: API Dart
 tmux new-session -d -s "$SESSION" -n "api" -x 220 -y 50
 tmux send-keys -t "$SESSION:api" \
-  "cd '$PROJECT_ROOT/api' && echo '▶ Arrancando API...' && dart run bin/server.dart" Enter
+  "cd '$PROJECT_ROOT/api' && echo '▶ Arrancando API en :$API_PORT...' && dart run bin/server.dart" Enter
 
-# Ventana 1: Flutter Web headless (sin Chrome, accesible desde otros dispositivos)
-tmux new-window -t "$SESSION" -n "flutter"
-tmux send-keys -t "$SESSION:flutter" \
-  "cd '$PROJECT_ROOT' && echo '▶ Arrancando Flutter Web...' && flutter run -d web-server --web-port $WEB_PORT --web-hostname 0.0.0.0" Enter
-
-# Esperar a que la API arranque antes de configurar Tailscale
-step "Esperando que la API esté lista (máx 20s)..."
-for i in $(seq 1 40); do
-  if curl -sf "http://localhost:$API_PORT/api/health" >/dev/null 2>&1; then
-    echo "  API lista ✅"
-    break
-  fi
-  sleep 0.5
-  if [ "$i" -eq 40 ]; then
-    warning "API no respondió en 20s — continúa de todos modos"
-  fi
-done
+# Ventana 1: servidor HTTP estático para el build de release
+BUILD_DIR="$PROJECT_ROOT/build/web"
+REBUILD_CMD="cd '$PROJECT_ROOT' && flutter build web --release && python3 -m http.server $WEB_PORT --bind 0.0.0.0 --directory '$BUILD_DIR'"
+tmux new-window -t "$SESSION" -n "web"
+tmux send-keys -t "$SESSION:web" \
+  "echo '▶ Sirviendo build/web en :$WEB_PORT...' && python3 -m http.server $WEB_PORT --bind 0.0.0.0 --directory '$BUILD_DIR'" Enter
 
 # ── Configurar Tailscale Serve ────────────────────────────────────────────────
-step "Configurando Tailscale Serve (puerto HTTPS $HTTPS_PORT)..."
+step "Configurando Tailscale Serve (HTTPS :$HTTPS_PORT)..."
 
-# Ruta raíz → Flutter Web
 tailscale serve --bg --https="$HTTPS_PORT" "$WEB_PORT" 2>/dev/null || \
   tailscale serve --bg --https="$HTTPS_PORT" "http://localhost:$WEB_PORT" 2>/dev/null || \
-  warning "No se pudo configurar / → puerto $WEB_PORT (quizá ya existe)"
+  warning "  / → :$WEB_PORT ya configurado o error"
 
-# Ruta /api → API Dart
-# La app detecta automáticamente el host remoto (env_config.dart → Uri.base.origin)
-# y llama a /api/* en el mismo host:puerto, que Tailscale enruta al backend local.
 if tailscale serve --bg --https="$HTTPS_PORT" --set-path /api "http://localhost:$API_PORT" 2>/dev/null; then
-  echo "  /api → :$API_PORT ✅"
+  info "  /api → :$API_PORT ✅"
 else
-  warning "Tu versión de Tailscale puede no soportar --set-path."
-  warning "Prueba manualmente: tailscale serve --bg --https=$HTTPS_PORT --set-path /api http://localhost:$API_PORT"
-  warning "O actualiza Tailscale: sudo softwareupdate --install tailscale"
+  warning "  --set-path no soportado — prueba: tailscale serve --bg --https=$HTTPS_PORT --set-path /api http://localhost:$API_PORT"
 fi
 
-# ── Obtener URL pública de Tailscale ─────────────────────────────────────────
-TAILSCALE_HOST=$(tailscale status --json 2>/dev/null | python3 -c \
-  "import sys,json; d=json.load(sys.stdin); print(d.get('Self',{}).get('DNSName','').rstrip('.'))" 2>/dev/null || echo "")
+# ── URL de acceso ─────────────────────────────────────────────────────────────
+TAILSCALE_HOST=$(tailscale status --json 2>/dev/null | \
+  python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('Self',{}).get('DNSName','').rstrip('.'))" 2>/dev/null || echo "")
 
 echo ""
 echo -e "${BOLD}════════════════════════════════════════════${NC}"
 if [ -n "$TAILSCALE_HOST" ]; then
-  echo -e "${BOLD}  URL de acceso:${NC}"
+  echo -e "  ${BOLD}Acceso desde iPhone/iPad:${NC}"
   echo -e "  ${GREEN}https://${TAILSCALE_HOST}:${HTTPS_PORT}${NC}"
 else
-  echo -e "${BOLD}  Consulta la URL con:  tailscale serve status${NC}"
+  echo -e "  Consulta URL: ${CYAN}tailscale serve status${NC}"
 fi
 echo -e "${BOLD}════════════════════════════════════════════${NC}"
 echo ""
-echo "  Local (Chrome):    http://localhost:$WEB_PORT"
-echo "  API local:         http://localhost:$API_PORT"
+echo "  Local:   http://localhost:$WEB_PORT"
+echo "  API:     http://localhost:$API_PORT"
 echo ""
-echo "  tmux ventanas:"
-echo "    Ctrl+B  W    — lista de ventanas"
-echo "    Ctrl+B  D    — desconectar (servidores siguen corriendo)"
-echo "    Ctrl+B  N/P  — siguiente/anterior ventana"
-echo "    Ctrl+B  [    — scroll (q para salir)"
+echo "  Rebuild tras cambios en el código:"
+echo "    tmux attach -t $SESSION → ventana 'web' → Ctrl+C → flecha↑ → Enter"
+echo "  O desde terminal:  cd '$PROJECT_ROOT' && $REBUILD_CMD"
 echo ""
-echo "  Detener todo:    tmux kill-session -t $SESSION"
-echo "  Reconectar:      tmux attach -t $SESSION"
+echo "  tmux:"
+echo "    Ctrl+B W  — lista ventanas     Ctrl+B D  — desconectar"
+echo "    Ctrl+B 0  — ventana api        Ctrl+B 1  — ventana web"
+echo ""
+echo "  Detener todo:  tmux kill-session -t $SESSION"
 echo ""
 
-# Conectar a la sesión mostrando la ventana flutter
-tmux select-window -t "$SESSION:flutter"
+tmux select-window -t "$SESSION:web"
 tmux attach -t "$SESSION"
