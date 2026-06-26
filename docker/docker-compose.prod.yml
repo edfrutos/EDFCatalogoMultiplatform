@@ -1,0 +1,42 @@
+# docker-compose.prod.yml — Producción con Plesk/Nginx como proxy inverso
+#
+# Solo corre el contenedor de la API Dart.
+# Los ficheros estáticos de Flutter Web los sirve Nginx/Plesk directamente
+# desde el webroot del subdominio (deploy.sh los sincroniza via rsync).
+#
+# Nginx/Plesk proxea:
+#   /api/*  →  http://127.0.0.1:8089  (este contenedor)
+#   /*      →  webroot Plesk           (Flutter build/web estático)
+#
+# Primer despliegue en el servidor:
+#   git clone <repo> /opt/edfcatalogo
+#   cp .env.example .env  # rellenar con valores de producción
+#   docker compose -f docker/docker-compose.prod.yml up -d --build
+#
+# Actualizar tras cambios en la API:
+#   docker compose -f docker/docker-compose.prod.yml up -d --build api
+
+services:
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    image: edfcatalogo-api:latest
+    container_name: edfcatalogo-api-prod
+    restart: unless-stopped
+    # Solo accesible desde localhost — Nginx/Plesk hace el proxy
+    ports:
+      - "127.0.0.1:8089:8089"
+    env_file:
+      - ../.env
+    environment:
+      API_PORT: "8089"
+      # CORS: el frontend está en el mismo dominio, Nginx añade los headers
+      API_CORS_ORIGIN: "https://edfcat.efjdefrutos.com"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8089/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

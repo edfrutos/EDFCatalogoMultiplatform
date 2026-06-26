@@ -81,14 +81,21 @@ class EnvConfig {
           pageHost == '';
 
       if (!isLocal) {
-        // Acceso remoto (ej: Tailscale).
-        // Tailscale Serve con --set-path elimina el prefijo de ruta al hacer
-        // el proxy, por lo que /api/auth/login llega al backend como /auth/login.
-        // Solución: API en puerto HTTPS dedicado (8444) sin path routing,
-        // así el path llega intacto al backend Dart.
-        // CORS: la API tiene origin '*', así que distintos puertos no son problema.
-        const apiPort = String.fromEnvironment('TAILSCALE_API_PORT', defaultValue: '8444');
-        return '${Uri.base.scheme}://${Uri.base.host}:$apiPort';
+        // Tailscale Serve: host termina en .ts.net o puerto no estándar (8443).
+        // La API está en puerto HTTPS dedicado (8444) porque Tailscale Serve
+        // con --set-path eliminaría el prefijo /api del path al proxear.
+        final isTailscale = pageHost.contains('.ts.net') ||
+            Uri.base.port == 8443;
+
+        if (isTailscale) {
+          const apiPort = String.fromEnvironment(
+              'TAILSCALE_API_PORT', defaultValue: '8444');
+          return '${Uri.base.scheme}://${Uri.base.host}:$apiPort';
+        }
+
+        // Producción (Plesk/Nginx): API en el mismo origen, mismo puerto 443.
+        // Nginx proxea /api/* → localhost:8089 preservando el path completo.
+        return Uri.base.origin;
       }
 
       // Acceso local: usar API_BASE_URL del .env o fallback a localhost
