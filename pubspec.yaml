@@ -93,7 +93,10 @@ dependencies:
   intl: ^0.20.2
   uuid: ^4.5.1
   equatable: ^2.0.5
-  
+
+  # Tipografía branding
+  google_fonts: ^6.2.1
+
   # Export
   excel: ^4.0.6
   csv: ^6.0.0

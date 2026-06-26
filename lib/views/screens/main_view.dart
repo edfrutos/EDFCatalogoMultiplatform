@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../utils/app_theme.dart';
+import '../../utils/theme_provider.dart';
 import '../../viewmodels/auth_viewmodel.dart';
+import '../widgets/edf_logo.dart';
 import 'catalogs_view.dart';
 import 'profile_view.dart';
 import 'admin_view.dart';
@@ -15,261 +19,347 @@ class MainView extends StatefulWidget {
 }
 
 class _MainViewState extends State<MainView> {
-  NavigationItem? _selectedItem = NavigationItem.catalogs;
+  NavigationItem _selectedItem = NavigationItem.catalogs;
+
+  int get _navIndex => switch (_selectedItem) {
+    NavigationItem.catalogs => 0,
+    NavigationItem.profile  => 1,
+    NavigationItem.admin    => 2,
+  };
+
+  void _selectIndex(int index, bool isAdmin) {
+    setState(() {
+      _selectedItem = switch (index) {
+        0 => NavigationItem.catalogs,
+        1 => NavigationItem.profile,
+        2 when isAdmin => NavigationItem.admin,
+        _ => NavigationItem.catalogs,
+      };
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final authViewModel = context.watch<AuthViewModel>();
     final isAdmin = authViewModel.currentUser?.isAdmin ?? false;
+    final size = MediaQuery.of(context).size;
+    final isNarrow = size.width < 600;
+    final isTablet = size.width >= 600 && size.width < 1100;
+    // narrow  → BottomNavigationBar
+    // tablet  → NavigationRail compacto (solo iconos)
+    // desktop → NavigationRail extendido (iconos + etiquetas + logo)
 
-    // Detectar si es móvil (ancho < 600px) o tablet/desktop
-    final isMobile = MediaQuery.of(context).size.width < 600;
+    if (isNarrow) return _buildMobileLayout(context, authViewModel, isAdmin);
+    if (isTablet) return _buildTabletLayout(context, authViewModel, isAdmin);
+    return _buildDesktopLayout(context, authViewModel, isAdmin);
+  }
 
+  // ── Móvil: BottomNavigationBar ─────────────────────────────────────────────
+  Widget _buildMobileLayout(BuildContext context, AuthViewModel auth, bool isAdmin) {
+    final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      drawer: isMobile ? _buildDrawer(context, authViewModel, isAdmin) : null,
+      appBar: AppBar(
+        title: EdfLogoHorizontal(iconSize: 28),
+        actions: [
+          _ThemeToggleButton(),
+          IconButton(
+            icon: const Icon(Icons.logout_rounded),
+            onPressed: auth.signOut,
+            tooltip: 'Cerrar sesión',
+          ),
+        ],
+      ),
+      body: _buildContent(),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: isAdmin ? _navIndex : _navIndex.clamp(0, 1),
+        onDestinationSelected: (i) => _selectIndex(i, isAdmin),
+        destinations: [
+          const NavigationDestination(
+            icon: Icon(Icons.folder_outlined),
+            selectedIcon: Icon(Icons.folder_rounded),
+            label: 'Catálogos',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.person_outline_rounded),
+            selectedIcon: Icon(Icons.person_rounded),
+            label: 'Perfil',
+          ),
+          if (isAdmin)
+            const NavigationDestination(
+              icon: Icon(Icons.admin_panel_settings_outlined),
+              selectedIcon: Icon(Icons.admin_panel_settings_rounded),
+              label: 'Admin',
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ── Tablet: NavigationRail compacto ────────────────────────────────────────
+  Widget _buildTabletLayout(BuildContext context, AuthViewModel auth, bool isAdmin) {
+    final cs = Theme.of(context).colorScheme;
+    return Scaffold(
       body: Row(
         children: [
-          // Sidebar solo en desktop/tablet
-          if (!isMobile) ...[
-            Container(
-              width: 200,
-              color: Theme.of(context).colorScheme.surface,
+          NavigationRail(
+            extended: false,
+            selectedIndex: isAdmin ? _navIndex : _navIndex.clamp(0, 1),
+            onDestinationSelected: (i) => _selectIndex(i, isAdmin),
+            leading: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: EdfLogoIcon(size: 36),
+            ),
+            trailing: Column(
+              children: [
+                _ThemeToggleButton(),
+                const SizedBox(height: 4),
+                IconButton(
+                  icon: const Icon(Icons.logout_rounded),
+                  onPressed: auth.signOut,
+                  tooltip: 'Cerrar sesión',
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+            destinations: [
+              const NavigationRailDestination(
+                icon: Icon(Icons.folder_outlined),
+                selectedIcon: Icon(Icons.folder_rounded),
+                label: Text('Catálogos'),
+              ),
+              const NavigationRailDestination(
+                icon: Icon(Icons.person_outline_rounded),
+                selectedIcon: Icon(Icons.person_rounded),
+                label: Text('Perfil'),
+              ),
+              if (isAdmin)
+                const NavigationRailDestination(
+                  icon: Icon(Icons.admin_panel_settings_outlined),
+                  selectedIcon: Icon(Icons.admin_panel_settings_rounded),
+                  label: Text('Admin'),
+                ),
+            ],
+          ),
+          VerticalDivider(width: 1, thickness: 1, color: cs.outlineVariant),
+          Expanded(child: _buildContent()),
+        ],
+      ),
+    );
+  }
+
+  // ── Desktop: NavigationRail extendido ──────────────────────────────────────
+  Widget _buildDesktopLayout(BuildContext context, AuthViewModel auth, bool isAdmin) {
+    final cs = Theme.of(context).colorScheme;
+    return Scaffold(
+      body: Row(
+        children: [
+          SizedBox(
+            width: 240,
+            child: Container(
+              color: cs.surfaceContainerLow,
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 16),
-                  // Botones de navegación
-                  _buildNavButton(
-                    icon: Icons.folder,
-                    label: 'Catálogos',
-                    isSelected: _selectedItem == NavigationItem.catalogs,
-                    onTap: () {
-                      setState(() {
-                        _selectedItem = NavigationItem.catalogs;
-                      });
-                    },
+                  // Header con logo
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+                    child: EdfLogoHorizontal(iconSize: 32),
                   ),
-                  _buildNavButton(
-                    icon: Icons.person,
-                    label: 'Perfil',
-                    isSelected: _selectedItem == NavigationItem.profile,
-                    onTap: () {
-                      setState(() {
-                        _selectedItem = NavigationItem.profile;
-                      });
-                    },
-                  ),
-                  if (isAdmin)
-                    _buildNavButton(
-                      icon: Icons.settings,
-                      label: 'Administración',
-                      isSelected: _selectedItem == NavigationItem.admin,
-                      onTap: () {
-                        setState(() {
-                          _selectedItem = NavigationItem.admin;
-                        });
-                      },
+                  const SizedBox(height: 8),
+                  Divider(height: 1, color: cs.outlineVariant),
+                  const SizedBox(height: 8),
+                  // Navegación
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Column(
+                      children: [
+                        _SidebarNavItem(
+                          icon: Icons.folder_outlined,
+                          activeIcon: Icons.folder_rounded,
+                          label: 'Catálogos',
+                          isSelected: _selectedItem == NavigationItem.catalogs,
+                          onTap: () => setState(() => _selectedItem = NavigationItem.catalogs),
+                        ),
+                        _SidebarNavItem(
+                          icon: Icons.person_outline_rounded,
+                          activeIcon: Icons.person_rounded,
+                          label: 'Perfil',
+                          isSelected: _selectedItem == NavigationItem.profile,
+                          onTap: () => setState(() => _selectedItem = NavigationItem.profile),
+                        ),
+                        if (isAdmin)
+                          _SidebarNavItem(
+                            icon: Icons.admin_panel_settings_outlined,
+                            activeIcon: Icons.admin_panel_settings_rounded,
+                            label: 'Administración',
+                            isSelected: _selectedItem == NavigationItem.admin,
+                            onTap: () => setState(() => _selectedItem = NavigationItem.admin),
+                          ),
+                      ],
                     ),
+                  ),
                   const Spacer(),
-                  const Divider(),
-                  // Botón cerrar sesión (Material necesario: el Container padre crea un ColoredBox)
-                  Material(
-                    color: Colors.transparent,
-                    child: ListTile(
-                      leading: const Icon(Icons.logout),
-                      title: const Text('Cerrar sesión'),
-                      onTap: () {
-                        authViewModel.signOut();
-                      },
+                  Divider(height: 1, color: cs.outlineVariant),
+                  // Acciones inferiores
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    child: Column(
+                      children: [
+                        _SidebarActionTile(
+                          icon: context.watch<ThemeProvider>().icon,
+                          label: context.watch<ThemeProvider>().label,
+                          onTap: () => context.read<ThemeProvider>().toggle(),
+                        ),
+                        _SidebarActionTile(
+                          icon: Icons.logout_rounded,
+                          label: 'Cerrar sesión',
+                          onTap: auth.signOut,
+                          isDestructive: true,
+                        ),
+                      ],
                     ),
                   ),
+                  const SizedBox(height: 4),
                 ],
               ),
             ),
-            const VerticalDivider(thickness: 1, width: 1),
-          ],
-          // Content
-          Expanded(child: _buildDetailView()),
+          ),
+          VerticalDivider(width: 1, thickness: 1, color: cs.outlineVariant),
+          Expanded(child: _buildContent()),
         ],
       ),
-      // AppBar para móvil con botón de menú
-      appBar: isMobile
-          ? AppBar(
-              title: Text(_getAppBarTitle()),
-              leading: Builder(
-                builder: (context) => IconButton(
-                  icon: const Icon(Icons.menu),
-                  onPressed: () => Scaffold.of(context).openDrawer(),
+    );
+  }
+
+  Widget _buildContent() {
+    return switch (_selectedItem) {
+      NavigationItem.catalogs => const CatalogsView(),
+      NavigationItem.profile  => const ProfileView(),
+      NavigationItem.admin    => const AdminView(),
+    };
+  }
+}
+
+// ── Item de navegación para sidebar desktop ────────────────────────────────────
+class _SidebarNavItem extends StatelessWidget {
+  final IconData icon;
+  final IconData activeIcon;
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _SidebarNavItem({
+    required this.icon,
+    required this.activeIcon,
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: isSelected ? cs.secondaryContainer : Colors.transparent,
+              borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  isSelected ? activeIcon : icon,
+                  size: 20,
+                  color: isSelected
+                      ? cs.onSecondaryContainer
+                      : cs.onSurfaceVariant,
                 ),
-              ),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.logout),
-                  onPressed: () => authViewModel.signOut(),
-                  tooltip: 'Cerrar sesión',
+                const SizedBox(width: 12),
+                Text(
+                  label,
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                    color: isSelected ? cs.onSecondaryContainer : cs.onSurfaceVariant,
+                  ),
                 ),
               ],
-            )
-          : null,
-    );
-  }
-
-  String _getAppBarTitle() {
-    switch (_selectedItem) {
-      case NavigationItem.catalogs:
-        return 'Catálogos';
-      case NavigationItem.profile:
-        return 'Perfil';
-      case NavigationItem.admin:
-        return 'Administración';
-      case null:
-        return 'App';
-    }
-  }
-
-  Widget _buildDrawer(
-    BuildContext context,
-    AuthViewModel authViewModel,
-    bool isAdmin,
-  ) {
-    return Drawer(
-      child: SafeArea(
-        child: Column(
-          children: [
-            const SizedBox(height: 16),
-            // Botones de navegación
-            _buildDrawerItem(
-              icon: Icons.folder,
-              label: 'Catálogos',
-              isSelected: _selectedItem == NavigationItem.catalogs,
-              onTap: () {
-                Navigator.of(context).pop(); // Cerrar drawer
-                setState(() {
-                  _selectedItem = NavigationItem.catalogs;
-                });
-              },
             ),
-            _buildDrawerItem(
-              icon: Icons.person,
-              label: 'Perfil',
-              isSelected: _selectedItem == NavigationItem.profile,
-              onTap: () {
-                Navigator.of(context).pop(); // Cerrar drawer
-                setState(() {
-                  _selectedItem = NavigationItem.profile;
-                });
-              },
-            ),
-            if (isAdmin)
-              _buildDrawerItem(
-                icon: Icons.settings,
-                label: 'Administración',
-                isSelected: _selectedItem == NavigationItem.admin,
-                onTap: () {
-                  Navigator.of(context).pop(); // Cerrar drawer
-                  setState(() {
-                    _selectedItem = NavigationItem.admin;
-                  });
-                },
-              ),
-            const Spacer(),
-            const Divider(),
-            // Botón cerrar sesión
-            ListTile(
-              leading: const Icon(Icons.logout),
-              title: const Text('Cerrar sesión'),
-              onTap: () {
-                Navigator.of(context).pop(); // Cerrar drawer
-                authViewModel.signOut();
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDrawerItem({
-    required IconData icon,
-    required String label,
-    required bool isSelected,
-    required VoidCallback onTap,
-  }) {
-    return ListTile(
-      leading: Icon(
-        icon,
-        color: isSelected
-            ? Theme.of(context).colorScheme.primary
-            : Theme.of(context).colorScheme.onSurface,
-      ),
-      title: Text(
-        label,
-        style: TextStyle(
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          color: isSelected
-              ? Theme.of(context).colorScheme.primary
-              : Theme.of(context).colorScheme.onSurface,
-        ),
-      ),
-      selected: isSelected,
-      onTap: onTap,
-    );
-  }
-
-  Widget _buildNavButton({
-    required IconData icon,
-    required String label,
-    required bool isSelected,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        color: isSelected
-            ? Theme.of(context).colorScheme.primaryContainer
-            : Colors.transparent,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              color: isSelected
-                  ? Theme.of(context).colorScheme.onPrimaryContainer
-                  : Theme.of(context).colorScheme.onSurface,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: isSelected
-                      ? Theme.of(context).colorScheme.onPrimaryContainer
-                      : Theme.of(context).colorScheme.onSurface,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDetailView() {
-    switch (_selectedItem) {
-      case NavigationItem.catalogs:
-        return const CatalogsView();
-      case NavigationItem.profile:
-        return const ProfileView();
-      case NavigationItem.admin:
-        return const AdminView();
-      case null:
-        return const Center(
-          child: Text(
-            'Selecciona una opción del menú',
-            style: TextStyle(color: Colors.grey),
           ),
-        );
-    }
+        ),
+      ),
+    );
+  }
+}
+
+// ── Acción de sidebar (sin estado seleccionado) ────────────────────────────────
+class _SidebarActionTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool isDestructive;
+
+  const _SidebarActionTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.isDestructive = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final color = isDestructive ? cs.error : cs.onSurfaceVariant;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                Icon(icon, size: 20, color: color),
+                const SizedBox(width: 12),
+                Text(
+                  label,
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    color: color,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Botón toggle de tema ──────────────────────────────────────────────────────
+class _ThemeToggleButton extends StatelessWidget {
+  const _ThemeToggleButton();
+
+  @override
+  Widget build(BuildContext context) {
+    final themeProv = context.watch<ThemeProvider>();
+    return IconButton(
+      icon: Icon(themeProv.icon),
+      onPressed: () => themeProv.toggle(),
+      tooltip: themeProv.label,
+    );
   }
 }

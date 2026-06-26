@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:provider/provider.dart';
 
+import 'utils/app_theme.dart';
 import 'utils/env_config.dart';
 import 'utils/env_loader.dart';
+import 'utils/theme_provider.dart';
 import 'viewmodels/admin_viewmodel.dart';
 import 'viewmodels/auth_viewmodel.dart';
 import 'views/content_view.dart';
@@ -30,30 +32,39 @@ void main() async {
     print('❌ Flutter error: ${details.exception}');
   };
 
-  runApp(const MyApp());
+  // Cargar preferencia de tema antes de arrancar
+  final themeProvider = ThemeProvider();
+  await themeProvider.loadFromPrefs();
+
+  runApp(MyApp(themeProvider: themeProvider));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final ThemeProvider themeProvider;
+  const MyApp({super.key, required this.themeProvider});
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider<ThemeProvider>.value(value: themeProvider),
         ChangeNotifierProvider(create: (_) => AuthViewModel()),
         ChangeNotifierProxyProvider<AuthViewModel, AdminViewModel>(
           create: (_) => AdminViewModel(),
           update: (_, authViewModel, previous) => previous ?? AdminViewModel(),
         ),
       ],
-      child: MaterialApp(
-        title: 'EDF Catálogo',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-          useMaterial3: true,
-        ),
-        home: const ContentView(),
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProv, _) {
+          return MaterialApp(
+            title: 'EDF Catálogo',
+            debugShowCheckedModeBanner: false,
+            themeMode: themeProv.mode,
+            theme: AppTheme.light(),
+            darkTheme: AppTheme.dark(),
+            home: const ContentView(),
+          );
+        },
       ),
     );
   }
