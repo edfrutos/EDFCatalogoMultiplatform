@@ -22,8 +22,8 @@ void main() {
       app.main();
       await tester.pumpAndSettle(const Duration(seconds: 3));
 
-      // La app debe mostrar al menos un widget (LoginView o MainView)
-      expect(find.byType(FlutterError), findsNothing);
+      // La app debe renderizar al menos un widget sin errores
+      expect(tester.takeException(), isNull);
     });
   });
 }

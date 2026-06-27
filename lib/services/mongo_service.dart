@@ -770,6 +770,7 @@ class MongoService {
     required String message,
   }) async {
     try {
+      final db = await getDatabase();
       final collection = db.collection('contacts');
       await collection.insertOne({
         'name': name,
