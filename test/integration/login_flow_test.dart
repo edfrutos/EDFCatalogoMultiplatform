@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:edfcatalogomultiplatform/viewmodels/auth_viewmodel.dart';
+import 'package:edfcatalogomultiplatform/views/screens/login_view.dart';
 
 import 'test_helpers.dart';
 
@@ -85,7 +86,12 @@ void main() {
 
       final authVm =
           AuthViewModel(mongoService: mongo, keychainService: keychain);
-      await tester.pumpWidget(buildApp(authVm));
+      // Usamos buildIsolated con LoginView directamente para evitar que
+      // ContentView transite a MainView tras el login (lo que dispararía
+      // cargas de catálogos con el MongoService real en CI).
+      await tester.pumpWidget(
+        buildIsolated(authVm: authVm, child: const LoginView()),
+      );
       await tester.pump();
 
       final fields = find.byType(TextFormField);
