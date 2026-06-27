@@ -96,7 +96,7 @@ jobs:
         if: ${{ env.KEYSTORE_B64 != '' }}
         run: |
           cat > android/key.properties << EOF
-          storeFile=app/edfcatalogo-release.jks
+          storeFile=edfcatalogo-release.jks
           storePassword=${STORE_PASSWORD}
           keyAlias=${KEY_ALIAS}
           keyPassword=${KEY_PASSWORD}
