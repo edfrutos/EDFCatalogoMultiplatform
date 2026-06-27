@@ -45,7 +45,7 @@ class _EdfMarkPainter extends CustomPainter {
     final h = size.height;
 
     // Fondo redondeado
-    final bgPaint = Paint()..color = color.withOpacity(0.12);
+    final bgPaint = Paint()..color = color.withValues(alpha: 0.12);
     final bgRect = RRect.fromRectAndRadius(
       Rect.fromLTWH(0, 0, w, h),
       Radius.circular(w * 0.25),
@@ -120,7 +120,7 @@ class EdfLogoHorizontal extends StatelessWidget {
               style: GoogleFonts.inter(
                 fontSize: fs * 0.7,
                 fontWeight: FontWeight.w400,
-                color: c.withOpacity(0.7),
+                color: c.withValues(alpha: 0.7),
                 letterSpacing: 0.5,
                 height: 1.2,
               ),
@@ -155,7 +155,7 @@ class EdfLogoStacked extends StatelessWidget {
             borderRadius: BorderRadius.circular(iconSize * 0.25),
             boxShadow: [
               BoxShadow(
-                color: c.withOpacity(0.25),
+                color: c.withValues(alpha: 0.25),
                 blurRadius: iconSize * 0.4,
                 offset: Offset(0, iconSize * 0.12),
               ),
@@ -179,7 +179,7 @@ class EdfLogoStacked extends StatelessWidget {
           style: GoogleFonts.inter(
             fontSize: iconSize * 0.22,
             fontWeight: FontWeight.w400,
-            color: c.withOpacity(0.65),
+            color: c.withValues(alpha: 0.65),
             letterSpacing: 2.0,
           ),
         ),

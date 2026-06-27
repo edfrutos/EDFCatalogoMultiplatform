@@ -760,6 +760,32 @@ class MongoService {
     }
   }
 
+  // MARK: - Contact Operations
+
+  /// Guarda un mensaje de contacto en la colección 'contacts'.
+  Future<bool> saveContactMessage({
+    required String name,
+    required String email,
+    required String subject,
+    required String message,
+  }) async {
+    try {
+      final collection = db.collection('contacts');
+      await collection.insertOne({
+        'name': name,
+        'email': email,
+        'subject': subject,
+        'message': message,
+        'createdAt': DateTime.now().toUtc().toIso8601String(),
+        'read': false,
+      });
+      return true;
+    } catch (e) {
+      print('❌ Error guardando mensaje de contacto: $e');
+      return false;
+    }
+  }
+
   // MARK: - Catalog Operations
 
   /// Obtener catálogos de un usuario

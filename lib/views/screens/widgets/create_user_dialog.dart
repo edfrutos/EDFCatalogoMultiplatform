@@ -222,9 +222,9 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                                           fontSize: 11,
                                           color: _isAdmin
                                               ? cs.onTertiaryContainer
-                                                  .withOpacity(0.75)
+                                                  .withValues(alpha: 0.75)
                                               : cs.onSurface
-                                                  .withOpacity(0.5))),
+                                                  .withValues(alpha: 0.5))),
                                 ],
                               ),
                             ),

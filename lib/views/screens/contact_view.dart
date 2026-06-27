@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+
+import '../../services/mongo_service.dart';
+import '../../utils/app_theme.dart';
 import '../../viewmodels/auth_viewmodel.dart';
-import '../../services/email_service.dart';
 
 class ContactView extends StatefulWidget {
   const ContactView({super.key});
@@ -17,27 +20,20 @@ class _ContactViewState extends State<ContactView> {
   final _subjectController = TextEditingController();
   final _messageController = TextEditingController();
 
-  bool _isSending = false;
-  String? _statusMessage;
-  bool _isError = false;
-
-  bool get _isFormValid =>
-      _nameController.text.isNotEmpty &&
-      _emailController.text.isNotEmpty &&
-      _subjectController.text.isNotEmpty &&
-      _messageController.text.isNotEmpty &&
-      _emailController.text.contains('@');
+  bool _sending = false;
+  bool _sent = false;
 
   @override
   void initState() {
     super.initState();
-    // Pre-rellenar con datos del usuario autenticado si están disponibles
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final authViewModel = context.read<AuthViewModel>();
-      final user = authViewModel.currentUser;
+      final user = context.read<AuthViewModel>().currentUser;
       if (user != null) {
-        _nameController.text = user.name;
-        _emailController.text = user.email;
+        final displayName =
+            (user.fullName?.isNotEmpty == true ? user.fullName! : user.name)
+                .trim();
+        _nameController.text = displayName;
+        _emailController.text = user.email.trim();
       }
     });
   }
@@ -51,194 +47,237 @@ class _ContactViewState extends State<ContactView> {
     super.dispose();
   }
 
-  Future<void> _sendContactEmail() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-
-    setState(() {
-      _isSending = true;
-      _statusMessage = null;
-    });
+  Future<void> _send() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _sending = true);
 
     try {
-      await EmailService.shared.sendContactMessage(
-        from: _emailController.text.trim(),
+      final ok = await MongoService.instance.saveContactMessage(
         name: _nameController.text.trim(),
-        message: '${_subjectController.text.trim()}\n\n${_messageController.text.trim()}',
+        email: _emailController.text.trim(),
+        subject: _subjectController.text.trim(),
+        message: _messageController.text.trim(),
       );
 
-      if (mounted) {
-        setState(() {
-          _isSending = false;
-          _isError = false;
-          _statusMessage = '✅ Mensaje enviado correctamente. ¡Gracias por contactarnos!';
-        });
+      if (!mounted) return;
 
-        // Limpiar formulario después de 2 segundos y cerrar modal
-        Future.delayed(const Duration(seconds: 2), () {
-          if (mounted) {
-            _clearForm();
-            Navigator.of(context).pop();
-          }
+      if (ok) {
+        setState(() {
+          _sending = false;
+          _sent = true;
         });
+        _subjectController.clear();
+        _messageController.clear();
+      } else {
+        setState(() => _sending = false);
+        _showError('No se pudo enviar el mensaje. Inténtalo de nuevo.');
       }
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isSending = false;
-          _isError = true;
-          _statusMessage = '❌ Error al enviar el mensaje. Por favor, inténtalo de nuevo.';
-        });
-      }
+      if (!mounted) return;
+      setState(() => _sending = false);
+      _showError('Error al enviar: $e');
     }
   }
 
-  void _clearForm() {
-    _nameController.clear();
-    _emailController.clear();
-    _subjectController.clear();
-    _messageController.clear();
-    _statusMessage = null;
+  void _showError(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: Theme.of(context).colorScheme.error,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
+
+  void _reset() => setState(() => _sent = false);
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Contacto'),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 600),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Contacto',
+                    style: GoogleFonts.inter(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Envíanos un mensaje y te responderemos lo antes posible.',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  _sent ? _buildSuccess(cs) : _buildForm(cs),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
+    );
+  }
+
+  Widget _buildForm(ColorScheme cs) {
+    return Card(
+      elevation: 0,
+      color: cs.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
+        side: BorderSide(color: cs.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
         child: Form(
           key: _formKey,
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TextFormField(
+              _buildField(
                 controller: _nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Nombre',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.person),
-                ),
-                enabled: !_isSending,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Por favor ingresa tu nombre';
-                  }
-                  return null;
-                },
+                label: 'Nombre',
+                icon: Icons.person_outline_rounded,
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'El nombre es obligatorio' : null,
               ),
               const SizedBox(height: 16),
-              TextFormField(
+              _buildField(
                 controller: _emailController,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.email),
-                ),
-                enabled: !_isSending,
+                label: 'Email',
+                icon: Icons.email_outlined,
                 keyboardType: TextInputType.emailAddress,
-                autocorrect: false,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Por favor ingresa tu email';
-                  }
-                  if (!value.contains('@')) {
-                    return 'Por favor ingresa un email válido';
-                  }
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'El email es obligatorio';
+                  if (!v.contains('@')) return 'Email no válido';
                   return null;
                 },
               ),
               const SizedBox(height: 16),
-              TextFormField(
+              _buildField(
                 controller: _subjectController,
-                decoration: const InputDecoration(
-                  labelText: 'Asunto',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.subject),
-                ),
-                enabled: !_isSending,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Por favor ingresa un asunto';
-                  }
-                  return null;
-                },
+                label: 'Asunto',
+                icon: Icons.subject_rounded,
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'El asunto es obligatorio' : null,
               ),
               const SizedBox(height: 16),
-              const Text(
-                'Mensaje:',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
+              _buildField(
                 controller: _messageController,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  hintText: 'Escribe tu mensaje aquí...',
-                ),
-                enabled: !_isSending,
-                maxLines: 10,
-                minLines: 5,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Por favor escribe un mensaje';
-                  }
+                label: 'Mensaje',
+                icon: Icons.chat_bubble_outline_rounded,
+                maxLines: 6,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'El mensaje es obligatorio';
+                  if (v.trim().length < 10) return 'El mensaje es demasiado corto';
                   return null;
                 },
               ),
               const SizedBox(height: 24),
-              if (_statusMessage != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: _isError ? Colors.red.shade50 : Colors.green.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: _isError ? Colors.red.shade200 : Colors.green.shade200,
-                      ),
-                    ),
-                    child: Text(
-                      _statusMessage!,
-                      style: TextStyle(
-                        color: _isError ? Colors.red.shade700 : Colors.green.shade700,
-                      ),
-                    ),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: _sending ? null : _send,
+                  icon: _sending
+                      ? SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: cs.onPrimary,
+                          ),
+                        )
+                      : const Icon(Icons.send_rounded),
+                  label: Text(
+                    _sending ? 'Enviando…' : 'Enviar mensaje',
+                    style: GoogleFonts.inter(fontWeight: FontWeight.w600),
                   ),
                 ),
-              if (_isSending)
-                const Center(
-                  child: Padding(
-                    padding: EdgeInsets.only(top: 16),
-                    child: Column(
-                      children: [
-                        CircularProgressIndicator(),
-                        SizedBox(height: 16),
-                        Text('Enviando...'),
-                      ],
-                    ),
-                  ),
-                )
-              else
-                ElevatedButton(
-                  onPressed: _isFormValid ? _sendContactEmail : null,
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  child: const Text('Enviar mensaje'),
-                ),
+              ),
             ],
           ),
         ),
       ),
     );
   }
-}
 
+  Widget _buildField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    TextInputType? keyboardType,
+    int maxLines = 1,
+    String? Function(String?)? validator,
+  }) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      maxLines: maxLines,
+      validator: validator,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, size: 20),
+        alignLabelWithHint: maxLines > 1,
+      ),
+    );
+  }
+
+  Widget _buildSuccess(ColorScheme cs) {
+    return Card(
+      elevation: 0,
+      color: cs.primaryContainer,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          children: [
+            Icon(
+              Icons.check_circle_outline_rounded,
+              size: 56,
+              color: cs.primary,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '¡Mensaje enviado!',
+              style: GoogleFonts.inter(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: cs.onPrimaryContainer,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Hemos recibido tu mensaje y te responderemos en breve.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                color: cs.onPrimaryContainer,
+              ),
+            ),
+            const SizedBox(height: 24),
+            OutlinedButton.icon(
+              onPressed: _reset,
+              icon: const Icon(Icons.edit_outlined),
+              label: const Text('Enviar otro mensaje'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

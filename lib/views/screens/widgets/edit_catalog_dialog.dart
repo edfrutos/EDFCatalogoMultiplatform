@@ -179,36 +179,36 @@ class _EditCatalogDialogState extends State<EditCatalogDialog> {
             fit: BoxFit.cover);
       } else {
         imgContent = Icon(Icons.image_outlined,
-            size: 40, color: cs.onSurface.withOpacity(0.3));
+            size: 40, color: cs.onSurface.withValues(alpha: 0.3));
       }
     } else if (_presignedThumbnailUrl != null && !_shouldRemoveImage) {
       imgContent = CachedNetworkImage(
         imageUrl: _presignedThumbnailUrl!,
         fit: BoxFit.cover,
-        placeholder: (_, __) =>
+        placeholder: (_, _) =>
             Center(child: CircularProgressIndicator(color: cs.primary)),
-        errorWidget: (_, __, ___) => Icon(Icons.broken_image_rounded,
-            size: 40, color: cs.onSurface.withOpacity(0.3)),
+        errorWidget: (_, _, _) => Icon(Icons.broken_image_rounded,
+            size: 40, color: cs.onSurface.withValues(alpha: 0.3)),
       );
     } else if (_presignedFirstRowImageUrl != null) {
       imgContent = CachedNetworkImage(
         imageUrl: _presignedFirstRowImageUrl!,
         fit: BoxFit.cover,
-        placeholder: (_, __) =>
+        placeholder: (_, _) =>
             Center(child: CircularProgressIndicator(color: cs.primary)),
-        errorWidget: (_, __, ___) => Icon(Icons.broken_image_rounded,
-            size: 40, color: cs.onSurface.withOpacity(0.3)),
+        errorWidget: (_, _, _) => Icon(Icons.broken_image_rounded,
+            size: 40, color: cs.onSurface.withValues(alpha: 0.3)),
       );
     } else {
       imgContent = Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.image_outlined,
-              size: 40, color: cs.onSurface.withOpacity(0.3)),
+              size: 40, color: cs.onSurface.withValues(alpha: 0.3)),
           const SizedBox(height: 6),
           Text('Sin imagen',
               style: GoogleFonts.inter(
-                  fontSize: 11, color: cs.onSurface.withOpacity(0.4))),
+                  fontSize: 11, color: cs.onSurface.withValues(alpha: 0.4))),
         ],
       );
     }
@@ -286,7 +286,7 @@ class _EditCatalogDialogState extends State<EditCatalogDialog> {
                               style: GoogleFonts.inter(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w500,
-                                  color: cs.onSurface.withOpacity(0.6))),
+                                  color: cs.onSurface.withValues(alpha: 0.6))),
                           const SizedBox(height: 8),
                           OutlinedButton.icon(
                             onPressed:
@@ -340,7 +340,7 @@ class _EditCatalogDialogState extends State<EditCatalogDialog> {
                               'Usando primera imagen de las filas',
                               style: GoogleFonts.inter(
                                   fontSize: 10,
-                                  color: cs.onSurface.withOpacity(0.45)),
+                                  color: cs.onSurface.withValues(alpha: 0.45)),
                             ),
                           ],
                         ],

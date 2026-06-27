@@ -6,10 +6,11 @@ import '../../utils/theme_provider.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../widgets/edf_logo.dart';
 import 'catalogs_view.dart';
+import 'contact_view.dart';
 import 'profile_view.dart';
 import 'admin_view.dart';
 
-enum NavigationItem { catalogs, profile, admin }
+enum NavigationItem { catalogs, profile, contact, admin }
 
 class MainView extends StatefulWidget {
   const MainView({super.key});
@@ -24,7 +25,8 @@ class _MainViewState extends State<MainView> {
   int get _navIndex => switch (_selectedItem) {
     NavigationItem.catalogs => 0,
     NavigationItem.profile  => 1,
-    NavigationItem.admin    => 2,
+    NavigationItem.contact  => 2,
+    NavigationItem.admin    => 3,
   };
 
   void _selectIndex(int index, bool isAdmin) {
@@ -32,7 +34,8 @@ class _MainViewState extends State<MainView> {
       _selectedItem = switch (index) {
         0 => NavigationItem.catalogs,
         1 => NavigationItem.profile,
-        2 when isAdmin => NavigationItem.admin,
+        2 => NavigationItem.contact,
+        3 when isAdmin => NavigationItem.admin,
         _ => NavigationItem.catalogs,
       };
     });
@@ -84,6 +87,11 @@ class _MainViewState extends State<MainView> {
             selectedIcon: Icon(Icons.person_rounded),
             label: 'Perfil',
           ),
+          const NavigationDestination(
+            icon: Icon(Icons.mail_outline_rounded),
+            selectedIcon: Icon(Icons.mail_rounded),
+            label: 'Contacto',
+          ),
           if (isAdmin)
             const NavigationDestination(
               icon: Icon(Icons.admin_panel_settings_outlined),
@@ -131,6 +139,11 @@ class _MainViewState extends State<MainView> {
                 icon: Icon(Icons.person_outline_rounded),
                 selectedIcon: Icon(Icons.person_rounded),
                 label: Text('Perfil'),
+              ),
+              const NavigationRailDestination(
+                icon: Icon(Icons.mail_outline_rounded),
+                selectedIcon: Icon(Icons.mail_rounded),
+                label: Text('Contacto'),
               ),
               if (isAdmin)
                 const NavigationRailDestination(
@@ -187,6 +200,13 @@ class _MainViewState extends State<MainView> {
                           isSelected: _selectedItem == NavigationItem.profile,
                           onTap: () => setState(() => _selectedItem = NavigationItem.profile),
                         ),
+                        _SidebarNavItem(
+                          icon: Icons.mail_outline_rounded,
+                          activeIcon: Icons.mail_rounded,
+                          label: 'Contacto',
+                          isSelected: _selectedItem == NavigationItem.contact,
+                          onTap: () => setState(() => _selectedItem = NavigationItem.contact),
+                        ),
                         if (isAdmin)
                           _SidebarNavItem(
                             icon: Icons.admin_panel_settings_outlined,
@@ -235,6 +255,7 @@ class _MainViewState extends State<MainView> {
     return switch (_selectedItem) {
       NavigationItem.catalogs => const CatalogsView(),
       NavigationItem.profile  => const ProfileView(),
+      NavigationItem.contact  => const ContactView(),
       NavigationItem.admin    => const AdminView(),
     };
   }
