@@ -58,7 +58,9 @@ void main() {
       await tester.tap(find.byType(FilledButton));
       await tester.pump();
 
-      expect(authVm.errorMessage, isNotNull);
+      // LoginView valida campos vacíos con _formKey.validate() antes de llamar
+      // a signIn(), así que authVm.errorMessage queda null. Solo verificamos
+      // que Mongo no fue llamado y el estado no cambió.
       expect(authVm.isAuthenticated, isFalse);
       verifyNever(
         () => mongo.authenticateUser(

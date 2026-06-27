@@ -95,7 +95,11 @@ Widget buildIsolated({
 }
 
 /// Configura stubs de keychain para un login exitoso.
+/// Incluye getToken/getJwtToken para evitar MissingStubError
+/// cuando ContentView llama a restoreSession() en initState.
 void stubKeychainForLogin(MockKeychainService keychain) {
+  when(() => keychain.getToken()).thenAnswer((_) async => null);
+  when(() => keychain.getJwtToken()).thenAnswer((_) async => null);
   when(() => keychain.saveToken(any())).thenAnswer((_) async => true);
   when(() => keychain.saveEmail(any())).thenAnswer((_) async => true);
   when(() => keychain.saveUserId(any())).thenAnswer((_) async => true);
