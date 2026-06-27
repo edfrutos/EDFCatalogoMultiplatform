@@ -133,7 +133,7 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView>
                       textAlign: TextAlign.center,
                       style: GoogleFonts.inter(
                         fontSize: 14,
-                        color: cs.onSurface.withOpacity(0.6),
+                        color: cs.onSurface.withValues(alpha: 0.6),
                         height: 1.5,
                       ),
                     ),
@@ -214,7 +214,7 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView>
                               'Enviando código...',
                               style: GoogleFonts.inter(
                                   fontSize: 13,
-                                  color: cs.onSurface.withOpacity(0.6)),
+                                  color: cs.onSurface.withValues(alpha: 0.6)),
                             ),
                           ],
                         ),

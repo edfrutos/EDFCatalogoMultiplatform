@@ -282,7 +282,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                             child: Text(
                               'Los backups de Google Drive solo están disponibles en la app de escritorio.',
                               style: GoogleFonts.inter(
-                                  color: cs.onSurface.withOpacity(0.5),
+                                  color: cs.onSurface.withValues(alpha: 0.5),
                                   fontSize: 13),
                             ),
                           ),
@@ -411,16 +411,16 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.cloud_off, size: 64, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.35)),
+            Icon(Icons.cloud_off, size: 64, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.35)),
             const SizedBox(height: 16),
             Text(
               'Backups disponibles solo en la app de escritorio',
-              style: GoogleFonts.inter(fontSize: 16, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
+              style: GoogleFonts.inter(fontSize: 16, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
             ),
             const SizedBox(height: 8),
             Text(
               'Descarga la app macOS para gestionar backups en Google Drive.',
-              style: GoogleFonts.inter(fontSize: 13, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
+              style: GoogleFonts.inter(fontSize: 13, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
               textAlign: TextAlign.center,
             ),
           ],
@@ -442,12 +442,12 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                   ? Icons.library_books_outlined
                   : Icons.people_outline,
               size: 64,
-              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 16),
             Text(
               'No hay backups de ${type == BackupType.catalogs ? 'catálogos' : 'usuarios'}',
-              style: GoogleFonts.inter(fontSize: 16, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
+              style: GoogleFonts.inter(fontSize: 16, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
             ),
           ],
         ),
@@ -1115,7 +1115,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
               const SizedBox(height: 8),
               Text(
                 'Esto puede tardar varios minutos',
-                style: GoogleFonts.inter(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
+                style: GoogleFonts.inter(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
               ),
             ],
           ),
@@ -1273,7 +1273,7 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
                         const SizedBox(height: 8),
                         Text(
                           'Esto puede tardar varios minutos',
-                          style: GoogleFonts.inter(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
+                          style: GoogleFonts.inter(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
                         ),
                       ],
                     ),
@@ -1354,16 +1354,16 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.cloud_off, size: 64, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.35)),
+            Icon(Icons.cloud_off, size: 64, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.35)),
             const SizedBox(height: 16),
             Text(
               'Backups disponibles solo en la app de escritorio',
-              style: GoogleFonts.inter(fontSize: 16, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
+              style: GoogleFonts.inter(fontSize: 16, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
             ),
             const SizedBox(height: 8),
             Text(
               'Descarga la app macOS para gestionar backups en Google Drive.',
-              style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
+              style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
               textAlign: TextAlign.center,
             ),
           ],
@@ -1383,12 +1383,12 @@ class _AdminBackupsViewState extends State<AdminBackupsView>
             Icon(
               Icons.folder_copy_outlined,
               size: 64,
-              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 16),
             Text(
               'No hay backups del proyecto',
-              style: TextStyle(fontSize: 16, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
+              style: TextStyle(fontSize: 16, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
             ),
           ],
         ),

@@ -363,7 +363,7 @@ class _StatCard extends StatelessWidget {
                 Text(title,
                     style: GoogleFonts.inter(
                         fontSize: 11,
-                        color: cs.onSurface.withOpacity(0.55))),
+                        color: cs.onSurface.withValues(alpha: 0.55))),
                 const SizedBox(height: 3),
                 Text(
                   value.toString(),

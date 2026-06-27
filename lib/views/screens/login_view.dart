@@ -83,8 +83,8 @@ class _LoginViewState extends State<LoginView> with SingleTickerProviderStateMix
                 end: Alignment.bottomRight,
                 colors: [
                   cs.primary,
-                  cs.primary.withOpacity(0.75),
-                  cs.secondary.withOpacity(0.6),
+                  cs.primary.withValues(alpha: 0.75),
+                  cs.secondary.withValues(alpha: 0.6),
                 ],
               ),
             ),
@@ -105,7 +105,7 @@ class _LoginViewState extends State<LoginView> with SingleTickerProviderStateMix
                           style: GoogleFonts.inter(
                             fontSize: 20,
                             fontWeight: FontWeight.w300,
-                            color: Colors.white.withOpacity(0.85),
+                            color: Colors.white.withValues(alpha: 0.85),
                             height: 1.5,
                           ),
                         ),
@@ -153,7 +153,7 @@ class _LoginViewState extends State<LoginView> with SingleTickerProviderStateMix
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [cs.primary, cs.primary.withOpacity(0.85)],
+                    colors: [cs.primary, cs.primary.withValues(alpha: 0.85)],
                   ),
                 ),
                 child: Column(
@@ -174,7 +174,7 @@ class _LoginViewState extends State<LoginView> with SingleTickerProviderStateMix
                       'Gestión de catálogos',
                       style: GoogleFonts.inter(
                         fontSize: 14,
-                        color: Colors.white.withOpacity(0.75),
+                        color: Colors.white.withValues(alpha: 0.75),
                         letterSpacing: 0.5,
                       ),
                     ),
@@ -379,8 +379,8 @@ class _PatternPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = color.withOpacity(0.07)..style = PaintingStyle.fill;
-    final stroke = Paint()..color = color.withOpacity(0.05)..style = PaintingStyle.stroke..strokeWidth = 1;
+    final paint = Paint()..color = color.withValues(alpha: 0.07)..style = PaintingStyle.fill;
+    final stroke = Paint()..color = color.withValues(alpha: 0.05)..style = PaintingStyle.stroke..strokeWidth = 1;
     canvas.drawCircle(Offset(size.width * 0.15, size.height * 0.2), size.width * 0.3, paint);
     canvas.drawCircle(Offset(size.width * 0.85, size.height * 0.8), size.width * 0.4, paint);
     canvas.drawCircle(Offset(size.width * 0.7, size.height * 0.1), size.width * 0.15, stroke);

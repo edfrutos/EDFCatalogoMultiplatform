@@ -502,7 +502,7 @@ class _CatalogCard extends StatelessWidget {
                     onPressed: onEdit,
                     tooltip: 'Editar',
                     style: IconButton.styleFrom(
-                      backgroundColor: cs.primaryContainer.withOpacity(0.4),
+                      backgroundColor: cs.primaryContainer.withValues(alpha: 0.4),
                       minimumSize: const Size(36, 36),
                       padding: EdgeInsets.zero,
                     ),
@@ -513,7 +513,7 @@ class _CatalogCard extends StatelessWidget {
                     onPressed: onDelete,
                     tooltip: 'Eliminar',
                     style: IconButton.styleFrom(
-                      backgroundColor: cs.errorContainer.withOpacity(0.3),
+                      backgroundColor: cs.errorContainer.withValues(alpha: 0.3),
                       minimumSize: const Size(36, 36),
                       padding: EdgeInsets.zero,
                     ),
@@ -536,7 +536,7 @@ class _ThumbPlaceholder extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       color: cs.surfaceContainerHighest,
-      child: Icon(Icons.photo_outlined, color: cs.onSurfaceVariant.withOpacity(0.5), size: 28),
+      child: Icon(Icons.photo_outlined, color: cs.onSurfaceVariant.withValues(alpha: 0.5), size: 28),
     );
   }
 }
@@ -744,7 +744,7 @@ class _EmptyState extends StatelessWidget {
             child: Icon(
               hasSearch ? Icons.search_off_rounded : Icons.folder_open_rounded,
               size: 40,
-              color: cs.onSurfaceVariant.withOpacity(0.5),
+              color: cs.onSurfaceVariant.withValues(alpha: 0.5),
             ),
           ),
           const SizedBox(height: 20),

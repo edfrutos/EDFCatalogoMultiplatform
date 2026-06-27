@@ -109,14 +109,14 @@ class _CreateCatalogDialogState extends State<CreateCatalogDialog> {
                 child: Row(
                   children: [
                     Icon(Icons.info_outline_rounded,
-                        size: 14, color: cs.onSurface.withOpacity(0.5)),
+                        size: 14, color: cs.onSurface.withValues(alpha: 0.5)),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         'La columna "Fecha" se añade automáticamente si no la incluyes.',
                         style: GoogleFonts.inter(
                             fontSize: 11,
-                            color: cs.onSurface.withOpacity(0.55)),
+                            color: cs.onSurface.withValues(alpha: 0.55)),
                       ),
                     ),
                   ],

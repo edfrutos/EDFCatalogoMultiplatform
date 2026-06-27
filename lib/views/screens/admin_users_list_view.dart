@@ -106,7 +106,7 @@ class _AdminUsersListViewState extends State<AdminUsersListView> {
                           '${vm.users.length} registrados',
                           style: GoogleFonts.inter(
                               fontSize: 12,
-                              color: cs.onSurface.withOpacity(0.5)),
+                              color: cs.onSurface.withValues(alpha: 0.5)),
                         ),
                       ],
                     ),
@@ -182,7 +182,7 @@ class _AdminUsersListViewState extends State<AdminUsersListView> {
                           const SizedBox(height: 14),
                           Text('Cargando usuarios...',
                               style: GoogleFonts.inter(
-                                  color: cs.onSurface.withOpacity(0.5))),
+                                  color: cs.onSurface.withValues(alpha: 0.5))),
                         ],
                       ),
                     )
@@ -292,7 +292,7 @@ class _EmptyState extends StatelessWidget {
             ),
             child: Icon(
                 isSearch ? Icons.search_off_rounded : Icons.people_outline_rounded,
-                size: 36, color: cs.onSurface.withOpacity(0.35)),
+                size: 36, color: cs.onSurface.withValues(alpha: 0.35)),
           ),
           const SizedBox(height: 16),
           Text(
@@ -306,7 +306,7 @@ class _EmptyState extends StatelessWidget {
                 ? 'Prueba con otro término de búsqueda'
                 : 'No hay usuarios registrados todavía',
             style: GoogleFonts.inter(
-                fontSize: 13, color: cs.onSurface.withOpacity(0.5)),
+                fontSize: 13, color: cs.onSurface.withValues(alpha: 0.5)),
           ),
         ],
       ),
@@ -409,21 +409,21 @@ class _UserCard extends StatelessWidget {
                       user.email,
                       style: GoogleFonts.inter(
                           fontSize: 12,
-                          color: cs.onSurface.withOpacity(0.55)),
+                          color: cs.onSurface.withValues(alpha: 0.55)),
                       overflow: TextOverflow.ellipsis,
                     ),
                     Text(
                       '@${user.username}',
                       style: GoogleFonts.inter(
                           fontSize: 11,
-                          color: cs.primary.withOpacity(0.7)),
+                          color: cs.primary.withValues(alpha: 0.7)),
                     ),
                   ],
                 ),
               ),
               PopupMenuButton<String>(
                 icon: Icon(Icons.more_vert_rounded,
-                    color: cs.onSurface.withOpacity(0.5)),
+                    color: cs.onSurface.withValues(alpha: 0.5)),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(AppTheme.radiusMedium)),
                 onSelected: (v) {

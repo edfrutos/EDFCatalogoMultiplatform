@@ -281,7 +281,7 @@ class _ProfileViewState extends State<ProfileView> {
                                   shape: BoxShape.circle,
                                   color: cs.primaryContainer,
                                   border: Border.all(
-                                      color: cs.outline.withOpacity(0.2),
+                                      color: cs.outline.withValues(alpha: 0.2),
                                       width: 2),
                                   image: avatarImage != null
                                       ? DecorationImage(
@@ -343,7 +343,7 @@ class _ProfileViewState extends State<ProfileView> {
                                 user.email,
                                 style: GoogleFonts.inter(
                                     fontSize: 14,
-                                    color: cs.onSurface.withOpacity(0.55)),
+                                    color: cs.onSurface.withValues(alpha: 0.55)),
                               ),
                               if (user.isAdmin) ...[
                                 const SizedBox(height: 8),
@@ -429,7 +429,7 @@ class _ProfileViewState extends State<ProfileView> {
                               Text('Subiendo imagen...',
                                   style: GoogleFonts.inter(
                                       fontSize: 13,
-                                      color: cs.onSurface.withOpacity(0.6))),
+                                      color: cs.onSurface.withValues(alpha: 0.6))),
                             ],
                           ),
                         ],
@@ -450,7 +450,7 @@ class _ProfileViewState extends State<ProfileView> {
                                 prefixIcon: const Icon(Icons.email_rounded),
                                 filled: true,
                                 fillColor: cs.surfaceContainerHighest
-                                    .withOpacity(0.5),
+                                    .withValues(alpha: 0.5),
                               ),
                               enabled: false,
                             ),

@@ -45,7 +45,7 @@ class _AdminPanelViewState extends State<AdminPanelView> {
                 end: Alignment.bottomRight,
                 colors: [
                   cs.primary,
-                  cs.primary.withOpacity(0.85),
+                  cs.primary.withValues(alpha: 0.85),
                 ],
               ),
             ),
@@ -57,7 +57,7 @@ class _AdminPanelViewState extends State<AdminPanelView> {
                     width: isWide ? 44 : 36,
                     height: isWide ? 44 : 36,
                     decoration: BoxDecoration(
-                      color: cs.onPrimary.withOpacity(0.2),
+                      color: cs.onPrimary.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
                     ),
                     child: Icon(Icons.admin_panel_settings_rounded,
@@ -82,7 +82,7 @@ class _AdminPanelViewState extends State<AdminPanelView> {
                           widget.currentUser.name,
                           style: GoogleFonts.inter(
                             fontSize: 12,
-                            color: cs.onPrimary.withOpacity(0.75),
+                            color: cs.onPrimary.withValues(alpha: 0.75),
                           ),
                         ),
                       ],
@@ -121,7 +121,7 @@ class _AdminPanelViewState extends State<AdminPanelView> {
                                 size: 16,
                                 color: sel
                                     ? cs.onPrimaryContainer
-                                    : cs.onSurface.withOpacity(0.6)),
+                                    : cs.onSurface.withValues(alpha: 0.6)),
                             label: Text(t.label,
                                 style: GoogleFonts.inter(
                                     fontSize: 13,

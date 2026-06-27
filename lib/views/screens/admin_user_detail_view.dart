@@ -247,7 +247,7 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
                     style: GoogleFonts.inter(
                         fontSize: 12,
                         fontWeight: FontWeight.w400,
-                        color: cs.onSurface.withOpacity(0.6))),
+                        color: cs.onSurface.withValues(alpha: 0.6))),
               ],
             ),
             actions: [
@@ -334,7 +334,7 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
                           Text(widget.user.email,
                               style: GoogleFonts.inter(
                                   fontSize: 13,
-                                  color: cs.onSurface.withOpacity(0.55))),
+                                  color: cs.onSurface.withValues(alpha: 0.55))),
                           const SizedBox(height: 10),
                           // Badges
                           Row(
@@ -406,13 +406,13 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
                           Row(children: [
                             Icon(Icons.admin_panel_settings_rounded,
                                 size: 18,
-                                color: cs.onSurface.withOpacity(0.5)),
+                                color: cs.onSurface.withValues(alpha: 0.5)),
                             const SizedBox(width: 8),
                             Expanded(
                                 child: Text('Rol',
                                     style: GoogleFonts.inter(
                                         fontSize: 13,
-                                        color: cs.onSurface.withOpacity(0.6)))),
+                                        color: cs.onSurface.withValues(alpha: 0.6)))),
                           ]),
                           const SizedBox(height: 8),
                           _isEditing

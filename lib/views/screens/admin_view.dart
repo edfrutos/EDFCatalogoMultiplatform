@@ -62,7 +62,7 @@ class AdminView extends StatelessWidget {
                         textAlign: TextAlign.center,
                         style: GoogleFonts.inter(
                           fontSize: 14,
-                          color: cs.onSurface.withOpacity(0.6),
+                          color: cs.onSurface.withValues(alpha: 0.6),
                           height: 1.5,
                         ),
                       ),

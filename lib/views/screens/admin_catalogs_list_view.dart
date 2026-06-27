@@ -89,7 +89,7 @@ class _AdminCatalogsListViewState extends State<AdminCatalogsListView> {
                     Text('${_catalogs.length} en total',
                         style: GoogleFonts.inter(
                             fontSize: 12,
-                            color: cs.onSurface.withOpacity(0.5))),
+                            color: cs.onSurface.withValues(alpha: 0.5))),
                   ],
                 ),
               ),
@@ -137,7 +137,7 @@ class _AdminCatalogsListViewState extends State<AdminCatalogsListView> {
                       const SizedBox(height: 14),
                       Text('Cargando catálogos...',
                           style: GoogleFonts.inter(
-                              color: cs.onSurface.withOpacity(0.5))),
+                              color: cs.onSurface.withValues(alpha: 0.5))),
                     ],
                   ),
                 )
@@ -158,7 +158,7 @@ class _AdminCatalogsListViewState extends State<AdminCatalogsListView> {
                                     ? Icons.search_off_rounded
                                     : Icons.library_books_rounded,
                                 size: 36,
-                                color: cs.onSurface.withOpacity(0.35)),
+                                color: cs.onSurface.withValues(alpha: 0.35)),
                           ),
                           const SizedBox(height: 16),
                           Text(
@@ -226,7 +226,7 @@ class _AdminCatalogsListViewState extends State<AdminCatalogsListView> {
                                               style: GoogleFonts.inter(
                                                   fontSize: 12,
                                                   color: cs.onSurface
-                                                      .withOpacity(0.55)),
+                                                      .withValues(alpha: 0.55)),
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
                                             ),
@@ -249,7 +249,7 @@ class _AdminCatalogsListViewState extends State<AdminCatalogsListView> {
                                       ),
                                     ),
                                     Icon(Icons.chevron_right_rounded,
-                                        color: cs.onSurface.withOpacity(0.35)),
+                                        color: cs.onSurface.withValues(alpha: 0.35)),
                                   ],
                                 ),
                               ),
@@ -281,11 +281,11 @@ class _InfoChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 11, color: cs.onSurface.withOpacity(0.5)),
+          Icon(icon, size: 11, color: cs.onSurface.withValues(alpha: 0.5)),
           const SizedBox(width: 4),
           Text(label,
               style: GoogleFonts.inter(
-                  fontSize: 11, color: cs.onSurface.withOpacity(0.6))),
+                  fontSize: 11, color: cs.onSurface.withValues(alpha: 0.6))),
         ],
       ),
     );

@@ -203,7 +203,7 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                                 size: 20,
                                 color: _isAdmin
                                     ? cs.onTertiaryContainer
-                                    : cs.onSurface.withOpacity(0.5)),
+                                    : cs.onSurface.withValues(alpha: 0.5)),
                             const SizedBox(width: 10),
                             Expanded(
                               child: Column(

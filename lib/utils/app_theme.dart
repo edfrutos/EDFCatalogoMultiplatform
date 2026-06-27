@@ -103,7 +103,7 @@ class AppTheme {
       surfaceTintColor: Colors.transparent,
       backgroundColor: colorScheme.surface,
       foregroundColor: colorScheme.onSurface,
-      shadowColor: colorScheme.shadow.withOpacity(0.08),
+      shadowColor: colorScheme.shadow.withValues(alpha: 0.08),
       titleTextStyle: GoogleFonts.inter(
         fontSize: 20,
         fontWeight: FontWeight.w600,
@@ -165,7 +165,7 @@ class AppTheme {
       style: ElevatedButton.styleFrom(
         backgroundColor: colorScheme.primary,
         foregroundColor: colorScheme.onPrimary,
-        disabledBackgroundColor: colorScheme.onSurface.withOpacity(0.12),
+        disabledBackgroundColor: colorScheme.onSurface.withValues(alpha: 0.12),
         elevation: 0,
         shadowColor: Colors.transparent,
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
@@ -289,14 +289,14 @@ class AppTheme {
         );
       }),
       elevation: 2,
-      shadowColor: colorScheme.shadow.withOpacity(0.1),
+      shadowColor: colorScheme.shadow.withValues(alpha: 0.1),
       height: 72,
     );
 
     // ── Drawer ───────────────────────────────────────────────────────────────
     final drawerTheme = DrawerThemeData(
       backgroundColor: colorScheme.surfaceContainerLow,
-      shadowColor: colorScheme.shadow.withOpacity(0.15),
+      shadowColor: colorScheme.shadow.withValues(alpha: 0.15),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.only(
           topRight: Radius.circular(radiusXL),

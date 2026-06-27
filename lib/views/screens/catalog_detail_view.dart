@@ -193,7 +193,7 @@ class _CatalogDetailViewState extends State<CatalogDetailView> {
                       '${viewModel.totalRows} fila${viewModel.totalRows != 1 ? 's' : ''}',
                       style: GoogleFonts.inter(
                         fontSize: 12,
-                        color: cs.onSurface.withOpacity(0.55),
+                        color: cs.onSurface.withValues(alpha: 0.55),
                         fontWeight: FontWeight.w400,
                       ),
                     ),
@@ -269,7 +269,7 @@ class _CatalogDetailViewState extends State<CatalogDetailView> {
                           viewModel.catalog.description,
                           style: GoogleFonts.inter(
                             fontSize: 14,
-                            color: cs.onSurface.withOpacity(0.75),
+                            color: cs.onSurface.withValues(alpha: 0.75),
                             height: 1.5,
                           ),
                         ),
@@ -500,7 +500,7 @@ class _ColumnHeaderBar extends StatelessWidget {
                       Icon(sortIcon, size: 14,
                           color: isSorted
                               ? cs.primary
-                              : cs.onSurface.withOpacity(0.45)),
+                              : cs.onSurface.withValues(alpha: 0.45)),
                     ],
                   ),
                   selected: isSorted,
@@ -524,8 +524,8 @@ class _ColumnHeaderBar extends StatelessWidget {
                   style: GoogleFonts.inter(
                       fontSize: 13, fontWeight: FontWeight.w500)),
               onPressed: onFilesTap,
-              side: BorderSide(color: cs.primary.withOpacity(0.4)),
-              backgroundColor: cs.primaryContainer.withOpacity(0.35),
+              side: BorderSide(color: cs.primary.withValues(alpha: 0.4)),
+              backgroundColor: cs.primaryContainer.withValues(alpha: 0.35),
               padding: const EdgeInsets.symmetric(horizontal: 4),
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
@@ -567,7 +567,7 @@ class _PaginationBar extends StatelessWidget {
           Text(
             rowsRange,
             style: GoogleFonts.inter(
-                fontSize: 12, color: cs.onSurface.withOpacity(0.6)),
+                fontSize: 12, color: cs.onSurface.withValues(alpha: 0.6)),
           ),
           Row(
             children: [
@@ -638,7 +638,7 @@ class _EmptyState extends StatelessWidget {
                 borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
               ),
               child: Icon(Icons.table_rows_rounded,
-                  size: 36, color: cs.onSurface.withOpacity(0.4)),
+                  size: 36, color: cs.onSurface.withValues(alpha: 0.4)),
             ),
             const SizedBox(height: 20),
             Text(
@@ -653,7 +653,7 @@ class _EmptyState extends StatelessWidget {
               'Añade nuevas filas para comenzar a gestionar el catálogo.',
               textAlign: TextAlign.center,
               style: GoogleFonts.inter(
-                  fontSize: 14, color: cs.onSurface.withOpacity(0.55)),
+                  fontSize: 14, color: cs.onSurface.withValues(alpha: 0.55)),
             ),
             if (isEditing) ...[
               const SizedBox(height: 24),
@@ -709,7 +709,7 @@ class _ErrorState extends StatelessWidget {
               message,
               textAlign: TextAlign.center,
               style: GoogleFonts.inter(
-                  fontSize: 13, color: cs.onSurface.withOpacity(0.6)),
+                  fontSize: 13, color: cs.onSurface.withValues(alpha: 0.6)),
             ),
             const SizedBox(height: 24),
             FilledButton.icon(
@@ -856,7 +856,7 @@ class _CatalogRowCard extends StatelessWidget {
                     style: GoogleFonts.inter(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: cs.onSurface.withOpacity(0.55),
+                      color: cs.onSurface.withValues(alpha: 0.55),
                     ),
                   ),
                 ),
@@ -879,7 +879,7 @@ class _CatalogRowCard extends StatelessWidget {
                                 style: GoogleFonts.inter(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w500,
-                                  color: cs.onSurface.withOpacity(0.5),
+                                  color: cs.onSurface.withValues(alpha: 0.5),
                                   letterSpacing: 0.3,
                                 ),
                               ),
@@ -890,7 +890,7 @@ class _CatalogRowCard extends StatelessWidget {
                                   fontSize: 14,
                                   fontWeight: FontWeight.w400,
                                   color: value.isEmpty
-                                      ? cs.onSurface.withOpacity(0.3)
+                                      ? cs.onSurface.withValues(alpha: 0.3)
                                       : cs.onSurface,
                                 ),
                               ),
@@ -913,7 +913,7 @@ class _CatalogRowCard extends StatelessWidget {
                         minWidth: 32, minHeight: 32),
                     padding: EdgeInsets.zero,
                     style: IconButton.styleFrom(
-                      backgroundColor: cs.primaryContainer.withOpacity(0.5),
+                      backgroundColor: cs.primaryContainer.withValues(alpha: 0.5),
                     ),
                   ),
                   const SizedBox(width: 6),
@@ -926,7 +926,7 @@ class _CatalogRowCard extends StatelessWidget {
                         minWidth: 32, minHeight: 32),
                     padding: EdgeInsets.zero,
                     style: IconButton.styleFrom(
-                      backgroundColor: cs.errorContainer.withOpacity(0.5),
+                      backgroundColor: cs.errorContainer.withValues(alpha: 0.5),
                     ),
                   ),
                 ],
@@ -979,8 +979,8 @@ class _FileChip extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
       ),
       onPressed: onTap,
-      side: BorderSide(color: cs.primary.withOpacity(0.3)),
-      backgroundColor: cs.primaryContainer.withOpacity(0.25),
+      side: BorderSide(color: cs.primary.withValues(alpha: 0.3)),
+      backgroundColor: cs.primaryContainer.withValues(alpha: 0.25),
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       padding: const EdgeInsets.symmetric(horizontal: 4),
     );
@@ -1078,11 +1078,11 @@ class _FilesModalDialogState extends State<_FilesModalDialog> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.inbox_rounded, size: 56,
-                color: cs.onSurface.withOpacity(0.3)),
+                color: cs.onSurface.withValues(alpha: 0.3)),
             const SizedBox(height: 16),
             Text('No hay filas en este catálogo',
                 style: GoogleFonts.inter(
-                    fontSize: 15, color: cs.onSurface.withOpacity(0.55))),
+                    fontSize: 15, color: cs.onSurface.withValues(alpha: 0.55))),
           ],
         ),
       );
@@ -1090,7 +1090,7 @@ class _FilesModalDialogState extends State<_FilesModalDialog> {
 
     return ListView.separated(
       itemCount: widget.catalog.rows.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 4),
+      separatorBuilder: (_, _) => const SizedBox(height: 4),
       itemBuilder: (context, index) {
         final row = widget.catalog.rows[index];
         final hasFiles = row.files.hasAnyFiles;
@@ -1106,7 +1106,7 @@ class _FilesModalDialogState extends State<_FilesModalDialog> {
               '${index + 1}',
               style: GoogleFonts.inter(
                 fontWeight: FontWeight.w700,
-                color: hasFiles ? cs.onPrimaryContainer : cs.onSurface.withOpacity(0.4),
+                color: hasFiles ? cs.onPrimaryContainer : cs.onSurface.withValues(alpha: 0.4),
                 fontSize: 13,
               ),
             ),
@@ -1121,7 +1121,7 @@ class _FilesModalDialogState extends State<_FilesModalDialog> {
               fontSize: 12,
               color: hasFiles
                   ? cs.primary
-                  : cs.onSurface.withOpacity(0.4),
+                  : cs.onSurface.withValues(alpha: 0.4),
             ),
           ),
           trailing: hasFiles
@@ -1144,11 +1144,11 @@ class _FilesModalDialogState extends State<_FilesModalDialog> {
                     ],
                     const SizedBox(width: 8),
                     Icon(Icons.chevron_right_rounded,
-                        color: cs.onSurface.withOpacity(0.4)),
+                        color: cs.onSurface.withValues(alpha: 0.4)),
                   ],
                 )
               : Icon(Icons.chevron_right_rounded,
-                  color: cs.onSurface.withOpacity(0.2)),
+                  color: cs.onSurface.withValues(alpha: 0.2)),
           enabled: hasFiles,
           onTap: hasFiles ? () => _selectRow(row, index) : null,
         );
@@ -1209,11 +1209,11 @@ class _FilesModalDialogState extends State<_FilesModalDialog> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.folder_open_rounded, size: 56,
-                color: cs.onSurface.withOpacity(0.3)),
+                color: cs.onSurface.withValues(alpha: 0.3)),
             const SizedBox(height: 16),
             Text('Esta fila no tiene archivos',
                 style: GoogleFonts.inter(
-                    fontSize: 15, color: cs.onSurface.withOpacity(0.55))),
+                    fontSize: 15, color: cs.onSurface.withValues(alpha: 0.55))),
           ],
         ),
       );
@@ -1303,7 +1303,7 @@ class _FileCategorySection extends StatelessWidget {
               padding:
                   const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: iconColor.withOpacity(0.15),
+                color: iconColor.withValues(alpha: 0.15),
                 borderRadius:
                     BorderRadius.circular(AppTheme.radiusFull),
               ),
@@ -1333,7 +1333,7 @@ class _FileCategorySection extends StatelessWidget {
               subtitle: Text('Fila ${file.rowNumber}',
                   style: GoogleFonts.inter(fontSize: 12)),
               trailing: Icon(Icons.chevron_right_rounded,
-                  color: cs.onSurface.withOpacity(0.4)),
+                  color: cs.onSurface.withValues(alpha: 0.4)),
               onTap: () => onFileTap(file),
             ),
           ),

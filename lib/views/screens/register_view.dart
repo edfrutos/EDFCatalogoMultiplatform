@@ -155,7 +155,7 @@ class _RegisterViewState extends State<RegisterView>
                           'Completa los datos para crear tu cuenta',
                           style: GoogleFonts.inter(
                               fontSize: 14,
-                              color: cs.onSurface.withOpacity(0.55)),
+                              color: cs.onSurface.withValues(alpha: 0.55)),
                         ),
                       ),
 
@@ -361,7 +361,7 @@ class _RegisterViewState extends State<RegisterView>
                               Text('Creando cuenta...',
                                   style: GoogleFonts.inter(
                                       fontSize: 13,
-                                      color: cs.onSurface.withOpacity(0.6))),
+                                      color: cs.onSurface.withValues(alpha: 0.6))),
                             ],
                           ),
                         )
