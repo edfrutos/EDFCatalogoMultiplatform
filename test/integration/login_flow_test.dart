@@ -9,7 +9,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:edfcatalogomultiplatform/viewmodels/auth_viewmodel.dart';
-import 'package:edfcatalogomultiplatform/views/screens/login_view.dart';
 
 import 'test_helpers.dart';
 
@@ -76,6 +75,8 @@ void main() {
 
   group('LoginView — autenticación', () {
     testWidgets('autentica con credenciales correctas', (tester) async {
+      // Test de ViewModel puro: evita renderizar UI para no disparar
+      // CatalogsView → SyncService.hasConnection → timer pendiente al final.
       when(
         () => mongo.authenticateUser(
           emailOrUsername: 'test@edf.test',
@@ -86,22 +87,11 @@ void main() {
 
       final authVm =
           AuthViewModel(mongoService: mongo, keychainService: keychain);
-      // Usamos buildIsolated con LoginView directamente para evitar que
-      // ContentView transite a MainView tras el login (lo que dispararía
-      // cargas de catálogos con el MongoService real en CI).
-      await tester.pumpWidget(
-        buildIsolated(authVm: authVm, child: const LoginView()),
+
+      await authVm.signIn(
+        emailOrUsername: 'test@edf.test',
+        password: 'Test1234!',
       );
-      await tester.pump();
-
-      final fields = find.byType(TextFormField);
-      await tester.enterText(fields.at(0), 'test@edf.test');
-      await tester.enterText(fields.at(1), 'Test1234!');
-      await tester.pump();
-
-      await tester.tap(find.byType(FilledButton));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 150));
 
       expect(authVm.isAuthenticated, isTrue);
       expect(authVm.currentUser?.email, 'test@edf.test');
