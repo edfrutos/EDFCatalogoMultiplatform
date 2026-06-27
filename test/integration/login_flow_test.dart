@@ -4,8 +4,11 @@
 // Cubren: renderizado, validación local, autenticación mock, cierre de sesión.
 // No requieren dispositivo ni conexión a MongoDB.
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+
+import 'package:edfcatalogomultiplatform/viewmodels/auth_viewmodel.dart';
 
 import 'test_helpers.dart';
 

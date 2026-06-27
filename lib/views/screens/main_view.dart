@@ -59,7 +59,6 @@ class _MainViewState extends State<MainView> {
 
   // ── Móvil: BottomNavigationBar ─────────────────────────────────────────────
   Widget _buildMobileLayout(BuildContext context, AuthViewModel auth, bool isAdmin) {
-    final cs = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
         title: EdfLogoHorizontal(iconSize: 28),

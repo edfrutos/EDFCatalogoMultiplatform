@@ -52,7 +52,7 @@ class _ContactViewState extends State<ContactView> {
     setState(() => _sending = true);
 
     try {
-      final ok = await MongoService.instance.saveContactMessage(
+      final ok = await MongoService.shared.saveContactMessage(
         name: _nameController.text.trim(),
         email: _emailController.text.trim(),
         subject: _subjectController.text.trim(),

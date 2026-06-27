@@ -3,7 +3,7 @@
 /// Usa dart:html (no package:web) para evitar conflictos de tipo File.
 library;
 
-// ignore: avoid_web_libraries_in_flutter
+// ignore: avoid_web_libraries_in_flutter, deprecated_member_use
 import 'dart:html' as html;
 import 'dart:ui_web' as ui_web;
 import 'package:flutter/material.dart';

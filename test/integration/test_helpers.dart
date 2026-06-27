@@ -56,11 +56,11 @@ Widget buildApp(AuthViewModel authVm) {
       ChangeNotifierProvider<AuthViewModel>.value(value: authVm),
       ChangeNotifierProxyProvider<AuthViewModel, AdminViewModel>(
         create: (_) => AdminViewModel(),
-        update: (_, __, prev) => prev ?? AdminViewModel(),
+        update: (_, _, prev) => prev ?? AdminViewModel(),
       ),
     ],
     child: Consumer<ThemeProvider>(
-      builder: (_, themeProv, __) => MaterialApp(
+      builder: (_, themeProv, _) => MaterialApp(
         title: 'EDF Test',
         debugShowCheckedModeBanner: false,
         themeMode: themeProv.mode,
@@ -83,7 +83,7 @@ Widget buildIsolated({
       ChangeNotifierProvider<AuthViewModel>.value(value: authVm),
       ChangeNotifierProxyProvider<AuthViewModel, AdminViewModel>(
         create: (_) => AdminViewModel(),
-        update: (_, __, prev) => prev ?? AdminViewModel(),
+        update: (_, _, prev) => prev ?? AdminViewModel(),
       ),
     ],
     child: MaterialApp(
