@@ -60,6 +60,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: true  # PNG icons están en Git LFS — sin esto AAPT2 recibe el puntero de texto
 
       - uses: actions/setup-java@v4
         with:
