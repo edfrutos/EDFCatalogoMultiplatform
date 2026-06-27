@@ -1,6 +1,7 @@
 import 'dart:io' if (dart.library.html) 'package:edfcatalogomultiplatform/utils/io_stub.dart';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:provider/provider.dart';
@@ -62,6 +63,15 @@ class MyApp extends StatelessWidget {
             themeMode: themeProv.mode,
             theme: AppTheme.light(),
             darkTheme: AppTheme.dark(),
+            // Evita aserción trackpad en macOS:
+            // PointerDownEvent no admite PointerDeviceKind.trackpad
+            scrollBehavior: const MaterialScrollBehavior().copyWith(
+              dragDevices: {
+                PointerDeviceKind.touch,
+                PointerDeviceKind.mouse,
+                PointerDeviceKind.stylus,
+              },
+            ),
             home: const ContentView(),
           );
         },
