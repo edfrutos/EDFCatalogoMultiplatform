@@ -133,11 +133,9 @@ jobs:
         run: flutter build web --release
 
       - name: Setup SSH
-        env:
-          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
         run: |
           mkdir -p ~/.ssh
-          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -p 2222 208.76.221.20 >> ~/.ssh/known_hosts
 
@@ -150,10 +148,8 @@ jobs:
             root@208.76.221.20:/var/www/vhosts/efjdefrutos.com/edfcat.efjdefrutos.com/
 
       - name: Reiniciar API en servidor
-        env:
-          SERVER_REPO: /opt/edfcatalogo
         run: |
           ssh -p 2222 -i ~/.ssh/deploy_key root@208.76.221.20 \
-            "cd $SERVER_REPO \
+            "cd /opt/edfcatalogo \
              && git pull --ff-only \
              && docker compose -f docker/docker-compose.prod.yml up -d --build api"
