@@ -189,6 +189,21 @@ class ApiService {
     return User.fromJson(data);
   }
 
+  Future<bool> saveContactMessage({
+    required String name,
+    required String email,
+    required String subject,
+    required String message,
+  }) async {
+    final data = await _post('api/contact/', {
+      'name': name,
+      'email': email,
+      'subject': subject,
+      'message': message,
+    });
+    return data?['saved'] as bool? ?? false;
+  }
+
   Future<bool> checkUserExists(String email) async {
     final data = await _post('api/users/check-exists', {'email': email});
     return data?['exists'] as bool? ?? false;

@@ -23,6 +23,9 @@ class Config {
   }
   static bool get useS3 => _env('USE_S3').toLowerCase() == 'true';
 
+  // Email (Brevo)
+  static String get brevoApiKey => _env('BREVO_API_KEY');
+
   // Servidor
   static int get port => int.tryParse(_env('API_PORT', '8080')) ?? 8080;
 

@@ -769,6 +769,15 @@ class MongoService {
     required String subject,
     required String message,
   }) async {
+    // En web no hay acceso directo a MongoDB — delegar a la API
+    if (kIsWeb) {
+      return ApiService.instance.saveContactMessage(
+        name: name,
+        email: email,
+        subject: subject,
+        message: message,
+      );
+    }
     try {
       final db = await getDatabase();
       final collection = db.collection('contacts');

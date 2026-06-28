@@ -9,6 +9,7 @@ import '../lib/routes/auth_routes.dart';
 import '../lib/routes/user_routes.dart';
 import '../lib/routes/catalog_routes.dart';
 import '../lib/routes/s3_routes.dart';
+import '../lib/routes/contact_routes.dart';
 
 void main() async {
   // Validar configuración crítica
@@ -39,6 +40,7 @@ void main() async {
   router.mount('/api/users/', userRoutes().call);
   router.mount('/api/catalogs/', catalogRoutes().call);
   router.mount('/api/s3/', s3Routes().call);
+  router.mount('/api/contact/', contactRoutes().call);
 
   // 404 catch-all
   router.all('/<ignored|.*>', (_) => Response.notFound(
