@@ -104,3 +104,56 @@ jobs:
 
       - name: Build Android AAB
         run: flutter build appbundle --release
+
+  deploy-web:
+    name: Deploy Web (producción)
+    runs-on: ubuntu-latest
+    needs: build-web
+    # Solo en push a main — no en pull requests
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Inject production .env
+        env:
+          ENV_FILE: ${{ secrets.DEPLOY_ENV_FILE }}
+        run: |
+          printf '%s' "$ENV_FILE" > .env
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Flutter Web (producción con .env real)
+        run: flutter build web --release
+
+      - name: Setup SSH
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p 2222 208.76.221.20 >> ~/.ssh/known_hosts
+
+      - name: Sync web files al servidor
+        run: |
+          rsync -az --delete \
+            --exclude=".DS_Store" \
+            -e "ssh -p 2222 -i ~/.ssh/deploy_key" \
+            build/web/ \
+            root@208.76.221.20:/var/www/vhosts/efjdefrutos.com/edfcat.efjdefrutos.com/
+
+      - name: Reiniciar API en servidor
+        env:
+          SERVER_REPO: /opt/edfcatalogo
+        run: |
+          ssh -p 2222 -i ~/.ssh/deploy_key root@208.76.221.20 \
+            "cd $SERVER_REPO \
+             && git pull --ff-only \
+             && docker compose -f docker/docker-compose.prod.yml up -d --build api"
