@@ -14,21 +14,28 @@ Router authRoutes() {
   router.post('/login', (Request req) async {
     try {
       final body = jsonDecode(await req.readAsString()) as Map<String, dynamic>;
-      final emailOrUsername = body['emailOrUsername']?.toString().trim() ?? '';
+      final rawInput = body['emailOrUsername']?.toString().trim() ?? '';
       final password = body['password']?.toString() ?? '';
 
-      if (emailOrUsername.isEmpty || password.isEmpty) {
+      if (rawInput.isEmpty || password.isEmpty) {
         return error('emailOrUsername y password son requeridos', 400);
       }
 
+      // Normalizar email a minúsculas; username se respeta tal cual
+      final isEmail = rawInput.contains('@');
+      final emailOrUsername = isEmail ? rawInput.toLowerCase() : rawInput;
+
       final coll = await MongoDb.instance.users;
 
-      // Buscar por Email o Username (mismo patrón que mongo_service.dart)
+      // Buscar por Email o Username — búsqueda insensible a mayúsculas para email
       final results = <Map<String, dynamic>>[];
       await coll.find({
         r'$or': [
           {'Email': emailOrUsername},
           {'email': emailOrUsername},
+          // Búsqueda regex case-insensitive como fallback (cubre emails guardados con mayúsculas)
+          {'Email': {r'$regex': '^${RegExp.escape(rawInput)}\$', r'$options': 'i'}},
+          {'email': {r'$regex': '^${RegExp.escape(rawInput)}\$', r'$options': 'i'}},
           {'Username': emailOrUsername},
           {'username': emailOrUsername},
         ],

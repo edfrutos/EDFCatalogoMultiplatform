@@ -96,7 +96,8 @@ Router userRoutes() {
     try {
       final body =
           jsonDecode(await req.readAsString()) as Map<String, dynamic>;
-      final email = body['email']?.toString().trim() ?? '';
+      // Normalizar email a minúsculas para evitar duplicados y fallos de login
+      final email = (body['email']?.toString().trim() ?? '').toLowerCase();
       final username = body['username']?.toString().trim() ?? '';
       final name = body['name']?.toString().trim() ?? '';
       final password = body['password']?.toString() ?? '';
