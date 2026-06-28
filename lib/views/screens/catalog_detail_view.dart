@@ -460,6 +460,7 @@ class _ColumnHeaderBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final isDark = cs.brightness == Brightness.dark;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -495,7 +496,8 @@ class _ColumnHeaderBar extends StatelessWidget {
                               fontWeight: isSorted
                                   ? FontWeight.w600
                                   : FontWeight.w500,
-                              fontSize: 13)),
+                              fontSize: 13,
+                              color: cs.onSurface)),
                       const SizedBox(width: 4),
                       Icon(sortIcon, size: 14,
                           color: isSorted
@@ -509,8 +511,12 @@ class _ColumnHeaderBar extends StatelessWidget {
                   side: BorderSide(
                     color: isSorted ? cs.primary : cs.outlineVariant,
                   ),
-                  backgroundColor: cs.surfaceContainerLowest,
-                  selectedColor: cs.primaryContainer,
+                  backgroundColor: isDark
+                      ? cs.surfaceContainerHigh
+                      : cs.surfaceContainerLowest,
+                  selectedColor: isDark
+                      ? cs.primaryContainer.withValues(alpha: 0.8)
+                      : cs.primaryContainer,
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
@@ -522,10 +528,14 @@ class _ColumnHeaderBar extends StatelessWidget {
                   size: 16, color: cs.primary),
               label: Text('Archivos',
                   style: GoogleFonts.inter(
-                      fontSize: 13, fontWeight: FontWeight.w500)),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: cs.onSurface)),
               onPressed: onFilesTap,
-              side: BorderSide(color: cs.primary.withValues(alpha: 0.4)),
-              backgroundColor: cs.primaryContainer.withValues(alpha: 0.35),
+              side: BorderSide(color: cs.primary.withValues(alpha: isDark ? 0.6 : 0.4)),
+              backgroundColor: isDark
+                  ? cs.surfaceContainerHigh
+                  : cs.primaryContainer.withValues(alpha: 0.35),
               padding: const EdgeInsets.symmetric(horizontal: 4),
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
@@ -971,16 +981,23 @@ class _FileChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = cs.brightness == Brightness.dark;
     return ActionChip(
       avatar: Icon(icon, size: 16, color: cs.primary),
       label: Text(
         label,
-        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500),
+        style: GoogleFonts.inter(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: cs.onSurface,
+        ),
         overflow: TextOverflow.ellipsis,
       ),
       onPressed: onTap,
-      side: BorderSide(color: cs.primary.withValues(alpha: 0.3)),
-      backgroundColor: cs.primaryContainer.withValues(alpha: 0.25),
+      side: BorderSide(color: cs.primary.withValues(alpha: isDark ? 0.6 : 0.3)),
+      backgroundColor: isDark
+          ? cs.surfaceContainerHigh
+          : cs.primaryContainer.withValues(alpha: 0.25),
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       padding: const EdgeInsets.symmetric(horizontal: 4),
     );
