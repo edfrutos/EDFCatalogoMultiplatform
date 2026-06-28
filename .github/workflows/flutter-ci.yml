@@ -137,30 +137,18 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          # Configurar SSH para este host: sin strict checking, timeout razonable
-          cat >> ~/.ssh/config << 'SSHCONF'
-          Host deploy-server
-            HostName 208.76.221.20
-            Port 2222
-            User root
-            IdentityFile ~/.ssh/deploy_key
-            StrictHostKeyChecking no
-            UserKnownHostsFile /dev/null
-            ConnectTimeout 30
-          SSHCONF
-          chmod 600 ~/.ssh/config
 
       - name: Sync web files al servidor
         run: |
           rsync -az --delete \
             --exclude=".DS_Store" \
-            -e "ssh -F ~/.ssh/config" \
+            -e "ssh -p 2222 -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
             build/web/ \
-            deploy-server:/var/www/vhosts/efjdefrutos.com/edfcat.efjdefrutos.com/
+            root@208.76.221.20:/var/www/vhosts/efjdefrutos.com/edfcat.efjdefrutos.com/
 
       - name: Reiniciar API en servidor
         run: |
-          ssh deploy-server \
-            "cd /opt/edfcatalogo \
-             && git pull --ff-only \
-             && docker compose -f docker/docker-compose.prod.yml up -d --build api"
+          ssh -p 2222 -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            root@208.76.221.20 \
+            "cd /opt/edfcatalogo && git pull --ff-only && docker compose -f docker/docker-compose.prod.yml up -d --build api"
