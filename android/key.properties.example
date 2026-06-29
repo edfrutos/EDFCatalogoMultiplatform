@@ -1,0 +1,22 @@
+# android/key.properties.example
+#
+# Copia este archivo como android/key.properties y rellena con tus valores reales.
+# NUNCA hagas commit de key.properties — está en .gitignore.
+#
+# Cómo generar el keystore:
+#   keytool -genkey -v -keystore edfcatalogo-release.jks \
+#     -alias edfcatalogo -keyalg RSA -keysize 2048 -validity 10000
+#
+# CI (GitHub Actions): los valores se inyectan via Secrets:
+#   ANDROID_KEYSTORE_BASE64   — base64 del fichero .jks
+#   ANDROID_STORE_PASSWORD    — storePassword
+#   ANDROID_KEY_ALIAS         — keyAlias
+#   ANDROID_KEY_PASSWORD      — keyPassword
+#
+# Cómo generar ANDROID_KEYSTORE_BASE64:
+#   base64 -i edfcatalogo-release.jks | pbcopy
+
+storeFile=/ruta/absoluta/a/edfcatalogo-release.jks
+storePassword=TU_STORE_PASSWORD
+keyAlias=edfcatalogo
+keyPassword=TU_KEY_PASSWORD
