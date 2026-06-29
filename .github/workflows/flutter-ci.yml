@@ -32,7 +32,10 @@ jobs:
         run: flutter test
 
   test-e2e:
-    name: E2E Tests (Chrome headless)
+    # "flutter test integration_test/ -d chrome" no funciona: Flutter rechaza
+    # dispositivos web en flutter-test. IntegrationTestWidgetsFlutterBinding
+    # detecta la ausencia de driver externo y corre como widget test en VM host.
+    name: E2E Tests (VM host)
     runs-on: ubuntu-latest
     needs: test
 
@@ -50,24 +53,8 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Install Xvfb
-        run: sudo apt-get install -y xvfb
-
-      # Chrome determinista — evita incompatibilidades con el chromedriver del runner
-      - name: Setup Chrome
-        id: setup-chrome
-        uses: browser-actions/setup-chrome@v1
-        with:
-          chrome-version: stable
-
-      - name: Run E2E tests (Chrome headless via Xvfb)
-        run: |
-          Xvfb :99 -screen 0 1920x1080x24 -ac &
-          sleep 5
-          flutter test integration_test/ -d chrome
-        env:
-          DISPLAY: :99
-          CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
+      - name: Run integration tests
+        run: flutter test integration_test/
 
   build-web:
     name: Build Web
