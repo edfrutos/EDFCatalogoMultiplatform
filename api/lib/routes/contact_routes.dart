@@ -103,7 +103,7 @@ Future<void> _sendSmtpNotification({
   final msg = Message()
     ..from = Address(from, 'EDF Catálogo')
     ..recipients.add(to)
-    ..replyTo = Address(email, name)
+    ..headers['Reply-To'] = Address(email, name)
     ..subject = 'Contacto: $subject — $name'
     ..html = htmlBody;
 
