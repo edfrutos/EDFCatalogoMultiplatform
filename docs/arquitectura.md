@@ -35,23 +35,25 @@ de tablas con soporte multimedia. Corre en seis plataformas desde un único code
 api/                               # Servidor API Dart/Shelf (solo para web)
 ├── bin/server.dart                # Punto de entrada HTTP
 └── lib/
-    ├── config.dart                # Configuración del servidor (puerto, CORS, etc.)
+    ├── config.dart                # Configuración del servidor (puerto, CORS, BREVO_API_KEY, etc.)
     ├── auth/jwt_service.dart      # Autenticación JWT
     ├── db/mongo_db.dart           # Conexión MongoDB
     └── routes/
-        ├── auth_routes.dart       # POST /api/auth/login
+        ├── auth_routes.dart       # POST /api/auth/login (búsqueda case-insensitive)
+        ├── contact_routes.dart    # POST /api/contact/ — guarda en 'contacts' + email Brevo
         ├── s3_routes.dart         # POST /api/s3/upload, GET /api/s3/presign
         ├── catalog_routes.dart    # CRUD catálogos
-        ├── user_routes.dart       # CRUD usuarios (admin)
+        ├── user_routes.dart       # CRUD usuarios (admin); email normalizado a minúsculas
         └── helpers.dart           # Utilidades compartidas
 
 lib/
 ├── main.dart                  # Punto de entrada — llama a initEnv() y runApp()
 ├── models/                    # Entidades de dominio (User, Catalog, Row, …)
 ├── services/                  # Acceso a datos externos
-│   ├── mongo_service.dart     # Todas las operaciones MongoDB
+│   ├── mongo_service.dart     # Todas las operaciones MongoDB + kIsWeb guards
+│   ├── api_service.dart       # Cliente HTTP para el servidor API (solo web)
+│   ├── email_service.dart     # Envío de emails vía Brevo (nativo; en web lo hace la API)
 │   ├── s3_service.dart        # Upload/download en AWS S3
-│   ├── api_service.dart       # ← NUEVO: cliente HTTP para el servidor API (solo web)
 │   ├── keychain_service.dart  # Persistencia segura de sesión
 │   └── export_service.dart    # Exportación (PDF, CSV, Excel, compartir)
 ├── viewmodels/                # Lógica de presentación (ChangeNotifier)
@@ -59,17 +61,18 @@ lib/
 ├── views/
 │   ├── screens/               # Pantallas completas
 │   │   ├── admin_*/           # Pantallas de administración
+│   │   ├── contact_view.dart  # Formulario de contacto
 │   │   └── widgets/           # Widgets reutilizables entre pantallas
 │   └── …
 └── utils/
     ├── env_loader.dart           # Carga de .env multiplataforma + globalEnvMap
     ├── env_config.dart           # Getters tipados sobre las variables de entorno
-    ├── io_stub.dart              # ← NUEVO: stub dart:io File/Directory para web
-    ├── web_download.dart         # ← NUEVO: descarga Blob en browser (web only)
-    ├── web_download_stub.dart    # ← NUEVO: stub para plataformas nativas
-    ├── web_pdf_view.dart         # ← NUEVO: visor PDF via <iframe> (web only)
-    └── web_pdf_view_stub.dart    # ← NUEVO: stub para plataformas nativas
-```sh
+    ├── io_stub.dart              # Stub dart:io File/Directory para web
+    ├── web_download.dart         # Descarga Blob en browser (web only)
+    ├── web_download_stub.dart    # Stub para plataformas nativas
+    ├── web_pdf_view.dart         # Visor PDF via <iframe> (web only)
+    └── web_pdf_view_stub.dart    # Stub para plataformas nativas
+```
 
 ---
 
@@ -495,13 +498,29 @@ API_HTTPS_PORT=8444    # Puerto HTTPS Tailscale para la API
    - Crea `.env` placeholder (necesario para el asset)
    - `flutter pub get`
    - `flutter analyze --no-fatal-infos`
-   - `flutter test`
+   - `flutter test` — tests unitarios + widget tests con mocks
 
-2. **Build Web** (depende de Test & Analyze)
+2. **E2E Tests — Chrome headless** (depende de Test & Analyze)
+   - `flutter test integration_test/ -d chrome --headless`
+   - 5 tests E2E: arranque sin excepciones, pantalla login visible,
+     validación de formulario vacío, entrada de texto, árbol de semántica
+   - No requieren MongoDB — la app muestra login antes de cualquier conexión
+
+3. **Build Web** (depende de E2E Tests)
    - `flutter build web --release`
 
-Los tests unitarios están en `test/utils/` y `test/viewmodels/`. No requieren
-conexión a MongoDB ni a AWS — todos los servicios externos se mockean con `mocktail`.
+4. **Build Android AAB** (depende de E2E Tests)
+   - Decodifica keystore desde `ANDROID_KEYSTORE_BASE64` secret
+   - `flutter build appbundle --release`
+
+5. **Deploy Web** (solo en push a `main`, depende de Build Web)
+   - Build con `.env` real (secret `DEPLOY_ENV_FILE`)
+   - `rsync` al servidor Vultr/Plesk
+   - Reinicia el contenedor Docker API
+
+Los tests unitarios y de widget están en `test/` (no requieren dispositivo ni
+conexión externa — todos los servicios se mockean con `mocktail`).
+Los tests E2E están en `integration_test/` y se ejecutan en Chrome headless en CI.
 
 ---
 
@@ -643,12 +662,12 @@ find "${APP_PATH}/Contents/MacOS" -type f \
 ## 11. Evolución del proyecto
 
 | Versión | Hito |
-
 |---------|------|
 | Previa | `EDFCatalogoSwift` — app nativa macOS en SwiftUI (archivada) |
 | v0.x | `edf_catalogotablas_macOS` — versión Flutter solo macOS |
 | **v1.0.0** | `EDFCatalogoMultiplatform` — Flutter 6 plataformas, Docker Web, CI, tests |
 | **v1.1.0** | Soporte web completo: servidor API Dart/Shelf, uploads S3 vía API con Content-Type correcto, visor PDF inline, export CSV fix, scripts dev_web.sh, build_macos_dmg.sh con entitlements |
+| **v1.2.0** | Fixes web + E2E: login case-insensitive (MongoDB regex), email normalizado a minúsculas en creación de usuario, dark mode chips visibles (surfaceContainerHigh), formulario de contacto funcional en web (kIsWeb guard + ruta API POST /api/contact/ con notificación Brevo), 5 tests E2E Chrome headless, job CI test-e2e, Android key.properties.example, fix build macOS DMG en Xcode 26 beta (CODE_SIGNING_ALLOWED=NO en Flutter-Release.xcconfig) |
 
 El repositorio Swift original se mantiene como referencia histórica pero ya no
 recibe actualizaciones. Todo el desarrollo futuro ocurre en este repo.
