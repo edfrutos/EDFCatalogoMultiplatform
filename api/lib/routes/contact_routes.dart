@@ -35,22 +35,21 @@ Router contactRoutes() {
         'read': false,
       });
 
-      // Enviar email de notificación (no crítico — si falla el mensaje ya está guardado)
+      // Enviar emails (no críticos — si fallan el mensaje ya está guardado en MongoDB)
       try {
+        final subjectResolved = subject.isEmpty ? '(sin asunto)' : subject;
         if (Config.brevoApiKey.isNotEmpty) {
-          // Opción A: Brevo API (si BREVO_API_KEY está configurada)
           await _sendBrevoNotification(
             name: name, email: email,
-            subject: subject.isEmpty ? '(sin asunto)' : subject,
-            message: message,
+            subject: subjectResolved, message: message,
           );
+          await _sendBrevoAutoReply(name: name, email: email, subject: subjectResolved);
         } else if (Config.smtpUser.isNotEmpty && Config.smtpPass.isNotEmpty) {
-          // Opción B: SMTP (usa SMTP_USER / SMTP_PASS del .env — Gmail configurado)
           await _sendSmtpNotification(
             name: name, email: email,
-            subject: subject.isEmpty ? '(sin asunto)' : subject,
-            message: message,
+            subject: subjectResolved, message: message,
           );
+          await _sendSmtpAutoReply(name: name, email: email, subject: subjectResolved);
         } else {
           print('⚠️ contact_routes: sin BREVO_API_KEY ni credenciales SMTP — '
               'mensaje guardado en MongoDB sin notificación por email');
@@ -111,6 +110,36 @@ Future<void> _sendSmtpNotification({
   print('✅ Email de contacto (SMTP) enviado a $to');
 }
 
+// ── SMTP — acuse de recibo al remitente ──────────────────────────────────────
+
+Future<void> _sendSmtpAutoReply({
+  required String name,
+  required String email,
+  required String subject,
+}) async {
+  final user = Config.smtpUser;
+  final pass = Config.smtpPass;
+  final from = Config.smtpFrom.isNotEmpty ? Config.smtpFrom : user;
+  final host = Config.smtpHost;
+  final port = Config.smtpPort;
+
+  final SmtpServer smtpServer;
+  if (host.contains('gmail')) {
+    smtpServer = gmail(user, pass);
+  } else {
+    smtpServer = SmtpServer(host, port: port, username: user, password: pass, ssl: port == 465);
+  }
+
+  final msg = Message()
+    ..from = Address(from, 'EDF Catálogo')
+    ..recipients.add(email)
+    ..subject = 'Hemos recibido tu mensaje — EDF Catálogo'
+    ..html = _buildAutoReplyHtml(name: name, subject: subject);
+
+  await send(msg, smtpServer);
+  print('✅ Acuse de recibo (SMTP) enviado a $email');
+}
+
 // ── Brevo API — opcional, solo si BREVO_API_KEY está configurada ──────────────
 
 Future<void> _sendBrevoNotification({
@@ -143,6 +172,33 @@ Future<void> _sendBrevoNotification({
   print('✅ Email de contacto (Brevo) enviado a ${Config.notificationEmail}');
 }
 
+Future<void> _sendBrevoAutoReply({
+  required String name,
+  required String email,
+  required String subject,
+}) async {
+  final payload = {
+    'sender': {'name': 'EDF Catálogo', 'email': 'noreply@edefrutos2025.xyz'},
+    'to': [{'email': email, 'name': name}],
+    'subject': 'Hemos recibido tu mensaje — EDF Catálogo',
+    'htmlContent': _buildAutoReplyHtml(name: name, subject: subject),
+  };
+
+  final res = await http.post(
+    Uri.parse('https://api.brevo.com/v3/smtp/email'),
+    headers: {
+      'Content-Type': 'application/json',
+      'api-key': Config.brevoApiKey,
+    },
+    body: jsonEncode(payload),
+  );
+
+  if (res.statusCode < 200 || res.statusCode >= 300) {
+    throw Exception('Brevo auto-reply error ${res.statusCode}: ${res.body}');
+  }
+  print('✅ Acuse de recibo (Brevo) enviado a $email');
+}
+
 // ── HTML compartido ───────────────────────────────────────────────────────────
 
 String _buildHtml({
@@ -162,6 +218,26 @@ String _buildHtml({
     <div style="background:#f0f0f0;padding:15px;border-left:4px solid #007bff;margin:10px 0;">
       ${message.replaceAll('\n', '<br>')}
     </div>
+  </div>
+</body>
+</html>
+''';
+
+String _buildAutoReplyHtml({
+  required String name,
+  required String subject,
+}) =>
+    '''
+<html>
+<body style="font-family:Arial,sans-serif;padding:20px;background:#f5f5f5;">
+  <div style="max-width:600px;margin:0 auto;background:white;padding:30px;border-radius:10px;">
+    <h2 style="color:#333;">Hemos recibido tu mensaje</h2>
+    <p>Hola <strong>$name</strong>,</p>
+    <p>Gracias por ponerte en contacto con nosotros. Hemos recibido tu mensaje
+       sobre <em>«$subject»</em> y nos pondremos en contacto contigo en breve.</p>
+    <p style="margin-top:24px;color:#555;">Un saludo,<br><strong>EDF Catálogo</strong></p>
+    <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
+    <p style="font-size:12px;color:#999;">Este es un mensaje automático, por favor no respondas a este correo.</p>
   </div>
 </body>
 </html>
