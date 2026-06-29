@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:mailer/mailer.dart';
+import 'package:mailer/smtp_server.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
 import '../db/mongo_db.dart';
@@ -33,16 +35,28 @@ Router contactRoutes() {
         'read': false,
       });
 
-      // Enviar email de notificación via Brevo (no crítico — si falla, el mensaje ya está guardado)
+      // Enviar email de notificación (no crítico — si falla el mensaje ya está guardado)
       try {
-        await _sendBrevoNotification(
-          name: name,
-          email: email,
-          subject: subject.isEmpty ? '(sin asunto)' : subject,
-          message: message,
-        );
+        if (Config.brevoApiKey.isNotEmpty) {
+          // Opción A: Brevo API (si BREVO_API_KEY está configurada)
+          await _sendBrevoNotification(
+            name: name, email: email,
+            subject: subject.isEmpty ? '(sin asunto)' : subject,
+            message: message,
+          );
+        } else if (Config.smtpUser.isNotEmpty && Config.smtpPass.isNotEmpty) {
+          // Opción B: SMTP (usa SMTP_USER / SMTP_PASS del .env — Gmail configurado)
+          await _sendSmtpNotification(
+            name: name, email: email,
+            subject: subject.isEmpty ? '(sin asunto)' : subject,
+            message: message,
+          );
+        } else {
+          print('⚠️ contact_routes: sin BREVO_API_KEY ni credenciales SMTP — '
+              'mensaje guardado en MongoDB sin notificación por email');
+        }
       } catch (e) {
-        print('⚠️ contact_routes: email Brevo falló (mensaje guardado igualmente): $e');
+        print('⚠️ contact_routes: email falló (mensaje guardado igualmente): $e');
       }
 
       return ok({'saved': true});
@@ -54,21 +68,90 @@ Router contactRoutes() {
   return router;
 }
 
+// ── SMTP — Gmail u otro servidor ──────────────────────────────────────────────
+
+Future<void> _sendSmtpNotification({
+  required String name,
+  required String email,
+  required String subject,
+  required String message,
+}) async {
+  final user = Config.smtpUser;
+  final pass = Config.smtpPass;
+  final from = Config.smtpFrom.isNotEmpty ? Config.smtpFrom : user;
+  final to = Config.notificationEmail;
+  final host = Config.smtpHost;
+  final port = Config.smtpPort;
+
+  // Construir SmtpServer apropiado según el host
+  final SmtpServer smtpServer;
+  if (host.contains('gmail')) {
+    smtpServer = gmail(user, pass);   // helper de mailer: SSL 465
+  } else {
+    smtpServer = SmtpServer(
+      host,
+      port: port,
+      username: user,
+      password: pass,
+      ssl: port == 465,
+    );
+  }
+
+  final htmlBody = _buildHtml(name: name, email: email,
+      subject: subject, message: message);
+
+  final msg = Message()
+    ..from = Address(from, 'EDF Catálogo')
+    ..recipients.add(to)
+    ..replyToAddresses.add(Address(email, name))
+    ..subject = 'Contacto: $subject — $name'
+    ..html = htmlBody;
+
+  await send(msg, smtpServer);
+  print('✅ Email de contacto (SMTP) enviado a $to');
+}
+
+// ── Brevo API — opcional, solo si BREVO_API_KEY está configurada ──────────────
+
 Future<void> _sendBrevoNotification({
   required String name,
   required String email,
   required String subject,
   required String message,
 }) async {
-  final apiKey = Config.brevoApiKey;
-  if (apiKey.isEmpty) {
-    print('⚠️ BREVO_API_KEY no configurada — omitiendo notificación por email');
-    return;
+  final payload = {
+    'sender': {'name': 'EDF Catálogo', 'email': 'noreply@edefrutos2025.xyz'},
+    'to': [{'email': Config.notificationEmail}],
+    'replyTo': {'email': email},
+    'subject': 'Contacto: $subject — $name',
+    'htmlContent': _buildHtml(name: name, email: email,
+        subject: subject, message: message),
+  };
+
+  final res = await http.post(
+    Uri.parse('https://api.brevo.com/v3/smtp/email'),
+    headers: {
+      'Content-Type': 'application/json',
+      'api-key': Config.brevoApiKey,
+    },
+    body: jsonEncode(payload),
+  );
+
+  if (res.statusCode < 200 || res.statusCode >= 300) {
+    throw Exception('Brevo error ${res.statusCode}: ${res.body}');
   }
+  print('✅ Email de contacto (Brevo) enviado a ${Config.notificationEmail}');
+}
 
-  const adminEmail = 'edfrutos@gmail.com';
+// ── HTML compartido ───────────────────────────────────────────────────────────
 
-  final htmlContent = '''
+String _buildHtml({
+  required String name,
+  required String email,
+  required String subject,
+  required String message,
+}) =>
+    '''
 <html>
 <body style="font-family:Arial,sans-serif;padding:20px;background:#f5f5f5;">
   <div style="max-width:600px;margin:0 auto;background:white;padding:30px;border-radius:10px;">
@@ -83,26 +166,3 @@ Future<void> _sendBrevoNotification({
 </body>
 </html>
 ''';
-
-  final payload = {
-    'sender': {'name': 'EDF Catálogo', 'email': 'noreply@edefrutos2025.xyz'},
-    'to': [{'email': adminEmail}],
-    'replyTo': {'email': email},
-    'subject': 'Contacto: $subject — $name',
-    'htmlContent': htmlContent,
-  };
-
-  final res = await http.post(
-    Uri.parse('https://api.brevo.com/v3/smtp/email'),
-    headers: {
-      'Content-Type': 'application/json',
-      'api-key': apiKey,
-    },
-    body: jsonEncode(payload),
-  );
-
-  if (res.statusCode < 200 || res.statusCode >= 300) {
-    throw Exception('Brevo error ${res.statusCode}: ${res.body}');
-  }
-  print('✅ Email de contacto enviado a $adminEmail');
-}

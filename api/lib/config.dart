@@ -23,8 +23,20 @@ class Config {
   }
   static bool get useS3 => _env('USE_S3').toLowerCase() == 'true';
 
-  // Email (Brevo)
+  // Email — Brevo API (opcional)
   static String get brevoApiKey => _env('BREVO_API_KEY');
+
+  // Email — SMTP (Gmail u otro servidor)
+  static String get smtpHost => _env('SMTP_HOST', 'smtp.gmail.com');
+  static int get smtpPort => int.tryParse(_env('SMTP_PORT', '465')) ?? 465;
+  static String get smtpUser => _env('SMTP_USER');
+  static String get smtpPass => _env('SMTP_PASS');
+  static String get smtpFrom => _env('SMTP_FROM');
+  // Email de destino para notificaciones de contacto
+  static String get notificationEmail {
+    final e1 = _env('NOTIFICATION_EMAIL_1');
+    return e1.isNotEmpty ? e1 : smtpUser;
+  }
 
   // Servidor
   static int get port => int.tryParse(_env('API_PORT', '8080')) ?? 8080;

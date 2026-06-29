@@ -53,12 +53,21 @@ jobs:
       - name: Install Xvfb
         run: sudo apt-get install -y xvfb
 
+      # Chrome determinista — evita incompatibilidades con el chromedriver del runner
+      - name: Setup Chrome
+        id: setup-chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+
       - name: Run E2E tests (Chrome headless via Xvfb)
         run: |
-          export DISPLAY=:99
-          Xvfb :99 -screen 0 1280x1024x24 &
-          sleep 2
+          Xvfb :99 -screen 0 1920x1080x24 -ac &
+          sleep 5
           flutter test integration_test/ -d chrome
+        env:
+          DISPLAY: :99
+          CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
 
   build-web:
     name: Build Web
