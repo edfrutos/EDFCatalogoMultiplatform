@@ -31,10 +31,32 @@ jobs:
       - name: Run tests
         run: flutter test
 
+  test-e2e:
+    name: E2E Tests (Chrome headless)
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Create .env placeholder
+        run: echo "# CI placeholder" > .env
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run E2E tests (Chrome headless)
+        run: flutter test integration_test/ -d chrome --headless
+
   build-web:
     name: Build Web
     runs-on: ubuntu-latest
-    needs: test
+    needs: test-e2e
 
     steps:
       - uses: actions/checkout@v4
@@ -56,7 +78,7 @@ jobs:
   build-android:
     name: Build Android (AAB)
     runs-on: ubuntu-latest
-    needs: test
+    needs: test-e2e
 
     steps:
       - uses: actions/checkout@v4
