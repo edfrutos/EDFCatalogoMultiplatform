@@ -189,17 +189,58 @@ class GoogleDriveBackupService {
       }
 
       final httpClient = http.Client();
-      final authClient = auth.autoRefreshingClient(
-        clientId,
-        credentials,
-        httpClient,
-      );
 
-      return authClient;
+      // Validar el refresh token AHORA. Si Google lo ha invalidado (caducado —
+      // los clientes OAuth en estado "Testing" caducan el refresh token a los 7
+      // días —, revocado, o cambio de contraseña), `refreshCredentials` lanza
+      // `invalid_grant`. En ese caso limpiamos el token guardado y devolvemos
+      // null para que initialize() dispare una re-autenticación limpia.
+      try {
+        final fresh = await auth.refreshCredentials(
+          clientId,
+          credentials,
+          httpClient,
+        );
+        await _saveCredentials(fresh);
+        return auth.autoRefreshingClient(clientId, fresh, httpClient);
+      } catch (e) {
+        print(
+          '⚠️ Refresh token de Google Drive inválido/caducado ($e). '
+          'Limpiando credenciales y pidiendo re-autenticación.',
+        );
+        await _clearStoredCredentials();
+        httpClient.close();
+        return null;
+      }
     } catch (e) {
       print('⚠️ Error cargando credenciales guardadas: $e');
       return null;
     }
+  }
+
+  /// Borra las credenciales de Google Drive de todos los almacenes.
+  Future<void> _clearStoredCredentials() async {
+    for (final key in [_refreshTokenKey, _accessTokenKey, _tokenExpiryKey]) {
+      try {
+        await _secureStorage.delete(key: key);
+      } catch (_) {}
+      try {
+        _prefs ??= await SharedPreferences.getInstance();
+        await _prefs!.remove(key);
+      } catch (_) {}
+    }
+  }
+
+  /// Desconecta Google Drive: cierra el cliente y borra el token guardado.
+  /// Tras esto, `initialize()` volverá a abrir el flujo OAuth en el navegador.
+  Future<void> signOut() async {
+    _authClient?.close();
+    _driveApi = null;
+    _authClient = null;
+    _backupFolderId = null;
+    _isInitialized = false;
+    await _clearStoredCredentials();
+    print('👋 Google Drive desconectado — se pedirá autorización en el próximo backup');
   }
 
   /// Guardar credenciales en secure storage (con fallback a SharedPreferences)
