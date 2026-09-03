@@ -7,6 +7,8 @@ environment:
   sdk: '>=3.0.0 <4.0.0'
 
 dependencies:
+  edfcatalogo_crypto:
+    path: ../packages/edfcatalogo_crypto
   shelf: ^1.4.0
   shelf_router: ^1.1.4
   shelf_cors_headers: ^0.1.5

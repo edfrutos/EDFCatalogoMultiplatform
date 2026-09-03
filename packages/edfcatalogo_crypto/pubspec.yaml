@@ -1,0 +1,15 @@
+name: edfcatalogo_crypto
+description: Primitivas compartidas (contraseñas, AWS Signature V4, keys y MIME de S3) entre app Flutter y API Dart.
+publish_to: none
+version: 1.0.0
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  crypto: ^3.0.3
+  # Werkzeug/Flask password hashes (scrypt, pbkdf2) — verificación de usuarios legados
+  pointycastle: ^3.9.0
+
+dev_dependencies:
+  test: ^1.25.0

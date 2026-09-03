@@ -4,8 +4,11 @@
 // future. If not, the values below would default to using the project name when this becomes a
 // 'flutter create' template.
 
-// The application's name. By default this is also the title of the Flutter window.
-PRODUCT_NAME = EDF Catálogo
+// The application's name.
+// ASCII a propósito: un nombre de bundle/binario con acentos (la "á" de "Catálogo")
+// rompe `codesign --verify` en macOS 27 beta ("a sealed resource is missing or invalid").
+// El nombre visible con tilde se define en Info.plist → CFBundleDisplayName.
+PRODUCT_NAME = EDFCatalogo
 
 // The application's bundle identifier
 PRODUCT_BUNDLE_IDENTIFIER = com.edfcatalogo.edfcatalogomultiplatform

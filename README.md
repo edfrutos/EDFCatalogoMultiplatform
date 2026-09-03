@@ -80,9 +80,16 @@ Reconectar: `tmux attach -t edf` · Parar: `tmux kill-session -t edf`.
 ### macOS — distribuible (DMG)
 
 ```bash
+# Uso interno (firma ad-hoc — la app pide "Abrir de todas formas" en otros Macs)
+./scripts/build_macos_dmg.sh --adhoc
+
+# Distribución (Developer ID + Hardened Runtime + notarización + staple)
+# Requiere MACOS_SIGN_IDENTITY y NOTARY_PROFILE en el entorno / .env
 ./scripts/build_macos_dmg.sh
-# → dist/EDFCatalogo-<version>.dmg  (firma ad-hoc, sin Developer ID)
+# → dist/EDFCatalogo-<version>.dmg
 ```
+
+Guía completa del proceso de notarización: [`docs/macos/DISTRIBUCION_MACOS.md`](docs/macos/DISTRIBUCION_MACOS.md).
 
 ### Web — producción (VPS + Plesk)
 

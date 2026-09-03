@@ -1,7 +1,9 @@
 #include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"
 #include "ephemeral/Flutter-Generated.xcconfig"
 
-// Xcode 26 beta: desactivar signing automático — el script build_macos_dmg.sh
-// aplica firma ad-hoc (codesign --sign -) manualmente tras el build.
+// Signing automático de Xcode desactivado a propósito: scripts/build_macos_dmg.sh
+// firma el bundle manualmente tras el build (ad-hoc, o Developer ID + Hardened
+// Runtime + notarización cuando hay identidad). Ver docs/macos/DISTRIBUCION_MACOS.md.
+// Revalidar tras cada actualización de Xcode beta (26 → 27 → …).
 CODE_SIGNING_ALLOWED = NO
 CODE_SIGNING_REQUIRED = NO

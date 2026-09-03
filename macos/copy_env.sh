@@ -15,36 +15,50 @@ fi
 
 ENV_FILE="$PROJECT_ROOT/.env"
 
-# Determinar la ruta del bundle
+# Determinar la ruta del bundle.
+# El .app se llama "EDFCatalogo.app" (ASCII; el nombre visible con tilde va en
+# CFBundleDisplayName). NO hardcodeamos el nombre: variables de Xcode o glob *.app.
 if [ -n "$BUILT_PRODUCTS_DIR" ] && [ -n "$CONTENTS_FOLDER_PATH" ]; then
-    # Variables de Xcode están disponibles
+    # Variables de Xcode disponibles (caso normal en `flutter build macos`)
     RESOURCES_DIR="$BUILT_PRODUCTS_DIR/$CONTENTS_FOLDER_PATH/Resources"
     echo "📦 [Build] Copiando .env al bundle..."
-elif [ -n "$PROJECT_DIR" ]; then
-    # Estamos en build pero variables específicas no están, usar path relativo
-    RESOURCES_DIR="$PROJECT_DIR/../build/macos/Build/Products/$CONFIGURATION/edfcatalogomultiplatform.app/Contents/Resources"
-    echo "📦 [Build] Copiando .env al bundle (path alternativo)..."
 else
-    # Ejecutándose manualmente - usar rutas por defecto
-    BUILD_DIR="$PROJECT_ROOT/build/macos/Build/Products"
-    RESOURCES_DIR="$BUILD_DIR/Debug/edfcatalogomultiplatform.app/Contents/Resources"
-    echo "📦 [Manual] Copiando .env al bundle..."
+    # Fallback: localizar el primer .app en Products/<Config>/
+    CONF="${CONFIGURATION:-Release}"
+    PRODUCTS_DIR="${PROJECT_DIR:+$PROJECT_DIR/..}"
+    PRODUCTS_DIR="${PRODUCTS_DIR:-$PROJECT_ROOT}/build/macos/Build/Products/$CONF"
+    APP_DIR="$(/bin/ls -d "$PRODUCTS_DIR"/*.app 2>/dev/null | head -1)"
+    RESOURCES_DIR="${APP_DIR:-$PRODUCTS_DIR/EDFCatalogo.app}/Contents/Resources"
+    echo "📦 [Fallback] Copiando .env al bundle en: $RESOURCES_DIR"
 fi
 
 # Crear directorio Resources si no existe
 mkdir -p "$RESOURCES_DIR"
 
+# Copia el .env con permisos 0644 y SIN bit de ejecución ni xattrs.
+# CRÍTICO: un fichero con +x dentro de Contents/Resources/ hace que codesign lo
+# trate como "código anidado" y luego `--verify` falle con
+# "a sealed resource is missing or invalid". El .env del repo suele ser 0700.
+copy_env_clean() {
+    local dest="$1/.env"
+    /bin/cp "$ENV_FILE" "$dest"
+    /bin/chmod 0644 "$dest"
+    /usr/bin/xattr -c "$dest" 2>/dev/null || true
+    echo "✅ .env copiado (0644, sin xattrs) → $dest"
+}
+
 # Copiar .env si existe
 if [ -f "$ENV_FILE" ]; then
-    cp "$ENV_FILE" "$RESOURCES_DIR/.env"
-    echo "✅ Archivo .env copiado a $RESOURCES_DIR/.env"
-    
-    # También copiar para Release si estamos en Debug (para facilitar)
-    if [ "$CONFIGURATION" = "Debug" ] && [ -d "$(dirname "$RESOURCES_DIR")/../../../Release" ]; then
-        RELEASE_RESOURCES_DIR="$(dirname "$RESOURCES_DIR")/../../../Release/edfcatalogomultiplatform.app/Contents/Resources"
-        mkdir -p "$RELEASE_RESOURCES_DIR"
-        cp "$ENV_FILE" "$RELEASE_RESOURCES_DIR/.env"
-        echo "✅ Archivo .env también copiado para Release"
+    copy_env_clean "$RESOURCES_DIR"
+
+    # Si estamos en Debug, replicar también en el .app de Release (si existe)
+    if [ "$CONFIGURATION" = "Debug" ]; then
+        REL_DIR="$(dirname "$(dirname "$(dirname "$RESOURCES_DIR")")")/../Release"
+        REL_APP="$(/bin/ls -d "$REL_DIR"/*.app 2>/dev/null | head -1)"
+        if [ -n "$REL_APP" ]; then
+            mkdir -p "$REL_APP/Contents/Resources"
+            copy_env_clean "$REL_APP/Contents/Resources"
+        fi
     fi
 else
     echo "⚠️ Archivo .env no encontrado en $ENV_FILE"
