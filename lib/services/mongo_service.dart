@@ -1,5 +1,4 @@
-import 'dart:convert';
-import 'package:crypto/crypto.dart';
+import 'package:edfcatalogo_crypto/password_hasher.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:mongo_dart/mongo_dart.dart';
 import '../utils/env_config.dart';
@@ -76,46 +75,14 @@ class MongoService {
         );
       }
 
-      // Limpiar URI: quitar el nombre de BD si está incluido y asegurar formato correcto
-      String cleanUri = mongoUri.trim();
-
-      // Si la URI termina con un nombre de BD, quitarlo (todo después del último / antes de ?)
-      // Formato esperado: mongodb+srv://...@cluster.net/?params o mongodb+srv://...@cluster.net/dbname?params
-      if (cleanUri.contains('/') &&
-          !cleanUri.contains('mongodb+srv://') &&
-          cleanUri.split('/').length > 4) {
-        // Si tiene más de 4 partes separadas por /, probablemente tiene nombre de BD
-        final parts = cleanUri.split('/');
-        // Reconstruir sin el nombre de BD (partes antes del último /)
-        final baseParts = parts.sublist(0, parts.length - 1);
-        cleanUri = baseParts.join('/');
-        // Asegurar que tenga los parámetros de query si los tenía
-        final lastPart = parts.last;
-        if (lastPart.contains('?')) {
-          final queryParams = lastPart.substring(lastPart.indexOf('?'));
-          cleanUri += queryParams;
-        }
-      }
-
-      // Si no termina en / ni ?, agregar / para luego especificar la BD
-      if (!cleanUri.endsWith('/') && !cleanUri.contains('?')) {
-        cleanUri += '/';
-      }
-
-      // Construir URI completa con nombre de BD
-      String fullUri = cleanUri;
-      if (fullUri.endsWith('/')) {
-        fullUri += mongoDb;
-      } else if (fullUri.contains('?')) {
-        // Si tiene parámetros, insertar el nombre de BD antes del ?
-        final parts = fullUri.split('?');
-        fullUri = '${parts[0]}/$mongoDb?${parts[1]}';
-      } else {
-        fullUri += '/$mongoDb';
-      }
+      // Normalizar la URI: dejar SIEMPRE  esquema://credenciales@host  (sin BD)
+      // + '/'+mongoDb + query.  Antes había un bug: la condición para quitar la
+      // BD ya presente en MONGO_URI excluía las URIs `mongodb+srv://`, así que el
+      // nombre se concatenaba dos veces → se abría "edf_catalogotablasedf_catalogotablas".
+      final fullUri = _buildMongoUri(mongoUri.trim(), mongoDb);
 
       print('🔌 Intentando conectar a MongoDB...');
-      print('📍 URI: ${_maskUri(cleanUri)}');
+      print('📍 URI: ${_maskUri(fullUri)}');
       print('🗄️  Base de datos: $mongoDb');
 
       // Crear conexión con la URI completa que incluye el nombre de la BD
@@ -141,11 +108,41 @@ class MongoService {
     }
   }
 
+  /// Construye la URI final: `<esquema>://<credenciales>@<host>/<db>?<query>`.
+  /// Elimina cualquier nombre de BD ya presente en [rawUri] (venga o no la URI
+  /// con `+srv`) para no duplicarlo con [db].
+  static String _buildMongoUri(String rawUri, String db) {
+    var base = rawUri;
+
+    // Separar la query string
+    var query = '';
+    final qIdx = base.indexOf('?');
+    if (qIdx >= 0) {
+      query = base.substring(qIdx); // incluye el '?'
+      base = base.substring(0, qIdx);
+    }
+
+    // Cortar en el primer '/' que haya DESPUÉS de "://host" → quita la BD y/o
+    // la barra final. Todo lo anterior es esquema://credenciales@host[:puerto].
+    final schemeIdx = base.indexOf('://');
+    if (schemeIdx >= 0) {
+      final afterScheme = base.substring(schemeIdx + 3);
+      final slashIdx = afterScheme.indexOf('/');
+      if (slashIdx >= 0) {
+        base = base.substring(0, schemeIdx + 3 + slashIdx);
+      }
+    } else if (base.endsWith('/')) {
+      base = base.substring(0, base.length - 1);
+    }
+
+    return '$base/$db$query';
+  }
+
   /// Enmascarar URI para logs (ocultar credenciales)
   String _maskUri(String uri) {
-    return uri.replaceAll(
-      RegExp(r'mongodb\+srv://[^:]+:[^@]+'),
-      'mongodb+srv://***:***',
+    return uri.replaceAllMapped(
+      RegExp(r'(mongodb(?:\+srv)?://)[^:/@]+:[^@]+@'),
+      (m) => '${m[1]}***:***@',
     );
   }
 
@@ -338,58 +335,11 @@ class MongoService {
         return null;
       }
 
-      // Verificar contraseña (múltiples métodos)
-      bool passwordMatch = false;
-
-      // Método 1: Texto plano
-      if (storedPassword == password) {
-        print('✅ Contraseña coincide (texto plano)');
-        passwordMatch = true;
-      }
-
-      // Método 2: SHA256
-      if (!passwordMatch) {
-        final hash = sha256.convert(utf8.encode(password));
-        final passwordHash = base64Encode(hash.bytes);
-        print('🔐 Comparando hash SHA256:');
-        print(
-          '   Almacenado: ${storedPassword.substring(0, storedPassword.length > 30 ? 30 : storedPassword.length)}...',
-        );
-        print(
-          '   Calculado:  ${passwordHash.substring(0, passwordHash.length > 30 ? 30 : passwordHash.length)}...',
-        );
-        if (storedPassword == passwordHash) {
-          print('✅ Contraseña coincide (SHA256)');
-          passwordMatch = true;
-        } else {
-          print('❌ Hashes no coinciden');
-        }
-      }
-
-      // Método 3: SHA512
-      if (!passwordMatch) {
-        final hash = sha512.convert(utf8.encode(password));
-        final passwordHash = base64Encode(hash.bytes);
-        if (storedPassword == passwordHash) {
-          print('✅ Contraseña coincide (SHA512)');
-          passwordMatch = true;
-        }
-      }
-
-      // Método 4: SHA384
-      if (!passwordMatch) {
-        final hash = sha384.convert(utf8.encode(password));
-        final passwordHash = base64Encode(hash.bytes);
-        if (storedPassword == passwordHash) {
-          print('✅ Contraseña coincide (SHA384)');
-          passwordMatch = true;
-        }
-      }
-
-      if (!passwordMatch) {
+      if (!PasswordHasher.verify(password, storedPassword)) {
         print('❌ Contraseña incorrecta');
         return null;
       }
+      print('✅ Contraseña verificada');
 
       return User.fromJson(userDoc);
     } catch (e) {
@@ -429,9 +379,7 @@ class MongoService {
     try {
       final collection = await getUsersCollection();
 
-      // Hash de la contraseña con SHA256
-      final hash = sha256.convert(utf8.encode(password));
-      final passwordHash = base64Encode(hash.bytes);
+      final passwordHash = PasswordHasher.hash(password);
 
       final userDoc = {
         '_id': ObjectId().toString(),
@@ -594,9 +542,7 @@ class MongoService {
       print('🔑 Actualizando contraseña para: $email');
       final collection = await getUsersCollection();
 
-      // Hash de la nueva contraseña con SHA256
-      final hash = sha256.convert(utf8.encode(newPassword));
-      final passwordHash = base64Encode(hash.bytes);
+      final passwordHash = PasswordHasher.hash(newPassword);
 
       final result = await collection.update(where.eq('Email', email), {
         '\$set': {'Password': passwordHash},
