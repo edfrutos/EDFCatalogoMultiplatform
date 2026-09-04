@@ -3,6 +3,9 @@ FROM dart:stable AS builder
 
 WORKDIR /app
 
+# Paquete compartido (dependencia de path de api/pubspec.yaml: ../packages/edfcatalogo_crypto)
+COPY packages/edfcatalogo_crypto /packages/edfcatalogo_crypto
+
 # Copiar manifiesto e instalar dependencias
 COPY api/pubspec.yaml api/pubspec.lock* ./
 RUN dart pub get

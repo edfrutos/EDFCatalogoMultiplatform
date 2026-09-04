@@ -1,6 +1,6 @@
 # ── Carpetas de build y dependencias ─────────────────────────────────────────
 build/
-.dart_tool/
+**/.dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
 
