@@ -15,6 +15,7 @@ COPY api/ .
 
 # Compilar a binario nativo (AOT)
 RUN dart compile exe bin/server.dart -o bin/server
+RUN dart compile exe bin/healthcheck.dart -o bin/healthcheck
 
 # ── Etapa 2: imagen mínima de producción ─────────────────────────────────────
 # FROM scratch evita el conflicto con debian:bookworm-slim donde /lib es un
@@ -29,8 +30,9 @@ COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 WORKDIR /app
 
-# Binario compilado
+# Binarios compilados
 COPY --from=builder /app/bin/server /app/bin/server
+COPY --from=builder /app/bin/healthcheck /app/bin/healthcheck
 
 EXPOSE 8089
 

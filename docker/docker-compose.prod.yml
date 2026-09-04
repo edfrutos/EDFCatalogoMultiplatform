@@ -35,7 +35,7 @@ services:
       # CORS: el frontend está en el mismo dominio, Nginx añade los headers
       API_CORS_ORIGIN: "https://edfcat.efjdefrutos.com"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8089/api/health"]
+      test: ["CMD", "/app/bin/healthcheck"]
       interval: 30s
       timeout: 5s
       retries: 3
