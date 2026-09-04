@@ -10,7 +10,6 @@ import '../../../models/file_type.dart';
 import '../../../utils/app_theme.dart';
 import '../../../viewmodels/auth_viewmodel.dart';
 import '../../../services/s3_service.dart';
-import '../../../services/api_service.dart';
 
 class EditCatalogDialog extends StatefulWidget {
   final Catalog catalog;
@@ -102,11 +101,12 @@ class _EditCatalogDialogState extends State<EditCatalogDialog> {
             widget.catalog.userId;
         final pf = _selectedPlatformFile!;
         if (kIsWeb) {
-          thumbnailUrl = await ApiService.instance.uploadBytes(
+          thumbnailUrl = await S3Service().uploadBytes(
             bytes: pf.bytes!,
             fileName: pf.name,
-            folder: 'users/$userId/catalogs/${widget.catalog.id}/image',
-            contentType: 'image/${pf.extension ?? 'jpeg'}',
+            userId: userId,
+            catalogId: widget.catalog.id,
+            fileType: FileType.image,
           );
         } else {
           thumbnailUrl = await S3Service().uploadFile(

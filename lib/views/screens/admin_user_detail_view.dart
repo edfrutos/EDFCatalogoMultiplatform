@@ -10,7 +10,6 @@ import '../../models/file_type.dart';
 import '../../utils/app_theme.dart';
 import '../../viewmodels/admin_viewmodel.dart';
 import '../../services/s3_service.dart';
-import '../../services/api_service.dart';
 import 'admin_user_catalogs_view.dart';
 
 class AdminUserDetailView extends StatefulWidget {
@@ -116,11 +115,12 @@ class _AdminUserDetailViewState extends State<AdminUserDetailView> {
       try {
         final pf = _selectedPlatformFile!;
         if (kIsWeb) {
-          profileImageUrl = await ApiService.instance.uploadBytes(
+          profileImageUrl = await S3Service().uploadBytes(
             bytes: pf.bytes!,
             fileName: pf.name,
-            folder: 'users/${widget.user.id}/catalogs/profile/image',
-            contentType: 'image/${pf.extension ?? 'jpeg'}',
+            userId: widget.user.id,
+            catalogId: 'profile',
+            fileType: FileType.image,
           );
         } else {
           profileImageUrl = await S3Service().uploadFile(

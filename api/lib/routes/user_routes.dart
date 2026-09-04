@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:crypto/crypto.dart';
+import 'package:edfcatalogo_crypto/password_hasher.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
 import 'package:mongo_dart/mongo_dart.dart';
@@ -115,9 +115,7 @@ Router userRoutes() {
       );
       if (exists > 0) return error('El email ya está registrado', 409);
 
-      // Hash SHA-256
-      final passwordHash =
-          base64Encode(sha256.convert(utf8.encode(password)).bytes);
+      final passwordHash = PasswordHasher.hash(password);
 
       final doc = {
         'Email': email,
@@ -185,9 +183,7 @@ Router userRoutes() {
       // Cambio de contraseña
       if (body.containsKey('password') &&
           body['password'].toString().isNotEmpty) {
-        updates['Password'] = base64Encode(
-          sha256.convert(utf8.encode(body['password'].toString())).bytes,
-        );
+        updates['Password'] = PasswordHasher.hash(body['password'].toString());
       }
 
       if (updates.isEmpty) return error('Sin campos para actualizar', 400);
@@ -287,8 +283,7 @@ Router userRoutes() {
       }
 
       final coll = await MongoDb.instance.users;
-      final passwordHash =
-          base64Encode(sha256.convert(utf8.encode(newPassword)).bytes);
+      final passwordHash = PasswordHasher.hash(newPassword);
 
       final result = await coll.updateOne(
         {r'$or': [{'Email': email}, {'email': email}]},

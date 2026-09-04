@@ -6,7 +6,6 @@ import '../../../models/catalog.dart';
 import '../../../models/file_type.dart' as app_file_type;
 import '../../../viewmodels/auth_viewmodel.dart';
 import '../../../services/s3_service.dart';
-import '../../../services/api_service.dart';
 import '../../../utils/validators.dart';
 import 'multiple_files_section.dart';
 
@@ -148,51 +147,22 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
       app_file_type.FileType fileType,
     ) async {
       if (kIsWeb) {
-        // Web: sin path nativo, usar bytes + ApiService
         final bytes = pf.bytes;
         if (bytes == null) throw Exception('Archivo sin datos en web');
-        final folder = switch (fileType) {
-          app_file_type.FileType.image => 'images',
-          app_file_type.FileType.document => 'documents',
-          app_file_type.FileType.multimedia => 'multimedia',
-          _ => 'uploads',
-        };
-        // Inferir MIME type por extensión para que S3 lo almacene correctamente.
-        // Sin esto el servidor usa 'application/octet-stream' → Chrome descarga
-        // los PDFs en vez de abrirlos inline en el visor.
-        final ext = pf.name.split('.').last.toLowerCase();
-        const mimeByExt = {
-          'pdf': 'application/pdf',
-          'jpg': 'image/jpeg', 'jpeg': 'image/jpeg',
-          'png': 'image/png', 'gif': 'image/gif',
-          'webp': 'image/webp', 'heic': 'image/heic',
-          'mp4': 'video/mp4', 'mov': 'video/quicktime',
-          'webm': 'video/webm', 'avi': 'video/x-msvideo',
-          'mp3': 'audio/mpeg', 'wav': 'audio/wav',
-          'ogg': 'audio/ogg', 'aac': 'audio/aac',
-          'doc': 'application/msword',
-          'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          'xls': 'application/vnd.ms-excel',
-          'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          'txt': 'text/plain', 'md': 'text/markdown',
-          'rtf': 'application/rtf', 'csv': 'text/csv',
-        };
-        final contentType = mimeByExt[ext] ?? 'application/octet-stream';
-        return ApiService.instance.uploadBytes(
+        return S3Service.shared.uploadBytes(
           bytes: bytes,
           fileName: pf.name,
-          folder: folder,
-          contentType: contentType,
-        );
-      } else {
-        // Nativo: path disponible, usar S3Service directo
-        return S3Service.shared.uploadFile(
-          filePath: pf.path!,
           userId: userId,
           catalogId: widget.catalog.id,
           fileType: fileType,
         );
       }
+      return S3Service.shared.uploadFile(
+        filePath: pf.path!,
+        userId: userId,
+        catalogId: widget.catalog.id,
+        fileType: fileType,
+      );
     }
 
     // Subir imágenes

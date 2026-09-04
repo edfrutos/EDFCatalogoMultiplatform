@@ -10,6 +10,13 @@
 analyzer:
   exclude:
     - api/**       # paquete Dart independiente con sus propias deps; flutter analyze no lo debe analizar
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
   errors:
     avoid_print: ignore
 include: package:flutter_lints/flutter.yaml

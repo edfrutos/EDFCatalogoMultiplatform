@@ -2,6 +2,8 @@
 
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:edfcatalogo_crypto/s3_content_type.dart';
+import 'package:edfcatalogo_crypto/s3_object_key.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import '../models/user.dart';
@@ -347,23 +349,46 @@ class ApiService {
     return Uri.parse(url);
   }
 
-  /// Sube bytes directamente a S3 a través del servidor API.
-  /// Útil en web donde no hay acceso a archivos del sistema.
+  /// Sube bytes a S3 a través del servidor API.
+  ///
+  /// Si hay [userId]/[catalogId]/[fileType], la key es la canónica
+  /// (`users/.../catalogs/.../{kind}/uuid.ext`). [folder] queda como
+  /// fallback para APIs viejas (mismo prefijo).
   Future<String> uploadBytes({
     required Uint8List bytes,
     required String fileName,
+    String? userId,
+    String? catalogId,
+    String? fileType,
     String folder = 'uploads',
     String? contentType,
   }) async {
     try {
+      final mime = S3ContentType.isGeneric(contentType)
+          ? S3ContentType.fromFileName(fileName)
+          : contentType!;
+      final prefix = (userId != null &&
+              catalogId != null &&
+              fileType != null)
+          ? S3ObjectKey.prefix(
+              userId: userId,
+              catalogId: catalogId,
+              kind: fileType,
+            )
+          : folder;
+      final headers = <String, String>{
+        'Authorization': 'Bearer $_token',
+        'Content-Type': mime,
+        'X-File-Name': fileName,
+        'X-Folder': prefix,
+      };
+      if (userId != null) headers['X-User-Id'] = userId;
+      if (catalogId != null) headers['X-Catalog-Id'] = catalogId;
+      if (fileType != null) headers['X-File-Type'] = fileType;
+
       final res = await http.post(
         _uri('api/s3/upload'),
-        headers: {
-          'Authorization': 'Bearer $_token',
-          'Content-Type': contentType ?? 'application/octet-stream',
-          'X-File-Name': fileName,
-          'X-Folder': folder,
-        },
+        headers: headers,
         body: bytes,
       );
       if (res.statusCode != 200) {

@@ -55,7 +55,7 @@ void main() async {
       .addMiddleware(corsHeaders(headers: {
         ACCESS_CONTROL_ALLOW_ORIGIN: corsOrigin,
         ACCESS_CONTROL_ALLOW_HEADERS:
-            'Content-Type, Authorization, X-File-Name, X-Folder',
+            'Content-Type, Authorization, X-File-Name, X-Folder, X-User-Id, X-Catalog-Id, X-File-Type',
         ACCESS_CONTROL_ALLOW_METHODS: 'GET, POST, PUT, DELETE, OPTIONS',
         ACCESS_CONTROL_MAX_AGE: '86400',
       }))

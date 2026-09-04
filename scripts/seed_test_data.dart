@@ -15,9 +15,8 @@
 
 import 'dart:io';
 import 'dart:math';
+import 'package:edfcatalogo_crypto/password_hasher.dart';
 import 'package:mongo_dart/mongo_dart.dart';
-import 'package:crypto/crypto.dart';
-import 'dart:convert';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -31,11 +30,8 @@ String? _env(List<String> names) {
   return null;
 }
 
-/// Hash SHA-256 hex (mismo algoritmo que usa la app en producción).
-String _hashPassword(String password) {
-  final bytes = utf8.encode(password);
-  return sha256.convert(bytes).toString();
-}
+/// Hash canónico (SHA-256 Base64), el mismo que app y API.
+String _hashPassword(String password) => PasswordHasher.hash(password);
 
 String _randomId() {
   final rng = Random.secure();

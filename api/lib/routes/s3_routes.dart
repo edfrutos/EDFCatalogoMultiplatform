@@ -1,8 +1,9 @@
-import 'dart:convert';
 import 'dart:typed_data';
+import 'package:edfcatalogo_crypto/aws_s3_signer.dart';
+import 'package:edfcatalogo_crypto/s3_content_type.dart';
+import 'package:edfcatalogo_crypto/s3_object_key.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
-import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 import 'package:mime/mime.dart';
@@ -47,17 +48,40 @@ Router s3Routes() {
       if (bytes.isEmpty) return error('Body vacío', 400);
 
       final fileName = req.headers['x-file-name'] ?? 'file';
-      final folder = req.headers['x-folder'] ?? 'uploads';
-      final ext = fileName.contains('.')
-          ? fileName.split('.').last.toLowerCase()
-          : '';
       final uuid = const Uuid().v4();
-      final s3Key = '$folder/$uuid${ext.isNotEmpty ? '.$ext' : ''}';
+      final userId = req.headers['x-user-id'];
+      final catalogId = req.headers['x-catalog-id'];
+      final fileType = req.headers['x-file-type'];
 
-      final contentType =
-          req.headers['content-type'] ??
-          lookupMimeType(fileName) ??
-          'application/octet-stream';
+      final String s3Key;
+      if (userId != null &&
+          userId.isNotEmpty &&
+          catalogId != null &&
+          catalogId.isNotEmpty &&
+          fileType != null &&
+          fileType.isNotEmpty) {
+        s3Key = S3ObjectKey.build(
+          userId: userId,
+          catalogId: catalogId,
+          kind: fileType,
+          originalFileName: fileName,
+          uuid: uuid,
+        );
+      } else {
+        final folder = req.headers['x-folder'] ?? 'uploads';
+        s3Key = '$folder/$uuid${S3ObjectKey.extensionOf(fileName)}';
+      }
+
+      final headerType = req.headers['content-type'];
+      final String contentType;
+      if (S3ContentType.isGeneric(headerType)) {
+        final inferred = S3ContentType.fromFileName(fileName);
+        contentType = inferred == S3ContentType.octetStream
+            ? (lookupMimeType(fileName) ?? S3ContentType.octetStream)
+            : inferred;
+      } else {
+        contentType = headerType!.split(';').first.trim();
+      }
 
       await _uploadToS3(
         key: s3Key,
@@ -93,68 +117,24 @@ Router s3Routes() {
   return router;
 }
 
-// ── AWS Signature V4 helpers (mismo algoritmo que s3_service.dart) ───────────
-
-List<int> _hmacSha256(List<int> key, String data) =>
-    Hmac(sha256, key).convert(utf8.encode(data)).bytes;
-
-String _formatDate(DateTime d) =>
-    '${d.year}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
-
-String _formatAmzDate(DateTime d) =>
-    d.toIso8601String().replaceAll('-', '').replaceAll(':', '').split('.')[0] +
-    'Z';
+AwsS3Signer _s3Signer() => AwsS3Signer(
+      accessKey: Config.awsAccessKeyId,
+      secretKey: Config.awsSecretAccessKey,
+      region: Config.awsRegion,
+      bucket: Config.s3BucketName,
+    );
 
 Future<String> _generatePresignedUrl(
   String key, {
   int expirationInSeconds = 3600,
 }) async {
-  final normalizedKey = key.startsWith('/') ? key.substring(1) : key;
-  final bucket = Config.s3BucketName;
-  final region = Config.awsRegion;
-  final accessKey = Config.awsAccessKeyId;
-  final secretKey = Config.awsSecretAccessKey;
-
-  final now = DateTime.now().toUtc();
-  final dateStamp = _formatDate(now);
-  final amzDate = _formatAmzDate(now);
-  final host = '$bucket.s3.$region.amazonaws.com';
-  final credentialScope = '$dateStamp/$region/s3/aws4_request';
-  final credential = '$accessKey/$credentialScope';
-
-  final queryParams = {
-    'X-Amz-Algorithm': 'AWS4-HMAC-SHA256',
-    'X-Amz-Credential': credential,
-    'X-Amz-Date': amzDate,
-    'X-Amz-Expires': '$expirationInSeconds',
-    'X-Amz-SignedHeaders': 'host',
-  };
-
-  final sortedQuery = queryParams.entries.toList()
-    ..sort((a, b) => a.key.compareTo(b.key));
-  final canonicalQueryString = sortedQuery
-      .map((e) => '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}')
-      .join('&');
-
-  final canonicalRequest =
-      'GET\n/$normalizedKey\n$canonicalQueryString\nhost:$host\n\nhost\nUNSIGNED-PAYLOAD';
-
-  final stringToSign =
-      'AWS4-HMAC-SHA256\n$amzDate\n$credentialScope\n'
-      '${sha256.convert(utf8.encode(canonicalRequest))}';
-
-  final kDate = _hmacSha256(utf8.encode('AWS4$secretKey'), dateStamp);
-  final kRegion = _hmacSha256(kDate, region);
-  final kService = _hmacSha256(kRegion, 's3');
-  final kSigning = _hmacSha256(kService, 'aws4_request');
-  final signature = _hmacSha256(kSigning, stringToSign)
-      .map((b) => b.toRadixString(16).padLeft(2, '0'))
-      .join();
-
-  return Uri.https(host, normalizedKey, {
-    ...queryParams,
-    'X-Amz-Signature': signature,
-  }).toString();
+  return _s3Signer()
+      .presignedGet(
+        key: key,
+        now: DateTime.now().toUtc(),
+        expiresInSeconds: expirationInSeconds,
+      )
+      .toString();
 }
 
 Future<void> _uploadToS3({
@@ -162,57 +142,17 @@ Future<void> _uploadToS3({
   required Uint8List bytes,
   required String contentType,
 }) async {
-  final bucket = Config.s3BucketName;
-  final region = Config.awsRegion;
-  final accessKey = Config.awsAccessKeyId;
-  final secretKey = Config.awsSecretAccessKey;
+  final signed = _s3Signer().sign(
+    method: 'PUT',
+    key: key,
+    now: DateTime.now().toUtc(),
+    extraHeaders: {'Content-Type': contentType},
+    payload: bytes,
+  );
 
-  final now = DateTime.now().toUtc();
-  final dateStamp = _formatDate(now);
-  final amzDate = _formatAmzDate(now);
-  final host = '$bucket.s3.$region.amazonaws.com';
-  final payloadHash = sha256.convert(bytes).toString();
-
-  final headers = {
-    'Content-Type': contentType,
-    'Host': host,
-    'x-amz-content-sha256': payloadHash,
-    'x-amz-date': amzDate,
-  };
-
-  final signedHeaders = (headers.keys.map((k) => k.toLowerCase()).toList()
-    ..sort()).join(';');
-  final canonicalHeaders = (headers.entries.toList()
-        ..sort((a, b) => a.key.toLowerCase().compareTo(b.key.toLowerCase())))
-      .map((e) => '${e.key.toLowerCase()}:${e.value}\n')
-      .join();
-
-  final canonicalRequest =
-      'PUT\n/$key\n\n$canonicalHeaders\n$signedHeaders\n$payloadHash';
-  final credentialScope = '$dateStamp/$region/s3/aws4_request';
-  final stringToSign =
-      'AWS4-HMAC-SHA256\n$amzDate\n$credentialScope\n'
-      '${sha256.convert(utf8.encode(canonicalRequest))}';
-
-  final kDate = _hmacSha256(utf8.encode('AWS4$secretKey'), dateStamp);
-  final kRegion = _hmacSha256(kDate, region);
-  final kService = _hmacSha256(kRegion, 's3');
-  final kSigning = _hmacSha256(kService, 'aws4_request');
-  final signature = _hmacSha256(kSigning, stringToSign)
-      .map((b) => b.toRadixString(16).padLeft(2, '0'))
-      .join();
-
-  final authorization =
-      'AWS4-HMAC-SHA256 Credential=$accessKey/$credentialScope, '
-      'SignedHeaders=$signedHeaders, Signature=$signature';
-
-  final url = Uri.https(host, '/$key');
   final response = await http.put(
-    url,
-    headers: {
-      ...headers,
-      'Authorization': authorization,
-    },
+    signed.url,
+    headers: signed.headers,
     body: bytes,
   );
 
@@ -222,50 +162,10 @@ Future<void> _uploadToS3({
 }
 
 Future<void> _deleteFromS3(String key) async {
-  final bucket = Config.s3BucketName;
-  final region = Config.awsRegion;
-  final accessKey = Config.awsAccessKeyId;
-  final secretKey = Config.awsSecretAccessKey;
-
-  final normalizedKey = key.startsWith('/') ? key.substring(1) : key;
-  final now = DateTime.now().toUtc();
-  final dateStamp = _formatDate(now);
-  final amzDate = _formatAmzDate(now);
-  final host = '$bucket.s3.$region.amazonaws.com';
-  final payloadHash = sha256.convert(utf8.encode('')).toString();
-
-  final headers = {
-    'Host': host,
-    'x-amz-content-sha256': payloadHash,
-    'x-amz-date': amzDate,
-  };
-
-  final signedHeaders = (headers.keys.map((k) => k.toLowerCase()).toList()
-    ..sort()).join(';');
-  final canonicalHeaders = (headers.entries.toList()
-        ..sort((a, b) => a.key.toLowerCase().compareTo(b.key.toLowerCase())))
-      .map((e) => '${e.key.toLowerCase()}:${e.value}\n')
-      .join();
-
-  final canonicalRequest =
-      'DELETE\n/$normalizedKey\n\n$canonicalHeaders\n$signedHeaders\n$payloadHash';
-  final credentialScope = '$dateStamp/$region/s3/aws4_request';
-  final stringToSign =
-      'AWS4-HMAC-SHA256\n$amzDate\n$credentialScope\n'
-      '${sha256.convert(utf8.encode(canonicalRequest))}';
-
-  final kDate = _hmacSha256(utf8.encode('AWS4$secretKey'), dateStamp);
-  final kRegion = _hmacSha256(kDate, region);
-  final kService = _hmacSha256(kRegion, 's3');
-  final kSigning = _hmacSha256(kService, 'aws4_request');
-  final signature = _hmacSha256(kSigning, stringToSign)
-      .map((b) => b.toRadixString(16).padLeft(2, '0'))
-      .join();
-
-  final authorization =
-      'AWS4-HMAC-SHA256 Credential=$accessKey/$credentialScope, '
-      'SignedHeaders=$signedHeaders, Signature=$signature';
-
-  final url = Uri.https(host, '/$normalizedKey');
-  await http.delete(url, headers: {...headers, 'Authorization': authorization});
+  final signed = _s3Signer().sign(
+    method: 'DELETE',
+    key: key,
+    now: DateTime.now().toUtc(),
+  );
+  await http.delete(signed.url, headers: signed.headers);
 }

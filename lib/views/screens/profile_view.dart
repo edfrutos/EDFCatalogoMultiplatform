@@ -8,7 +8,6 @@ import '../../utils/app_theme.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../services/mongo_service.dart';
 import '../../services/s3_service.dart';
-import '../../services/api_service.dart';
 import '../../models/file_type.dart';
 
 class ProfileView extends StatefulWidget {
@@ -101,11 +100,12 @@ class _ProfileViewState extends State<ProfileView> {
         try {
           final pf = _selectedPlatformFile!;
           if (kIsWeb) {
-            profileImageUrl = await ApiService.instance.uploadBytes(
+            profileImageUrl = await S3Service().uploadBytes(
               bytes: pf.bytes!,
               fileName: pf.name,
-              folder: 'users/${user.id}/catalogs/profile/image',
-              contentType: 'image/${pf.extension ?? 'jpeg'}',
+              userId: user.id,
+              catalogId: 'profile',
+              fileType: FileType.image,
             );
           } else {
             profileImageUrl = await S3Service().uploadFile(

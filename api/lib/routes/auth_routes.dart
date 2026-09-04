@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:crypto/crypto.dart';
+import 'package:edfcatalogo_crypto/password_hasher.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
 import 'package:mongo_dart/mongo_dart.dart';
@@ -48,7 +48,7 @@ Router authRoutes() {
           userDoc['password']?.toString() ??
           '';
 
-      if (!_verifyPassword(password, stored)) {
+      if (!PasswordHasher.verify(password, stored)) {
         return error('Contraseña incorrecta', 401);
       }
 
@@ -107,25 +107,4 @@ Router authRoutes() {
   });
 
   return router;
-}
-
-/// Verifica la contraseña con los mismos métodos que mongo_service.dart:
-/// texto plano, SHA-256, SHA-512, SHA-384 (todos en base64).
-bool _verifyPassword(String password, String stored) {
-  if (stored.isEmpty) return false;
-  // Texto plano
-  if (stored == password) return true;
-  // SHA-256
-  if (stored == base64Encode(sha256.convert(utf8.encode(password)).bytes)) {
-    return true;
-  }
-  // SHA-512
-  if (stored == base64Encode(sha512.convert(utf8.encode(password)).bytes)) {
-    return true;
-  }
-  // SHA-384
-  if (stored == base64Encode(sha384.convert(utf8.encode(password)).bytes)) {
-    return true;
-  }
-  return false;
 }

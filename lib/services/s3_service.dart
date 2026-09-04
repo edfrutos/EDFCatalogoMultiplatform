@@ -1,7 +1,9 @@
 // ignore_for_file: avoid_print
-import 'dart:convert';
+import 'dart:typed_data';
+import 'package:edfcatalogo_crypto/aws_s3_signer.dart';
+import 'package:edfcatalogo_crypto/s3_content_type.dart';
+import 'package:edfcatalogo_crypto/s3_object_key.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
 import 'package:uuid/uuid.dart';
@@ -79,42 +81,12 @@ class S3Service {
     required String catalogId,
     required FileType fileType,
   }) async {
-    // En web no hay sistema de archivos nativo; usar uploadBytes vía ApiService
+    // En web no hay sistema de archivos nativo; usar uploadBytes
     if (kIsWeb) {
       throw UnsupportedError(
         'uploadFile no está disponible en web. '
-        'Usa ApiService.instance.uploadBytes() con Uint8List del file picker.',
+        'Usa S3Service.uploadBytes() con los bytes del file picker.',
       );
-    }
-    // Limpiar el userId antes de usarlo
-    final cleanUserId = _cleanUserId(userId);
-    if (cleanUserId != userId) {
-      print('⚠️ UserId limpiado: "$userId" -> "$cleanUserId"');
-    }
-
-    print('📤 Iniciando subida de archivo:');
-    print('  - Archivo: ${path.basename(filePath)}');
-    print('  - Tipo: ${fileType.name}');
-    print('  - Usuario: $cleanUserId');
-    print('  - Catálogo: $catalogId');
-    print('  - Bucket: $_bucketName');
-    print('  - Region: $_region');
-    print('  - USE_S3: $_useS3');
-
-    // Validar configuración de S3
-    if (_useS3) {
-      if (_bucketName.isEmpty) {
-        throw Exception(
-          'BUCKET_NAME no está configurado en las variables de entorno. '
-          'Verifica tu archivo .env',
-        );
-      }
-      if (_accessKey.isEmpty || _secretKey.isEmpty) {
-        throw Exception(
-          'AWS_ACCESS_KEY_ID o AWS_SECRET_ACCESS_KEY no están configurados. '
-          'Verifica tu archivo .env',
-        );
-      }
     }
 
     final file = File(filePath);
@@ -122,19 +94,68 @@ class S3Service {
       throw Exception('Archivo no encontrado: $filePath');
     }
 
-    final fileSize = await file.length();
-    print('  - Tamaño: ${_formatBytes(fileSize)}');
-
-    _validateFileSize(fileSize, fileType);
-
-    // Usar el userId limpio
-    final s3Key = _generateS3Key(
-      userId: cleanUserId,
+    return uploadBytes(
+      bytes: await file.readAsBytes(),
+      fileName: path.basename(filePath),
+      userId: userId,
       catalogId: catalogId,
       fileType: fileType,
-      originalFileName: path.basename(filePath),
     );
+  }
 
+  /// Sube bytes a S3 con la misma key que [uploadFile].
+  /// En web delega en la API; en nativo firma PUT contra S3.
+  Future<String> uploadBytes({
+    required Uint8List bytes,
+    required String fileName,
+    required String userId,
+    required String catalogId,
+    required FileType fileType,
+  }) async {
+    final cleanUserId = S3ObjectKey.cleanId(userId);
+    if (cleanUserId != userId) {
+      print('⚠️ UserId limpiado: "$userId" -> "$cleanUserId"');
+    }
+    final cleanCatalogId = S3ObjectKey.cleanId(catalogId);
+
+    print('📤 Iniciando subida de archivo:');
+    print('  - Archivo: $fileName');
+    print('  - Tipo: ${fileType.name}');
+    print('  - Usuario: $cleanUserId');
+    print('  - Catálogo: $cleanCatalogId');
+    print('  - Bucket: $_bucketName');
+    print('  - Region: $_region');
+    print('  - USE_S3: $_useS3');
+    print('  - Tamaño: ${_formatBytes(bytes.length)}');
+
+    if (!kIsWeb) {
+      _assertS3ConfigIfEnabled();
+    }
+    _validateFileSize(bytes.length, fileType);
+
+    if (kIsWeb) {
+      return ApiService.instance.uploadBytes(
+        bytes: bytes,
+        fileName: fileName,
+        userId: cleanUserId,
+        catalogId: cleanCatalogId,
+        fileType: fileType.name,
+        folder: S3ObjectKey.prefix(
+          userId: cleanUserId,
+          catalogId: cleanCatalogId,
+          kind: fileType.name,
+        ),
+        contentType: S3ContentType.fromFileName(fileName),
+      );
+    }
+
+    final s3Key = S3ObjectKey.build(
+      userId: cleanUserId,
+      catalogId: cleanCatalogId,
+      kind: fileType.name,
+      originalFileName: fileName,
+      uuid: const Uuid().v4(),
+    );
     print('  - S3 Key: $s3Key');
 
     if (!_useS3) {
@@ -142,68 +163,70 @@ class S3Service {
       return _simulateUpload(s3Key: s3Key, fileType: fileType);
     }
 
-    return await _uploadToS3(file: file, s3Key: s3Key);
+    return _uploadBytesToS3(
+      bytes: bytes,
+      s3Key: s3Key,
+      contentType: S3ContentType.fromFileName(fileName),
+    );
   }
 
-  /// Sube el archivo real a S3
-  Future<String> _uploadToS3({
-    required File file,
+  void _assertS3ConfigIfEnabled() {
+    if (!_useS3) return;
+    if (_bucketName.isEmpty) {
+      throw Exception(
+        'BUCKET_NAME no está configurado en las variables de entorno. '
+        'Verifica tu archivo .env',
+      );
+    }
+    if (_accessKey.isEmpty || _secretKey.isEmpty) {
+      throw Exception(
+        'AWS_ACCESS_KEY_ID o AWS_SECRET_ACCESS_KEY no están configurados. '
+        'Verifica tu archivo .env',
+      );
+    }
+  }
+
+  AwsS3Signer get _signer => AwsS3Signer(
+        accessKey: _accessKey,
+        secretKey: _secretKey,
+        region: _region,
+        bucket: _bucketName,
+      );
+
+  Future<String> _uploadBytesToS3({
+    required Uint8List bytes,
     required String s3Key,
+    required String contentType,
   }) async {
     try {
-      // Validar que el bucket name no esté vacío
       if (_bucketName.isEmpty) {
         throw Exception(
           'BUCKET_NAME está vacío. Por favor, configura BUCKET_NAME en tu archivo .env',
         );
       }
 
-      final fileBytes = await file.readAsBytes();
-      final contentType = _detectContentType(file.path);
-
       print('  - Content-Type: $contentType');
       print('  - Bucket Name: $_bucketName');
       print('  - Region: $_region');
+      print('  - Host: ${_signer.host}');
 
-      final host = '$_bucketName.s3.$_region.amazonaws.com';
-      print('  - Host: $host');
-
-      final url = Uri.https(host, s3Key);
-      print('  - URL completa: $url');
-      final now = DateTime.now().toUtc();
-      final dateStamp = _formatDate(now);
-      final amzDate = _formatAmzDate(now);
-
-      // Calcular el hash SHA256 del contenido del payload
-      final payloadHash = sha256.convert(fileBytes).toString();
-
-      // IMPORTANTE: El header 'host' DEBE estar incluido en la firma
-      // AWS requiere que todos los headers presentes en la petición estén firmados
-      final headers = <String, String>{
-        'host': host, // Header host DEBE estar incluido en la firma
-        'Content-Type': contentType,
-        'x-amz-date': amzDate,
-        'x-amz-content-sha256':
-            payloadHash, // Header requerido para AWS Signature V4
-      };
-
-      final authorization = _generateAuthorization(
+      final signed = _signer.sign(
         method: 'PUT',
-        uri: s3Key,
-        headers: headers,
-        payload: base64.encode(fileBytes),
-        dateStamp: dateStamp,
-        amzDate: amzDate,
-        payloadHash: payloadHash, // Pasar el hash del payload
+        key: s3Key,
+        now: DateTime.now().toUtc(),
+        extraHeaders: {'Content-Type': contentType},
+        payload: bytes,
       );
 
-      headers['Authorization'] = authorization;
-
       print('📤 Subiendo a S3...');
-      final response = await http.put(url, headers: headers, body: fileBytes);
+      final response = await http.put(
+        signed.url,
+        headers: signed.headers,
+        body: bytes,
+      );
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
-        final s3Url = url.toString();
+        final s3Url = signed.url.toString();
         print('✅ Archivo subido exitosamente: $s3Url');
         return s3Url;
       } else {
@@ -253,50 +276,11 @@ class S3Service {
       return Uri.https('$_bucketName.s3.$_region.amazonaws.com', normalizedKey);
     }
 
-    final now = DateTime.now().toUtc();
-    final dateStamp = _formatDate(now);
-    final amzDate = _formatAmzDate(now);
-    final host = '$_bucketName.s3.$_region.amazonaws.com';
-    final credentialScope = '$dateStamp/$_region/s3/aws4_request';
-    final credential = '$_accessKey/$credentialScope';
-
-    final queryParams = {
-      'X-Amz-Algorithm': 'AWS4-HMAC-SHA256',
-      'X-Amz-Credential': credential,
-      'X-Amz-Date': amzDate,
-      'X-Amz-Expires': '$expirationInSeconds',
-      'X-Amz-SignedHeaders': 'host',
-    };
-
-    final sortedQuery = queryParams.entries.toList()
-      ..sort((a, b) => a.key.compareTo(b.key));
-    final canonicalQueryString = sortedQuery
-        .map(
-          (e) =>
-              '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}',
-        )
-        .join('&');
-
-    final canonicalRequest =
-        'GET\n/$normalizedKey\n$canonicalQueryString\nhost:$host\n\nhost\nUNSIGNED-PAYLOAD';
-
-    final stringToSign =
-        'AWS4-HMAC-SHA256\n$amzDate\n$credentialScope\n'
-        '${sha256.convert(utf8.encode(canonicalRequest)).toString()}';
-
-    final kDate = _hmacSha256(utf8.encode('AWS4$_secretKey'), dateStamp);
-    final kRegion = _hmacSha256(kDate, _region);
-    final kService = _hmacSha256(kRegion, 's3');
-    final kSigning = _hmacSha256(kService, 'aws4_request');
-    final signature = _hmacSha256(
-      kSigning,
-      stringToSign,
-    ).map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-
-    final signedUrl = Uri.https(host, normalizedKey, {
-      ...queryParams,
-      'X-Amz-Signature': signature,
-    });
+    final signedUrl = _signer.presignedGet(
+      key: normalizedKey,
+      now: DateTime.now().toUtc(),
+      expiresInSeconds: expirationInSeconds,
+    );
 
     // ── Guardar en caché con TTL conservador (300s de margen antes de expirar) ─
     final cacheTtl = Duration(
@@ -327,32 +311,20 @@ class S3Service {
       return;
     }
 
+    if (kIsWeb) {
+      await ApiService.instance.deleteS3File(normalizedKey);
+      print('✅ Archivo eliminado exitosamente');
+      return;
+    }
+
     try {
-      final url = Uri.https(
-        '$_bucketName.s3.$_region.amazonaws.com',
-        normalizedKey,
-      );
-      final now = DateTime.now().toUtc();
-      final dateStamp = _formatDate(now);
-      final amzDate = _formatAmzDate(now);
-
-      final headers = <String, String>{
-        'Date': dateStamp,
-        'x-amz-date': amzDate,
-      };
-
-      final authorization = _generateAuthorization(
+      final signed = _signer.sign(
         method: 'DELETE',
-        uri: normalizedKey,
-        headers: headers,
-        payload: '',
-        dateStamp: dateStamp,
-        amzDate: amzDate,
+        key: normalizedKey,
+        now: DateTime.now().toUtc(),
       );
 
-      headers['Authorization'] = authorization;
-
-      final response = await http.delete(url, headers: headers);
+      final response = await http.delete(signed.url, headers: signed.headers);
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         print('✅ Archivo eliminado exitosamente');
@@ -368,36 +340,6 @@ class S3Service {
   }
 
   // MARK: - Helpers
-
-  /// Limpia el userId de formato ObjectId(...)
-  String _cleanUserId(String userId) {
-    // Si el userId contiene ObjectId("..."), extraer solo el ID
-    final objectIdMatch = RegExp(r'ObjectId\("?([^"]+)"?\)').firstMatch(userId);
-    if (objectIdMatch != null) {
-      return objectIdMatch.group(1)!;
-    }
-    // Si ya es un ID limpio, devolverlo tal cual
-    return userId;
-  }
-
-  /// Genera una key única para S3
-  String _generateS3Key({
-    required String userId, // userId ya debería estar limpio desde uploadFile
-    required String catalogId,
-    required FileType fileType,
-    required String originalFileName,
-  }) {
-    // Limpiar el userId para asegurar que no contenga formato ObjectId(...)
-    // (por si acaso viene sin limpiar desde otros métodos)
-    final cleanUserId = _cleanUserId(userId);
-    // También limpiar catalogId por si acaso
-    final cleanCatalogId = _cleanUserId(catalogId);
-    final uuid = const Uuid().v4();
-    final extension = path.extension(originalFileName);
-    final fileTypeFolder = fileType.name; // image, document, multimedia
-
-    return 'users/$cleanUserId/catalogs/$cleanCatalogId/$fileTypeFolder/$uuid$extension';
-  }
 
   /// Normaliza una key de S3
   String _normalizeKey(String key) {
@@ -443,94 +385,6 @@ class S3Service {
         'El archivo excede el tamaño máximo permitido: ${_formatBytes(maxSize)}',
       );
     }
-  }
-
-  /// Detecta el Content-Type basado en la extensión del archivo
-  String _detectContentType(String filePath) {
-    final ext = path.extension(filePath).toLowerCase().replaceFirst('.', '');
-
-    const contentTypes = {
-      // Imágenes
-      'jpg': 'image/jpeg',
-      'jpeg': 'image/jpeg',
-      'png': 'image/png',
-      'gif': 'image/gif',
-      'webp': 'image/webp',
-      'svg': 'image/svg+xml',
-      'bmp': 'image/bmp',
-      // Documentos
-      'pdf': 'application/pdf',
-      'doc': 'application/msword',
-      'docx':
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'xls': 'application/vnd.ms-excel',
-      'xlsx':
-          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'txt': 'text/plain',
-      // Multimedia
-      'mp4': 'video/mp4',
-      'mov': 'video/quicktime',
-      'mp3': 'audio/mpeg',
-      'wav': 'audio/wav',
-    };
-
-    return contentTypes[ext] ?? 'application/octet-stream';
-  }
-
-  /// Genera la autorización AWS Signature V4
-  String _generateAuthorization({
-    required String method,
-    required String uri,
-    required Map<String, String> headers,
-    required String payload,
-    required String dateStamp,
-    required String amzDate,
-    String? payloadHash,
-  }) {
-    // Si no se proporciona payloadHash, calcularlo desde el payload
-    final contentHash =
-        payloadHash ?? sha256.convert(base64.decode(payload)).toString();
-    // Implementación simplificada de AWS Signature V4
-    // Nota: Para producción, usar un paquete dedicado o implementación completa
-    final canonicalUri = '/$uri';
-    final canonicalQueryString = '';
-    final canonicalHeaders =
-        headers.entries
-            .map((e) => '${e.key.toLowerCase()}:${e.value.trim()}\n')
-            .toList()
-          ..sort();
-    final signedHeaders = headers.keys.map((k) => k.toLowerCase()).toList()
-      ..sort();
-
-    // Para el canonical request, usar el hash del payload directamente (no codificar payload como string)
-    final canonicalRequest =
-        '$method\n$canonicalUri\n$canonicalQueryString\n${canonicalHeaders.join()}\n${signedHeaders.join(';')}\n$contentHash';
-
-    final algorithm = 'AWS4-HMAC-SHA256';
-    final credentialScope = '$dateStamp/$_region/s3/aws4_request';
-    final stringToSign =
-        '$algorithm\n$amzDate\n$credentialScope\n${sha256.convert(utf8.encode(canonicalRequest)).toString()}';
-
-    final kDate = _hmacSha256(utf8.encode('AWS4$_secretKey'), dateStamp);
-    final kRegion = _hmacSha256(kDate, _region);
-    final kService = _hmacSha256(kRegion, 's3');
-    final kSigning = _hmacSha256(kService, 'aws4_request');
-    final signature = _hmacSha256(kSigning, stringToSign);
-
-    return '$algorithm Credential=$_accessKey/$credentialScope, SignedHeaders=${signedHeaders.join(';')}, Signature=${signature.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-  }
-
-  List<int> _hmacSha256(List<int> key, String data) {
-    final hmac = Hmac(sha256, key);
-    return hmac.convert(utf8.encode(data)).bytes;
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.year}${date.month.toString().padLeft(2, '0')}${date.day.toString().padLeft(2, '0')}';
-  }
-
-  String _formatAmzDate(DateTime date) {
-    return '${date.toIso8601String().replaceAll('-', '').replaceAll(':', '').split('.')[0]}Z';
   }
 
   String _formatBytes(int bytes) {
