@@ -8,7 +8,7 @@ import '../utils/logger.dart';
 enum SortDirection { none, ascending, descending }
 
 class CatalogDetailViewModel extends ChangeNotifier {
-  final MongoService _mongoService = MongoService.shared;
+  final MongoService _mongoService;
   // Cola de guardado: serializa las llamadas a _persistCatalogChanges para
   // evitar que dos guardados en paralelo (p. ej. al añadir/editar varias
   // filas seguidas) se pisen entre sí. Cada guardado espera a que el
@@ -54,7 +54,11 @@ class CatalogDetailViewModel extends ChangeNotifier {
     _originalRows.length,
   );
 
-  CatalogDetailViewModel({required Catalog catalog}) : _catalog = catalog {
+  CatalogDetailViewModel({
+    required Catalog catalog,
+    MongoService? mongoService,
+  })  : _catalog = catalog,
+        _mongoService = mongoService ?? MongoService.shared {
     _loadRows();
   }
 
