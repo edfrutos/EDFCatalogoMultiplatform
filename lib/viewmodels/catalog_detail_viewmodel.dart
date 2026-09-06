@@ -9,6 +9,11 @@ enum SortDirection { none, ascending, descending }
 
 class CatalogDetailViewModel extends ChangeNotifier {
   final MongoService _mongoService = MongoService.shared;
+  // Cola de guardado: serializa las llamadas a _persistCatalogChanges para
+  // evitar que dos guardados en paralelo (p. ej. al añadir/editar varias
+  // filas seguidas) se pisen entre sí. Cada guardado espera a que el
+  // anterior termine antes de tomar su propio snapshot de _originalRows.
+  Future<void> _saveQueue = Future.value();
 
   Catalog _catalog;
   List<CatalogRow> _rows = [];
@@ -328,7 +333,14 @@ class CatalogDetailViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> _persistCatalogChanges() async {
+  Future<void> _persistCatalogChanges() {
+    final future = _saveQueue.then((_) => _persistCatalogChangesNow());
+    // Si un guardado falla, no debe bloquear los siguientes de la cola.
+    _saveQueue = future.catchError((_) {});
+    return future;
+  }
+
+  Future<void> _persistCatalogChangesNow() async {
     // Actualizar el catálogo con las filas originales (sin ordenamiento)
     final updatedCatalog = Catalog(
       id: _catalog.id,
