@@ -52,6 +52,20 @@ class _LazyImageWidgetState extends State<LazyImageWidget> {
     });
   }
 
+  @override
+  void didUpdateWidget(LazyImageWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Si la URL cambia (p. ej. se actualizó la miniatura del catálogo tras
+    // guardar), el State se reutiliza y hay que volver a pre-firmar; sin
+    // esto, la imagen nueva no aparece hasta recargar la página entera.
+    if (oldWidget.imageUrl != widget.imageUrl) {
+      setState(() => _presignedUrl = null);
+      if (_needsPresign) {
+        _presignUrl();
+      }
+    }
+  }
+
   Future<void> _presignUrl() async {
     try {
       final signed = await S3Service().getPresignedUrl(key: widget.imageUrl);
