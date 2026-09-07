@@ -139,7 +139,13 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
 
     // Subir archivos si hay alguno seleccionado
     final authViewModel = context.read<AuthViewModel>();
-    final userId = authViewModel.currentUser?.id ?? '';
+    // La key de S3 de los ficheros de la fila debe ir bajo la carpeta del
+    // dueño real del catálogo, no de quien edita (un admin puede editar
+    // filas de catálogos ajenos; sin esto, los ficheros se guardaban bajo
+    // la carpeta del admin y dejaban de cargar para el dueño real).
+    final userId = widget.catalog.userId.isNotEmpty
+        ? widget.catalog.userId
+        : (authViewModel.currentUser?.id ?? '');
 
     // ── Helper: sube un PlatformFile según plataforma ────────────────────────
     Future<String> uploadPlatformFile(

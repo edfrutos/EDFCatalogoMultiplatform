@@ -97,8 +97,14 @@ class _EditCatalogDialogState extends State<EditCatalogDialog> {
     } else if (_selectedPlatformFile != null) {
       setState(() => _isUploadingImage = true);
       try {
-        final userId = context.read<AuthViewModel>().currentUser?.id ??
-            widget.catalog.userId;
+        // La key de S3 del thumbnail debe ir siempre bajo la carpeta del
+        // dueño real del catálogo, no de quien lo edita (un admin puede
+        // editar catálogos ajenos; sin esto, el fichero se guardaba bajo
+        // la carpeta del admin y el thumbnail dejaba de cargar para el
+        // dueño real).
+        final userId = widget.catalog.userId.isNotEmpty
+            ? widget.catalog.userId
+            : (context.read<AuthViewModel>().currentUser?.id ?? '');
         final pf = _selectedPlatformFile!;
         if (kIsWeb) {
           thumbnailUrl = await S3Service().uploadBytes(
