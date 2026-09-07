@@ -237,6 +237,7 @@ class Catalog extends Equatable {
 
       // Parsear thumbnailUrl (Miniatura en MongoDB)
       final thumbnailUrl =
+          json['ThumbnailUrl']?.toString() ??
           json['Miniatura']?.toString() ??
           json['Thumbnail']?.toString() ??
           json['thumbnailUrl']?.toString();
@@ -276,7 +277,7 @@ class Catalog extends Equatable {
       'rows': rows.map((row) => row.toJson()).toList(),
       if (legacyRows != null) 'legacyRows': legacyRows,
       if (thumbnailUrl != null)
-        'Miniatura': thumbnailUrl, // MongoDB usa mayúsculas
+        'ThumbnailUrl': thumbnailUrl, // nombre que reconoce el backend (PUT /api/catalogs/<id>)
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
     };

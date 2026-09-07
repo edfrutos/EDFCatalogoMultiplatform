@@ -993,12 +993,14 @@ class MongoService {
         'UpdatedAt': catalog.updatedAt.toIso8601String(),
       };
 
-      // Incluir Miniatura (thumbnailUrl)
+      // Incluir ThumbnailUrl — el backend (PUT /api/catalogs/<id>) solo
+      // reconoce el campo 'ThumbnailUrl'; usar cualquier otro nombre hace
+      // que se ignore silenciosamente y la miniatura nunca se guarde.
       if (catalog.thumbnailUrl != null && catalog.thumbnailUrl!.isNotEmpty) {
-        updates['Miniatura'] = catalog.thumbnailUrl;
+        updates['ThumbnailUrl'] = catalog.thumbnailUrl;
       } else {
         // Si es null o vacío, eliminar el campo usando $unset
-        updates['Miniatura'] = null;
+        updates['ThumbnailUrl'] = null;
       }
 
       // Debug: verificar que thumbnailUrl se está incluyendo
