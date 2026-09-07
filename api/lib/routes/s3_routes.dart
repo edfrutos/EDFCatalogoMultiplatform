@@ -47,7 +47,11 @@ Router s3Routes() {
       final bytes = await req.read().expand((chunk) => chunk).toList();
       if (bytes.isEmpty) return error('Body vacío', 400);
 
-      final fileName = req.headers['x-file-name'] ?? 'file';
+      // El cliente envía X-File-Name percent-encoded (Uri.encodeComponent)
+      // porque las cabeceras HTTP solo admiten ISO-8859-1 y los nombres con
+      // tildes/ñ en NFD (típico en macOS) rompían el fetch en el navegador.
+      final rawFileName = req.headers['x-file-name'] ?? 'file';
+      final fileName = Uri.decodeComponent(rawFileName);
       final uuid = const Uuid().v4();
       final userId = req.headers['x-user-id'];
       final catalogId = req.headers['x-catalog-id'];

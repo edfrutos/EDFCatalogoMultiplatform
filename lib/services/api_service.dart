@@ -379,7 +379,10 @@ class ApiService {
       final headers = <String, String>{
         'Authorization': 'Bearer $_token',
         'Content-Type': mime,
-        'X-File-Name': fileName,
+        // Percent-encode: las cabeceras HTTP solo admiten ISO-8859-1, y
+        // nombres de archivo con tildes/ñ en NFD (típico en macOS) rompían el
+        // fetch entero en el navegador antes de llegar al servidor.
+        'X-File-Name': Uri.encodeComponent(fileName),
         'X-Folder': prefix,
       };
       if (userId != null) headers['X-User-Id'] = userId;
