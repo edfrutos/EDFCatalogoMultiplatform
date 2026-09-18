@@ -284,7 +284,7 @@ A diferencia del widget hermano `S3PresignedBuilder` (mismo fichero de referenci
 
 Los dos debug prints usados durante el diagnóstico se revirtieron antes del cierre; `git diff` contra `HEAD` confirma que el árbol de trabajo no contiene código de depuración residual.
 
-### 16.2 — Imágenes de alta resolución (cámara réflex/mirrorless) fallan al decodificar en Flutter Web (pendiente, sin resolver)
+### 16.2 — Imágenes de alta resolución (cámara réflex/mirrorless) fallan al decodificar en Flutter Web (CERRADO — mitigado en cliente)
 
 **Síntoma:** imágenes que se descargan correctamente desde S3 (`200 OK`, tamaño de respuesta correcto) fallan al decodificarse en el navegador: `LazyImageWidget: error cargando imagen: ImageCodecException: Failed to create image from Image.decode`. Confirmado tanto para el catálogo de Julia como, más tarde, para "Bricolaje" (catálogo del propio usuario admin) — no es específico de un catálogo ni de un usuario.
 
@@ -296,7 +296,11 @@ Los dos debug prints usados durante el diagnóstico se revirtieron antes del cie
 
 **Mitigación insuficiente por sí sola:** limitar `memCacheWidth`/`memCacheHeight` en `LazyImageWidget` no evita el fallo, porque CanvasKit decodifica la imagen completa a resolución original antes de reescalarla — el fallo ocurre en la propia decodificación, no en el cacheo posterior.
 
-**Pendiente de decisión:** alcance del redimensionado (¿todas las imágenes, o solo por encima de un umbral de tamaño?), y si se aborda en esta app o se deja como mejora para una sesión futura dedicada.
+**Corrección aplicada (mitigación en cliente, no redimensionado en backend):** en vez de procesar/redimensionar en el servidor (cambio de mayor alcance, descartado por ahora), se añadió una validación en el propio selector de ficheros del cliente web: `lib/utils/image_resolution_guard.dart` expone `checkWebImageResolution()`, que decodifica la imagen con `dart:ui.instantiateImageCodec` (el mismo decodificador de CanvasKit que fallaba) y rechaza cualquier imagen cuyo lado mayor supere `kMaxWebImageDimension` (4096 px, el límite típico de textura documentado arriba) — o que directamente no se pueda decodificar. Se aplica solo en `kIsWeb` (no restringe nativo, donde el decodificador de la plataforma no tiene este límite) en los dos puntos de subida de imágenes de catálogo: `add_edit_row_dialog.dart` (imágenes de fila) y `edit_catalog_dialog.dart` (miniatura de catálogo). El usuario ve un aviso (`_uploadError` / `SnackBar`) pidiéndole redimensionar la imagen antes de subirla, en vez de que el fallo aparezca más tarde, en silencio, al intentar visualizarla desde `LazyImageWidget`.
+
+Fotos de móvil habituales (hasta ~4032×3024, 12 MP) quedan por debajo del límite y no se ven afectadas; solo se rechazan resoluciones propias de cámaras réflex/mirrorless sin redimensionar (ej. 6000×4000, 24 MP).
+
+**Pendiente futuro (fuera de alcance de este cierre):** si se quiere aceptar también esas resoluciones altas, la solución de fondo sigue siendo redimensionar en el backend al subir (ver arriba) — no descartado, solo pospuesto.
 
 ### Próximos pasos (fuera del ámbito de servidor/infraestructura)
 

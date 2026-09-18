@@ -10,6 +10,7 @@ import '../../../models/file_type.dart';
 import '../../../utils/app_theme.dart';
 import '../../../viewmodels/auth_viewmodel.dart';
 import '../../../services/s3_service.dart';
+import '../../../utils/image_resolution_guard.dart';
 
 class EditCatalogDialog extends StatefulWidget {
   final Catalog catalog;
@@ -151,6 +152,18 @@ class _EditCatalogDialogState extends State<EditCatalogDialog> {
       if (result != null && result.files.isNotEmpty) {
         final pf = result.files.single;
         if (kIsWeb ? pf.bytes != null : pf.path != null) {
+          if (kIsWeb) {
+            final error = await checkWebImageResolution(pf.bytes!, fileName: pf.name);
+            if (error != null) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(error),
+                  behavior: SnackBarBehavior.floating,
+                ));
+              }
+              return;
+            }
+          }
           setState(() {
             _selectedPlatformFile = pf;
             _shouldRemoveImage = false;
