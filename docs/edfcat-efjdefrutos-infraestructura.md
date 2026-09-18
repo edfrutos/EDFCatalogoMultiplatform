@@ -379,3 +379,31 @@ Se creó `diagnostico-edfcat.sh` — script de solo lectura que agrupa las compr
 ```
 
 Requiere rellenar la cabecera de configuración del script (`CATALOG_ID`, `OWNER_ID`, credenciales de login opcionales) antes de usar las secciones que dependen de un catálogo concreto o de autenticación.
+
+## 17. Bug 5 — `bad auth` en MongoDB tras un despliegue (18 de septiembre de 2026, CERRADO)
+
+**Síntoma:** tras un despliegue normal con `./scripts/deploy.sh` (solo cambios de frontend web, sin tocar `api/` ni `.env`), el login dejó de funcionar. Logs del contenedor mostraban en bucle:
+
+```
+❌ Error conectando a MongoDB: MongoDart Error: bad auth : authentication failed
+```
+
+`docker ps -a` confirmó que el contenedor estaba en **crash-loop** (`Restarting (1)` cada pocos segundos) — de ahí que el healthcheck interno diera `HTTP:000` (connection refused, el proceso no llegaba a levantar el listener).
+
+**Diagnóstico:** se descartó que fuera el despliegue, el driver Dart o Docker reproduciendo el mismo `bad auth` con `mongosh` directamente en el servidor, usando la URI tal cual está en `/opt/edfcatalogo/.env` — mismo error, sin pasar por el contenedor. El usuario de la URI (`edefrutos`) coincidía con el `.env` local que sí funciona. Conclusión: la contraseña en el `.env` del servidor estaba obsoleta/revocada en MongoDB Atlas.
+
+**Causa raíz:** `scripts/deploy.sh` **nunca sincroniza `.env`** con el servidor (solo `build/web/` vía rsync y `git pull` del código — `.env` está en `.gitignore` a propósito, por seguridad, ver [`docs/misc/SECURITY_INCIDENT.md`](misc/SECURITY_INCIDENT.md)). En algún momento se rotó la contraseña del usuario de MongoDB Atlas y se actualizó el `.env` local, pero nunca se propagó manualmente al `.env` de producción — quedó con una credencial obsoleta hasta que un despliegue expuso el problema (coincidencia temporal, no causa).
+
+**Corrección:** actualizar `MONGO_URI` en `/opt/edfcatalogo/.env` con la contraseña vigente y recrear el contenedor para que recargue las variables de entorno:
+
+```bash
+# En el servidor, tras editar /opt/edfcatalogo/.env
+cd /opt/edfcatalogo
+docker compose -f docker/docker-compose.prod.yml up -d --force-recreate api
+```
+
+Un `docker compose restart api` simple no es suficiente — no siempre relee el `env_file` del contenedor existente; hace falta `--force-recreate`.
+
+**Verificación:** contenedor `Up (healthy)`, `curl http://127.0.0.1:8089/health` (endpoint **interno**, sin prefijo `/api/` — ese prefijo solo existe detrás del proxy nginx/Plesk) responde `200`, y login confirmado funcionando en producción.
+
+**Lección para futuros despliegues:** si se rota la contraseña de MongoDB Atlas (o cualquier credencial en `.env`), hay que actualizar **manualmente** `/opt/edfcatalogo/.env` en el servidor — `deploy.sh` no lo hace ni debe hacerlo automáticamente. Al diagnosticar, usar siempre `/health` (no `/api/health`) al consultar el contenedor directamente en `127.0.0.1:8089`.
