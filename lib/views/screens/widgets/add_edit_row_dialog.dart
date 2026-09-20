@@ -6,7 +6,6 @@ import '../../../models/catalog.dart';
 import '../../../models/file_type.dart' as app_file_type;
 import '../../../viewmodels/auth_viewmodel.dart';
 import '../../../services/s3_service.dart';
-import '../../../utils/image_resolution_guard.dart';
 import '../../../utils/validators.dart';
 import 'multiple_files_section.dart';
 
@@ -403,26 +402,6 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
           .where((f) => kIsWeb ? f.bytes != null : f.path != null)
           .toList();
 
-      String? resolutionError;
-      if (kIsWeb && fileType == app_file_type.FileType.image) {
-        final accepted = <file_picker.PlatformFile>[];
-        final rejected = <String>[];
-        for (final f in files) {
-          final error = await checkWebImageResolution(f.bytes!, fileName: f.name);
-          if (error == null) {
-            accepted.add(f);
-          } else {
-            rejected.add(f.name);
-          }
-        }
-        files = accepted;
-        if (rejected.isNotEmpty) {
-          resolutionError = rejected.length == 1
-              ? 'No se pudo añadir "${rejected.first}": resolución demasiado alta para la web (máx. ${kMaxWebImageDimension}px de lado). Redimensiónala e inténtalo de nuevo.'
-              : 'No se pudieron añadir ${rejected.length} imágenes por resolución demasiado alta para la web (máx. ${kMaxWebImageDimension}px de lado): ${rejected.join(", ")}';
-        }
-      }
-
       if (!mounted) return;
       setState(() {
         switch (fileType) {
@@ -450,7 +429,7 @@ class _AddEditRowDialogState extends State<AddEditRowDialog> {
           default:
             break;
         }
-        _uploadError = resolutionError;
+        _uploadError = null;
       });
     }
   }

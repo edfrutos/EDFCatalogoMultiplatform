@@ -19,3 +19,4 @@ dependencies:
   uuid: ^4.4.0
   mime: ^1.0.4
   mailer: ^6.1.0
+  image: ^4.10.1

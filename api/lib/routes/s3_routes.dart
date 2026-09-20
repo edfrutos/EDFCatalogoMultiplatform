@@ -7,8 +7,16 @@ import 'package:shelf_router/shelf_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 import 'package:mime/mime.dart';
+import 'package:image/image.dart' as img;
 import '../config.dart';
 import 'helpers.dart';
+
+/// Lado mayor máximo (px) servido para imágenes de catálogo (miniaturas y
+/// filas). Por encima de esto, el decodificador CanvasKit/Skia de Flutter
+/// Web puede fallar con fotos de cámara sin redimensionar (p. ej. 6000x4000)
+/// — ver docs/edfcat-efjdefrutos-infraestructura.md §16.2. El original sin
+/// tocar se conserva en una key secundaria para descarga bajo demanda.
+const int kMaxDisplayDimension = 1200;
 
 Router s3Routes() {
   final router = Router();
@@ -57,24 +65,25 @@ Router s3Routes() {
       final catalogId = req.headers['x-catalog-id'];
       final fileType = req.headers['x-file-type'];
 
-      final String s3Key;
-      if (userId != null &&
+      final hasStructuredKey = userId != null &&
           userId.isNotEmpty &&
           catalogId != null &&
           catalogId.isNotEmpty &&
           fileType != null &&
-          fileType.isNotEmpty) {
-        s3Key = S3ObjectKey.build(
-          userId: userId,
-          catalogId: catalogId,
-          kind: fileType,
-          originalFileName: fileName,
-          uuid: uuid,
-        );
-      } else {
-        final folder = req.headers['x-folder'] ?? 'uploads';
-        s3Key = '$folder/$uuid${S3ObjectKey.extensionOf(fileName)}';
-      }
+          fileType.isNotEmpty;
+      final folder = req.headers['x-folder'] ?? 'uploads';
+
+      String buildKey(String keyUuid) => hasStructuredKey
+          ? S3ObjectKey.build(
+              userId: userId,
+              catalogId: catalogId,
+              kind: fileType,
+              originalFileName: fileName,
+              uuid: keyUuid,
+            )
+          : '$folder/$keyUuid${S3ObjectKey.extensionOf(fileName)}';
+
+      final s3Key = buildKey(uuid);
 
       final headerType = req.headers['content-type'];
       final String contentType;
@@ -87,15 +96,66 @@ Router s3Routes() {
         contentType = headerType!.split(';').first.trim();
       }
 
+      final originalBytes = Uint8List.fromList(bytes);
+      var mainBytes = originalBytes;
+      var mainContentType = contentType;
+      String? originalKey;
+
+      // Redimensiona imágenes grandes para el decodificador CanvasKit de
+      // Flutter Web — ver docs/edfcat-efjdefrutos-infraestructura.md §16.2.
+      // Cualquier fallo aquí (SVG, formato no soportado, fichero corrupto)
+      // se ignora y se sube el original sin tocar, como antes de este fix.
+      if (contentType.startsWith('image/')) {
+        try {
+          final decoded = img.decodeImage(originalBytes);
+          final maxSide = decoded == null
+              ? 0
+              : (decoded.width > decoded.height
+                  ? decoded.width
+                  : decoded.height);
+          if (decoded != null && maxSide > kMaxDisplayDimension) {
+            final resized = decoded.width >= decoded.height
+                ? img.copyResize(decoded, width: kMaxDisplayDimension)
+                : img.copyResize(decoded, height: kMaxDisplayDimension);
+            if (decoded.hasAlpha) {
+              mainBytes = Uint8List.fromList(img.encodePng(resized));
+              mainContentType = 'image/png';
+            } else {
+              mainBytes =
+                  Uint8List.fromList(img.encodeJpg(resized, quality: 85));
+              mainContentType = 'image/jpeg';
+            }
+            originalKey = buildKey('${uuid}_original');
+          }
+        } catch (e) {
+          mainBytes = originalBytes;
+          mainContentType = contentType;
+          originalKey = null;
+        }
+      }
+
       await _uploadToS3(
         key: s3Key,
-        bytes: Uint8List.fromList(bytes),
-        contentType: contentType,
+        bytes: mainBytes,
+        contentType: mainContentType,
       );
 
-      final url =
-          'https://${Config.s3BucketName}.s3.${Config.awsRegion}.amazonaws.com/$s3Key';
-      return ok({'key': s3Key, 'url': url});
+      String urlFor(String key) =>
+          'https://${Config.s3BucketName}.s3.${Config.awsRegion}.amazonaws.com/$key';
+
+      final response = <String, dynamic>{'key': s3Key, 'url': urlFor(s3Key)};
+
+      if (originalKey != null) {
+        await _uploadToS3(
+          key: originalKey,
+          bytes: originalBytes,
+          contentType: contentType,
+        );
+        response['originalKey'] = originalKey;
+        response['originalUrl'] = urlFor(originalKey);
+      }
+
+      return ok(response);
     } catch (e) {
       return error('Error subiendo archivo: $e', 500);
     }
