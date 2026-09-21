@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart' as file_picker;
 import 'package:google_fonts/google_fonts.dart';
-import 'dart:io' if (dart.library.html) 'package:edfcatalogomultiplatform/utils/io_stub.dart';
+import 'dart:io'
+    if (dart.library.html) 'package:edfcatalogomultiplatform/utils/io_stub.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../utils/app_theme.dart';
 import '../../viewmodels/auth_viewmodel.dart';
@@ -80,14 +81,21 @@ class _ProfileViewState extends State<ProfileView> {
 
   Future<void> _handleSave() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() { _isSaving = true; _errorMessage = null; _successMessage = null; });
+    setState(() {
+      _isSaving = true;
+      _errorMessage = null;
+      _successMessage = null;
+    });
 
     try {
       final authViewModel = context.read<AuthViewModel>();
       final user = authViewModel.currentUser;
 
       if (user == null) {
-        setState(() { _errorMessage = 'No hay usuario autenticado'; _isSaving = false; });
+        setState(() {
+          _errorMessage = 'No hay usuario autenticado';
+          _isSaving = false;
+        });
         return;
       }
 
@@ -167,14 +175,104 @@ class _ProfileViewState extends State<ProfileView> {
     }
   }
 
+  Future<void> _confirmDeleteAccount() async {
+    final passwordController = TextEditingController();
+    String? dialogError;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            return AlertDialog(
+              title: const Text('Eliminar cuenta'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Esta acción es irreversible: se eliminará tu cuenta y no '
+                    'podrás recuperarla. Introduce tu contraseña actual para confirmar.',
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: passwordController,
+                    obscureText: true,
+                    autofocus: true,
+                    decoration: const InputDecoration(labelText: 'Contraseña'),
+                  ),
+                  if (dialogError != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      dialogError!,
+                      style: TextStyle(
+                        color: Theme.of(dialogContext).colorScheme.error,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Theme.of(dialogContext).colorScheme.error,
+                  ),
+                  onPressed: () async {
+                    if (passwordController.text.isEmpty) {
+                      setDialogState(
+                        () => dialogError = 'Introduce tu contraseña',
+                      );
+                      return;
+                    }
+                    final ok = await context
+                        .read<AuthViewModel>()
+                        .deleteAccount(passwordController.text);
+                    if (!ok) {
+                      setDialogState(
+                        () => dialogError =
+                            context.read<AuthViewModel>().errorMessage ??
+                            'No se pudo eliminar la cuenta',
+                      );
+                      return;
+                    }
+                    if (dialogContext.mounted) {
+                      Navigator.of(dialogContext).pop(true);
+                    }
+                  },
+                  child: const Text('Eliminar definitivamente'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (confirmed == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cuenta eliminada correctamente')),
+      );
+      if (Navigator.canPop(context)) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
+    }
+  }
+
   Future<void> _selectProfileImage() async {
     try {
-      file_picker.FilePickerResult? result = await file_picker.FilePicker.platform.pickFiles(
-        type: file_picker.FileType.custom,
-        allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'],
-        allowMultiple: false,
-        withData: true,
-      );
+      file_picker.FilePickerResult? result = await file_picker
+          .FilePicker
+          .platform
+          .pickFiles(
+            type: file_picker.FileType.custom,
+            allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'],
+            allowMultiple: false,
+            withData: true,
+          );
 
       if (result != null && result.files.isNotEmpty) {
         final pf = result.files.single;
@@ -219,7 +317,8 @@ class _ProfileViewState extends State<ProfileView> {
       if (kIsWeb && _selectedPlatformFile!.bytes != null) {
         return MemoryImage(_selectedPlatformFile!.bytes!);
       } else if (!kIsWeb && _selectedPlatformFile!.path != null) {
-        return FileImage(File(_selectedPlatformFile!.path!) as dynamic) as ImageProvider;
+        return FileImage(File(_selectedPlatformFile!.path!) as dynamic)
+            as ImageProvider;
       }
     }
     if (!_shouldRemoveImage && _presignedImageUrl != null) {
@@ -251,8 +350,10 @@ class _ProfileViewState extends State<ProfileView> {
         return Scaffold(
           appBar: Navigator.canPop(context)
               ? AppBar(
-                  title: Text('Mi perfil',
-                      style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+                  title: Text(
+                    'Mi perfil',
+                    style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                  ),
                   centerTitle: false,
                 )
               : null,
@@ -280,12 +381,14 @@ class _ProfileViewState extends State<ProfileView> {
                                   shape: BoxShape.circle,
                                   color: cs.primaryContainer,
                                   border: Border.all(
-                                      color: cs.outline.withValues(alpha: 0.2),
-                                      width: 2),
+                                    color: cs.outline.withValues(alpha: 0.2),
+                                    width: 2,
+                                  ),
                                   image: avatarImage != null
                                       ? DecorationImage(
                                           image: avatarImage,
-                                          fit: BoxFit.cover)
+                                          fit: BoxFit.cover,
+                                        )
                                       : null,
                                 ),
                                 child: avatarImage == null
@@ -314,10 +417,15 @@ class _ProfileViewState extends State<ProfileView> {
                                       shape: BoxShape.circle,
                                       color: cs.primary,
                                       border: Border.all(
-                                          color: cs.surface, width: 2),
+                                        color: cs.surface,
+                                        width: 2,
+                                      ),
                                     ),
-                                    child: Icon(Icons.camera_alt_rounded,
-                                        size: 18, color: cs.onPrimary),
+                                    child: Icon(
+                                      Icons.camera_alt_rounded,
+                                      size: 18,
+                                      color: cs.onPrimary,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -333,26 +441,31 @@ class _ProfileViewState extends State<ProfileView> {
                               Text(
                                 user.name,
                                 style: GoogleFonts.inter(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w700,
-                                    color: cs.onSurface),
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w700,
+                                  color: cs.onSurface,
+                                ),
                               ),
                               const SizedBox(height: 4),
                               Text(
                                 user.email,
                                 style: GoogleFonts.inter(
-                                    fontSize: 14,
-                                    color: cs.onSurface.withValues(alpha: 0.55)),
+                                  fontSize: 14,
+                                  color: cs.onSurface.withValues(alpha: 0.55),
+                                ),
                               ),
                               if (user.isAdmin) ...[
                                 const SizedBox(height: 8),
                                 Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 12, vertical: 4),
+                                    horizontal: 12,
+                                    vertical: 4,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: cs.tertiaryContainer,
                                     borderRadius: BorderRadius.circular(
-                                        AppTheme.radiusFull),
+                                      AppTheme.radiusFull,
+                                    ),
                                   ),
                                   child: Text(
                                     'Administrador',
@@ -379,8 +492,10 @@ class _ProfileViewState extends State<ProfileView> {
                                 onPressed: _isUploadingImage
                                     ? null
                                     : _selectProfileImage,
-                                icon: const Icon(Icons.photo_camera_rounded,
-                                    size: 16),
+                                icon: const Icon(
+                                  Icons.photo_camera_rounded,
+                                  size: 16,
+                                ),
                                 label: Text(
                                   _selectedPlatformFile != null
                                       ? 'Cambiar foto'
@@ -389,7 +504,9 @@ class _ProfileViewState extends State<ProfileView> {
                                 ),
                                 style: OutlinedButton.styleFrom(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 14, vertical: 8),
+                                    horizontal: 14,
+                                    vertical: 8,
+                                  ),
                                 ),
                               ),
                               if ((_selectedPlatformFile != null ||
@@ -398,15 +515,21 @@ class _ProfileViewState extends State<ProfileView> {
                                   !_isUploadingImage)
                                 OutlinedButton.icon(
                                   onPressed: _removeProfileImage,
-                                  icon: const Icon(Icons.delete_rounded,
-                                      size: 16),
-                                  label: Text('Eliminar',
-                                      style: GoogleFonts.inter(fontSize: 13)),
+                                  icon: const Icon(
+                                    Icons.delete_rounded,
+                                    size: 16,
+                                  ),
+                                  label: Text(
+                                    'Eliminar',
+                                    style: GoogleFonts.inter(fontSize: 13),
+                                  ),
                                   style: OutlinedButton.styleFrom(
                                     foregroundColor: cs.error,
                                     side: BorderSide(color: cs.error),
                                     padding: const EdgeInsets.symmetric(
-                                        horizontal: 14, vertical: 8),
+                                      horizontal: 14,
+                                      vertical: 8,
+                                    ),
                                   ),
                                 ),
                             ],
@@ -422,13 +545,18 @@ class _ProfileViewState extends State<ProfileView> {
                                 width: 16,
                                 height: 16,
                                 child: CircularProgressIndicator(
-                                    strokeWidth: 2, color: cs.primary),
+                                  strokeWidth: 2,
+                                  color: cs.primary,
+                                ),
                               ),
                               const SizedBox(width: 10),
-                              Text('Subiendo imagen...',
-                                  style: GoogleFonts.inter(
-                                      fontSize: 13,
-                                      color: cs.onSurface.withValues(alpha: 0.6))),
+                              Text(
+                                'Subiendo imagen...',
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  color: cs.onSurface.withValues(alpha: 0.6),
+                                ),
+                              ),
                             ],
                           ),
                         ],
@@ -464,8 +592,8 @@ class _ProfileViewState extends State<ProfileView> {
                                           icon: Icons.alternate_email_rounded,
                                           hint: 'Ej: juanp',
                                           autocorrect: false,
-                                          validator: (v) => (v == null ||
-                                                  v.isEmpty)
+                                          validator: (v) =>
+                                              (v == null || v.isEmpty)
                                               ? 'Obligatorio'
                                               : null,
                                         ),
@@ -477,8 +605,8 @@ class _ProfileViewState extends State<ProfileView> {
                                           label: 'Nombre para mostrar *',
                                           icon: Icons.badge_rounded,
                                           hint: 'Ej: Juan',
-                                          validator: (v) => (v == null ||
-                                                  v.isEmpty)
+                                          validator: (v) =>
+                                              (v == null || v.isEmpty)
                                               ? 'Obligatorio'
                                               : null,
                                         ),
@@ -495,8 +623,8 @@ class _ProfileViewState extends State<ProfileView> {
                                         autocorrect: false,
                                         validator: (v) =>
                                             (v == null || v.isEmpty)
-                                                ? 'Obligatorio'
-                                                : null,
+                                            ? 'Obligatorio'
+                                            : null,
                                       ),
                                       const SizedBox(height: 14),
                                       _buildField(
@@ -506,8 +634,8 @@ class _ProfileViewState extends State<ProfileView> {
                                         hint: 'Ej: Juan',
                                         validator: (v) =>
                                             (v == null || v.isEmpty)
-                                                ? 'Obligatorio'
-                                                : null,
+                                            ? 'Obligatorio'
+                                            : null,
                                       ),
                                     ],
                                   ),
@@ -614,7 +742,8 @@ class _ProfileViewState extends State<ProfileView> {
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(
-                                  AppTheme.radiusMedium),
+                                AppTheme.radiusMedium,
+                              ),
                             ),
                           ),
                           child: _isSaving
@@ -629,9 +758,47 @@ class _ProfileViewState extends State<ProfileView> {
                               : Text(
                                   'Guardar cambios',
                                   style: GoogleFonts.inter(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 15),
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 15,
+                                  ),
                                 ),
+                        ),
+                        const SizedBox(height: 24),
+                        _SectionCard(
+                          title: 'Zona de peligro',
+                          icon: Icons.warning_amber_rounded,
+                          cs: cs,
+                          children: [
+                            Text(
+                              'Al eliminar tu cuenta perderás el acceso de forma '
+                              'permanente. Esta acción no se puede deshacer.',
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                color: cs.onSurface.withValues(alpha: 0.7),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            OutlinedButton.icon(
+                              onPressed: _confirmDeleteAccount,
+                              icon: Icon(
+                                Icons.delete_forever_rounded,
+                                color: cs.error,
+                              ),
+                              label: Text(
+                                'Eliminar cuenta',
+                                style: GoogleFonts.inter(
+                                  color: cs.error,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                side: BorderSide(color: cs.error),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 32),
                       ],
@@ -762,7 +929,10 @@ class _StatusBanner extends StatelessWidget {
             child: Text(
               message,
               style: GoogleFonts.inter(
-                  fontSize: 13, color: fg, fontWeight: FontWeight.w500),
+                fontSize: 13,
+                color: fg,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],

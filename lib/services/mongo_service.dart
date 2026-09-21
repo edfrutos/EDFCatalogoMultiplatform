@@ -662,6 +662,41 @@ class MongoService {
     }
   }
 
+  /// El propio usuario da de baja su cuenta (requiere su contraseña actual).
+  Future<bool> deleteOwnAccount({
+    required String userId,
+    required String password,
+  }) async {
+    if (kIsWeb) return ApiService.instance.deleteOwnAccount(password);
+    try {
+      final collection = await getUsersCollection();
+      var userDoc = await collection.findOne({'_id': userId});
+      if (userDoc == null) {
+        try {
+          final objectId = ObjectId.fromHexString(userId);
+          userDoc = await collection.findOne(where.id(objectId));
+        } catch (_) {}
+      }
+      if (userDoc == null) {
+        print('❌ Usuario no encontrado con ID: $userId');
+        return false;
+      }
+
+      final stored = userDoc['Password']?.toString() ??
+          userDoc['password']?.toString() ??
+          '';
+      if (!PasswordHasher.verify(password, stored)) {
+        print('❌ Contraseña incorrecta al dar de baja la cuenta');
+        return false;
+      }
+
+      return await deleteUser(userId);
+    } catch (e) {
+      print('❌ Error dando de baja la cuenta: $e');
+      rethrow;
+    }
+  }
+
   /// Estadísticas de usuarios para el panel de administración.
   /// Devuelve: total, activos, inactivos, admins, usuarios normales.
   Future<Map<String, int>> getUserStats() async {

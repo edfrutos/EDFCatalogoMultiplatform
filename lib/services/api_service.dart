@@ -278,6 +278,13 @@ class ApiService {
   Future<bool> deleteUser(String id) async {
     return _delete('api/users/$id');
   }
+  
+  /// Da de baja la cuenta del usuario autenticado (requiere su contraseña actual).
+  Future<bool> deleteOwnAccount(String password) async {
+    final deleted = await _delete('api/users/me', {'password': password});
+    if (deleted) clearToken();
+    return deleted;
+  }
 
   // ── Password reset ────────────────────────────────────────────────────────
 

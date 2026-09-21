@@ -199,6 +199,38 @@ Router userRoutes() {
     }
   });
 
+  // DELETE /api/users/me — el propio usuario da de baja su cuenta
+  // (requiere reintroducir la contraseña actual).
+  router.delete('/me', (Request req) async {
+    final payload = requireAuth(req);
+    if (payload == null) return error('No autorizado', 401);
+
+    try {
+      final body =
+          jsonDecode(await req.readAsString()) as Map<String, dynamic>;
+      final password = body['password']?.toString() ?? '';
+      if (password.isEmpty) return error('password requerido', 400);
+
+      final oid = ObjectId.fromHexString(payload['sub'] as String);
+      final coll = await MongoDb.instance.users;
+
+      final userDoc = await coll.findOne(where.id(oid));
+      if (userDoc == null) return error('Usuario no encontrado', 404);
+
+      final stored = userDoc['Password']?.toString() ??
+          userDoc['password']?.toString() ??
+          '';
+      if (!PasswordHasher.verify(password, stored)) {
+        return error('Contraseña incorrecta', 401);
+      }
+
+      final result = await coll.deleteOne(where.id(oid));
+      return ok({'deleted': result.nRemoved > 0});
+    } catch (e) {
+      return error('$e', 500);
+    }
+  });
+
   // DELETE /api/users/<id> — eliminar usuario (admin)
   router.delete('/<id>', (Request req, String id) async {
     if (requireAdmin(req) == null) return error('No autorizado', 401);

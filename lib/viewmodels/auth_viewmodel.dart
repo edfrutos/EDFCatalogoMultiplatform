@@ -183,6 +183,41 @@ class AuthViewModel extends ChangeNotifier {
     print('✅ Sesión cerrada correctamente');
   }
 
+  /// Da de baja la cuenta del usuario actual (requiere reintroducir la contraseña).
+  Future<bool> deleteAccount(String password) async {
+    final user = _currentUser;
+    if (user == null) return false;
+
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final deleted = await _mongoService.deleteOwnAccount(
+        userId: user.id,
+        password: password,
+      );
+      if (!deleted) {
+        _errorMessage =
+            'Contraseña incorrecta o no se pudo eliminar la cuenta';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
+      _isLoading = false;
+      signOut();
+      print('✅ Cuenta eliminada: ${user.email}');
+      return true;
+    } catch (e) {
+      _errorMessage = 'Error al eliminar la cuenta: $e';
+      _isLoading = false;
+      notifyListeners();
+      print('❌ Error eliminando cuenta: $e');
+      return false;
+    }
+  }
+
   /// Registrar nuevo usuario
   Future<bool> register({
     required String username,
