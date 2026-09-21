@@ -93,6 +93,65 @@ Router authRoutes() {
     }
   });
 
+  // POST /api/auth/register — alta pública (rol "user" siempre, sin auth)
+  router.post('/register', (Request req) async {
+    try {
+      final body = jsonDecode(await req.readAsString()) as Map<String, dynamic>;
+      final email = (body['email']?.toString().trim() ?? '').toLowerCase();
+      final username = body['username']?.toString().trim() ?? '';
+      final name = body['name']?.toString().trim() ?? '';
+      final password = body['password']?.toString() ?? '';
+
+      if (email.isEmpty || username.isEmpty || password.isEmpty) {
+        return error('email, username y password son requeridos', 400);
+      }
+      if (password.length < 6) {
+        return error('La contraseña debe tener al menos 6 caracteres', 400);
+      }
+
+      final coll = await MongoDb.instance.users;
+
+      final existing = await coll.findOne({
+        r'$or': [
+          {'Email': email}, {'email': email},
+          {'Username': username}, {'username': username},
+        ],
+      });
+      if (existing != null) {
+        return error('El email o nombre de usuario ya está registrado', 409);
+      }
+
+      final passwordHash = PasswordHasher.hash(password);
+      final doc = {
+        'Email': email,
+        'Username': username,
+        'Name': name,
+        'Password': passwordHash,
+        'Role': 'user',
+        'IsActive': true,
+        'CreatedAt': DateTime.now().toUtc(),
+      };
+
+      final result = await coll.insertOne(doc);
+      final rawId = result.id;
+      final userId = rawId is ObjectId ? rawId.oid : rawId.toString();
+
+      final token = JwtService.issue(userId: userId, email: email, isAdmin: false);
+      final inserted = doc..['_id'] = result.id;
+
+      return Response(
+        201,
+        body: jsonEncode({
+          'user': MongoDb.docToJson(inserted.cast<String, dynamic>()),
+          'token': token,
+        }),
+        headers: {'Content-Type': 'application/json; charset=utf-8'},
+      );
+    } catch (e) {
+      return error('Error interno: $e', 500);
+    }
+  });
+
   // POST /api/auth/refresh — renueva el token sin re-autenticar
   router.post('/refresh', (Request req) async {
     final payload = JwtService.fromRequest(req.headers);

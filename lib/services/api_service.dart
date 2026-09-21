@@ -157,6 +157,39 @@ class ApiService {
     }
   }
 
+  /// Registro público: crea la cuenta, autentica automáticamente y guarda el JWT.
+  Future<User?> register({
+    required String username,
+    required String name,
+    required String email,
+    required String password,
+  }) async {
+    try {
+      final res = await http.post(
+        _uri('api/auth/register'),
+        headers: {'Content-Type': 'application/json; charset=utf-8'},
+        body: jsonEncode({
+          'email': email,
+          'username': username,
+          'name': name,
+          'password': password,
+        }),
+      );
+      if (res.statusCode != 201) {
+        print('❌ Registro fallido ${res.statusCode}: ${res.body}');
+        return null;
+      }
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      final userJson = data['user'] as Map<String, dynamic>;
+      final user = User.fromJson(userJson);
+      setToken(data['token'] as String, userId: user.id);
+      return user;
+    } catch (e) {
+      print('❌ ApiService register: $e');
+      rethrow;
+    }
+  }
+
   // ── Users ─────────────────────────────────────────────────────────────────
 
   Future<List<User>> getAllUsers() async {

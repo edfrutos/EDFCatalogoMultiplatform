@@ -197,6 +197,39 @@ class AuthViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
+      if (kIsWeb) {
+        // En web /api/users/ es solo para admins: el alta pública pasa por
+        // /api/auth/register, que crea el usuario y devuelve el JWT ya autenticado.
+        final user = await ApiService.instance.register(
+          username: username,
+          name: name,
+          email: email,
+          password: password,
+        );
+
+        if (user == null) {
+          _errorMessage = 'No se pudo crear la cuenta (¿el email ya existe?)';
+          _isLoading = false;
+          notifyListeners();
+          print('⚠️ Registro fallido para: $email');
+          return false;
+        }
+
+        _currentUser = user;
+        _isAuthenticated = true;
+        _isLoading = false;
+
+        await _keychainService.saveToken(user.email);
+        await _keychainService.saveEmail(user.email);
+        await _keychainService.saveUserId(user.id);
+        final jwt = ApiService.instance.currentToken;
+        if (jwt != null) await _keychainService.saveJwtToken(jwt);
+
+        notifyListeners();
+        print('✅ Registro exitoso para: $email');
+        return true;
+      }
+
       // Verificar si el usuario ya existe
       final exists = await _mongoService.checkUserExists(email);
       if (exists) {
