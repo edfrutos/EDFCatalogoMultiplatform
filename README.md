@@ -18,6 +18,8 @@ Backend: MongoDB Atlas · AWS S3 · Gmail SMTP.
 | Linux | 🐳 Docker (ver `docs/linux/`) |
 | Windows | 🔄 Experimental |
 
+📥 **[Descargar EDF Catálogo para macOS (DMG notarizado)](https://github.com/edfrutos/EDFCatalogoMultiplatform/releases/latest)**
+
 ---
 
 ## Requisitos
@@ -78,6 +80,8 @@ Reconectar: `tmux attach -t edf` · Parar: `tmux kill-session -t edf`.
 > Ver §6.3 de [`docs/arquitectura.md`](docs/arquitectura.md) para detalles técnicos.
 
 ### macOS — distribuible (DMG)
+
+> 📥 Última versión notarizada lista para instalar: [GitHub Releases](https://github.com/edfrutos/EDFCatalogoMultiplatform/releases/latest)
 
 ```bash
 # Uso interno (firma ad-hoc — la app pide "Abrir de todas formas" en otros Macs)
